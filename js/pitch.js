@@ -98,6 +98,7 @@ export function createPitch(root) {
     const spots = { 0: {}, 1: {} };
     let ballAt = null;
     let gain = null;
+    let focus = null;
     const carrier = match.carrier || 'S';
 
     const kickSpot = range => TRY_LINE - range * 10 * PX_PER_M;
@@ -135,6 +136,7 @@ export function createPitch(root) {
         spots[def][pos] = [X(TRY_LINE + 8 + (i % 2) * 6), 20 + i * 27];
       });
       ballAt = [X(kx + 5), 77];
+      if (step.range) focus = { x: (X(kx) + X(TRY_LINE)) / 2, y: 75, zoom: Math.min(2.2, W / (TRY_LINE - kx + 90)) };
     } else {
       // Open play: the gain line creeps forward with each phase.
       const phase = Math.max(1, match.phase || 1);
@@ -157,15 +159,57 @@ export function createPitch(root) {
         const runY = Math.min(Math.max(cy, 20), 130);
         spots[att][carrier] = [X(TRY_LINE - 14), runY];
         POSITIONS.forEach((pos, i) => (spots[def][pos] = [X(TRY_LINE - 50 + i * 4), 20 + i * 28]));
+        focus = { x: X(TRY_LINE - 34), y: runY, zoom: 1.9 };
       }
       ballAt = spots[att][carrier];
     }
-    return { spots, ballAt, gain: gain === null ? null : X(gain + 10), att };
+    return { spots, ballAt, gain: gain === null ? null : X(gain + 10), att, focus };
   }
 
-  function update(match) {
+  // ---- Camera: pans and zooms the viewBox onto the action ----
+  let view = [0, 0, W, H];
+  let cameraFrame = 0;
+  let cameraOn = true;
+  const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+
+  function camera(target, duration = 750) {
+    const to = target && cameraOn
+      ? (() => {
+        const w = W / target.zoom;
+        const h = H / target.zoom;
+        return [clamp(target.x - w / 2, 0, W - w), clamp(target.y - h / 2, 0, H - h), w, h];
+      })()
+      : [0, 0, W, H];
+    const from = [...view];
+    if (to.every((v, i) => Math.abs(v - from[i]) < 0.5)) return;
+    cancelAnimationFrame(cameraFrame);
+    if (!duration) {
+      view = to;
+      root.setAttribute('viewBox', view.join(' '));
+      return;
+    }
+    const start = performance.now();
+    const tick = now => {
+      const t = Math.min(1, (now - start) / duration);
+      const e = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+      view = from.map((v, i) => v + (to[i] - v) * e);
+      root.setAttribute('viewBox', view.map(v => v.toFixed(2)).join(' '));
+      if (t < 1) cameraFrame = requestAnimationFrame(tick);
+    };
+    cameraFrame = requestAnimationFrame(tick);
+  }
+
+  function setCamera(on) {
+    cameraOn = on;
+    if (!on) camera(null, 0);
+  }
+
+  // `slow` plays the token moves in slow motion, for line breaks.
+  function update(match, { slow = false } = {}) {
     setKits(match.teams);
-    const { spots, ballAt, gain, att } = layout(match);
+    root.style.setProperty('--tok-speed', slow ? '1300ms' : '520ms');
+    const { spots, ballAt, gain, att, focus } = layout(match);
+    camera(focus, slow ? 1300 : 750);
     for (const team of [0, 1]) {
       for (const pos of POSITIONS) {
         const node = tokens[team][pos];
@@ -205,9 +249,10 @@ export function createPitch(root) {
       const x = att === 1 ? 12 : W - 12;
       place(node, x, y);
       place(ball, x + 4, y - 4);
+      camera({ x, y, zoom: 2.6 }, 500);
     }
     return Promise.resolve();
   }
 
-  return { update, flourish };
+  return { update, flourish, setCamera };
 }

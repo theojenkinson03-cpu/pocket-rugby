@@ -74,6 +74,8 @@ export function newMatch({ mode = '1p', teams, length = 'standard', cpuLevel = '
 
 // ---- Modifiers -----------------------------------------------------------
 
+// Rules: a yellow card is "-1 on all Defensive dice rolls" for the half; a
+// second yellow makes it -2 for the match. It applies to each tackle die.
 export function defenceModifier(match, team) {
   const t = match.teams[team];
   if (t.yellows >= 2) return -2;
@@ -85,29 +87,36 @@ export function runIntensity(match, team, pos, value) {
   return Math.max(1, value + bonus - match.teams[team].injuries[pos]);
 }
 
-// Resolve a pair of defence dice against an intensity. Shared by the engine
-// and the odds helpers so they can never disagree.
-export function resolveTackle(firstFace, secondFace, intensity, modifier) {
+// Rules: a Big Hit on the first die against a Hit Up of 3 or 4 sets up a
+// ruck contest. Only plain Hit Ups qualify, never a player's big move.
+export function ruckEligible(face, intensity) {
+  return face.kind === 'run' && !face.special && intensity <= 4;
+}
+
+// Resolve a pair of defence dice against an intensity. `modifier` applies to
+// each die. Shared by the engine and the odds helpers so they never disagree.
+export function resolveTackle(firstFace, secondFace, intensity, modifier = 0, canRuck = intensity <= 4) {
   const first = DICE.D.faces[firstFace];
   const second = DICE.D.faces[secondFace];
-  const total = first.value + second.value + modifier;
+  const values = [first.value + modifier, second.value + modifier];
+  const total = values[0] + values[1];
   const firstHit = first.kind === 'bighit';
   const secondHit = second.kind === 'bighit';
   let outcome;
-  if (firstHit && intensity <= 4) outcome = 'ruck';
+  if (firstHit && canRuck) outcome = 'ruck';
   else if (secondHit) outcome = 'bighit';
   else if (total >= intensity) outcome = 'tackle';
   else outcome = 'break';
-  return { outcome, total, injury: firstHit && secondHit, bigHit: outcome !== 'break' && (firstHit || secondHit) };
+  return { outcome, total, values, injury: firstHit && secondHit, bigHit: outcome !== 'break' && (firstHit || secondHit) };
 }
 
 // ---- Odds ------------------------------------------------------------------
 
-export function breakChance(intensity, modifier = 0) {
+export function breakChance(intensity, modifier = 0, canRuck = intensity <= 4) {
   let breaks = 0;
   for (let a = 0; a < 6; a++) {
     for (let b = 0; b < 6; b++) {
-      if (resolveTackle(a, b, intensity, modifier).outcome === 'break') breaks++;
+      if (resolveTackle(a, b, intensity, modifier, canRuck).outcome === 'break') breaks++;
     }
   }
   return breaks / 36;
@@ -129,7 +138,10 @@ export function receiverOdds(match, team, pos) {
   let lineBreak = 0;
   let error = 0;
   for (const face of DICE[pos].faces) {
-    if (face.kind === 'run') lineBreak += breakChance(runIntensity(match, team, pos, face.value), modifier) / 6;
+    if (face.kind === 'run') {
+      const intensity = runIntensity(match, team, pos, face.value);
+      lineBreak += breakChance(intensity, modifier, ruckEligible(face, intensity)) / 6;
+    }
     if (face.kind === 'error' || face.kind === 'intercept') error += 1 / 6;
   }
   return { lineBreak, error, special: DICE[pos].faces.find(f => f.special) };
@@ -221,8 +233,16 @@ function onAttack(m, ev, rng) {
     case 'run': {
       T.stats.runs++;
       const intensity = runIntensity(m, team, pos, face.value);
-      ev.push({ type: 'run', team, pos, label: face.label, value: face.value, intensity, special: !!face.special });
-      m.step = { type: 'roll', purpose: 'tackle', dice: ['D', 'D'], team: other(team), intensity, carrier: pos };
+      ev.push({ type: 'run', team, pos, label: face.label, value: face.value, intensity, special: !!face.special, ruck: ruckEligible(face, intensity) });
+      m.step = {
+        type: 'roll',
+        purpose: 'tackle',
+        dice: ['D', 'D'],
+        team: other(team),
+        intensity,
+        carrier: pos,
+        ruck: ruckEligible(face, intensity),
+      };
       break;
     }
     case 'pass':
@@ -263,7 +283,7 @@ function onTackle(m, ev, rng) {
   const b = rollDie(rng);
   m.roll = { dice: ['D', 'D'], faces: [a, b], purpose: 'tackle', team: def };
   const modifier = defenceModifier(m, def);
-  const result = resolveTackle(a, b, intensity, modifier);
+  const result = resolveTackle(a, b, intensity, modifier, m.step.ruck);
   const D = m.teams[def];
   const A = m.teams[att];
 
@@ -275,7 +295,7 @@ function onTackle(m, ev, rng) {
   if (result.outcome === 'break') {
     A.stats.lineBreaks++;
     D.stats.missedTackles++;
-    ev.push({ type: 'lineBreak', team: att, pos: carrier, total: result.total, need: intensity, modifier });
+    ev.push({ type: 'lineBreak', team: att, pos: carrier, total: result.total, values: result.values, need: intensity, modifier });
     m.step = { type: 'roll', purpose: 'try', dice: ['K'], team: att, carrier, videos: 0 };
     return;
   }
@@ -288,6 +308,7 @@ function onTackle(m, ev, rng) {
     pos: carrier,
     outcome: result.outcome,
     total: result.total,
+    values: result.values,
     need: intensity,
     modifier,
   });

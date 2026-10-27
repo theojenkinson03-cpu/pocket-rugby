@@ -5,6 +5,7 @@ import { cpuChoice, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
 import { metres, narrate, scoreLine } from './commentary.js';
 import { createDie, dieChip, faceTile, rollTo, setFace, wait } from './dice-view.js';
+import { createCinema } from './cinema.js';
 import { createPitch } from './pitch.js';
 import { buzz, play, setSoundEnabled, unlockAudio } from './audio.js';
 import { kitVars } from './color.js';
@@ -31,7 +32,7 @@ const KITS = [
 ];
 
 const DEFAULT_SETUP = { mode: '1p', names: ['Ravens', 'Foxes'], colors: ['#1d3577', '#e8701c'], length: 'standard', cpu: 'pro' };
-const DEFAULT_PREFS = { sound: true, odds: true, fast: false, autoDefence: false, haptics: true };
+const DEFAULT_PREFS = { sound: true, odds: true, fast: false, autoDefence: false, haptics: true, cinema: 'full' };
 
 const DIE_NOTES = {
   S: 'Plays first after every tackle',
@@ -276,9 +277,48 @@ function skippable(ms) {
 
 const FOCUS = { kick: 'kick', penalty: 'card', try: 'result', ruck: 'result' };
 
+// Which big moments get a full cinematic scene at each setting.
+const SHORT_SCENES = new Set(['kickoff', 'try', 'kickcam', 'card', 'turnover', 'whistle', 'linebreak', 'bighit', 'notry']);
+const cinemaLevel = () => (reducedMotion.matches ? 'off' : ui.prefs.cinema);
+const wantsScene = kind => cinemaLevel() === 'full' || (cinemaLevel() === 'short' && SHORT_SCENES.has(kind));
+const cinemaSpeed = () => (ui.prefs.cinema === 'short' ? 0.7 : 1) * (ui.prefs.fast ? 0.7 : 1);
+
+// Moment kinds from the commentary, mapped to cinema scenes and their data.
+function sceneFor(moment, after, events) {
+  const team = moment.team === null || moment.team === undefined ? null : after.teams[moment.team];
+  switch (moment.kind) {
+    case 'try': return ['try', { team, pos: moment.pos, scoreline: scoreLine(after) }];
+    case 'break': return ['linebreak', { team, pos: moment.pos }];
+    case 'bighit': return ['bighit', { team, ruck: !!moment.ruck }];
+    case 'turnover': return ['turnover', { team, title: moment.title, sub: moment.sub }];
+    case 'injury': return ['injury', { team, pos: moment.pos, penalty: moment.penalty }];
+    case 'yellow':
+    case 'red': return ['card', { color: moment.kind, team }];
+    case 'penalty': return ['penalty', { team }];
+    case 'tmo': return ['tmo', {}];
+    case 'notry': return ['notry', { team, heldUp: moment.heldUp }];
+    case 'quicktap': return ['quicktap', { team }];
+    case 'halftime': return ['whistle', { full: false, teams: after.teams }];
+    case 'fulltime': return ['whistle', { full: true, teams: after.teams, winner: after.winner }];
+    // Goals are shown by the kick cam when it plays.
+    case 'goal':
+    case 'conversion': return events.some(e => e.type === 'kick') && wantsScene('kickcam') ? ['none'] : null;
+  }
+  return null;
+}
+
+// Big hits read better before the injury they cause.
+const MOMENT_ORDER = ['bighit', 'injury', 'break', 'try', 'notry', 'tmo', 'turnover', 'penalty', 'yellow', 'red', 'quicktap', 'goal', 'conversion', 'halftime', 'fulltime'];
+
 async function present(before, after, events, story) {
   const has = type => events.find(e => e.type === type);
   const step = before.step;
+  const covered = new Set();
+
+  // Calls before the scrum feed or lineout throw.
+  if (step.type === 'roll' && step.purpose === 'setpiece' && wantsScene('setpiece')) {
+    await ui.cinema.play('setpiece', { piece: step.piece });
+  }
 
   // Dice or coin.
   if (step.type === 'choose' && step.purpose === 'toss') {
@@ -286,8 +326,10 @@ async function present(before, after, events, story) {
     await flipCoin(after.toss.result);
   } else if (step.type === 'roll' && after.roll) {
     const roll = after.roll;
+    const dramatic = ['try', 'ruck', 'penalty', 'kick'].includes(step.purpose) && cinemaLevel() !== 'off';
     play('dice', roll.dice.length);
-    await showDice(roll.dice, roll.faces, roll, true);
+    if (dramatic) play('heartbeat', ui.prefs.fast ? 1 : 2);
+    await showDice(roll.dice, roll.faces, roll, true, dramatic);
     play('land');
     if (ui.prefs.haptics) buzz(12);
   }
@@ -295,8 +337,13 @@ async function present(before, after, events, story) {
   // A kick needs its flight before the verdict.
   const kick = has('kick');
   if (kick) {
-    play('kick');
-    await ui.pitch.flourish('kick', after, { team: kick.team, good: kick.good });
+    if (wantsScene('kickcam')) {
+      covered.add('kick');
+      await ui.cinema.play('kickcam', { team: after.teams[kick.team], kick: kick.kick, range: kick.range, distance: kick.distance, good: kick.good });
+    } else {
+      play('kick');
+      await ui.pitch.flourish('kick', after, { team: kick.team, good: kick.good });
+    }
   }
 
   const tryEvent = has('try');
@@ -304,37 +351,55 @@ async function present(before, after, events, story) {
 
   if (story.headline) setHeadline(story.headline, story.detail);
   renderFeed(story.lines.length);
-  soundFor(events);
+
+  const moments = story.moments
+    .map(moment => ({ moment, scene: sceneFor(moment, after, events) }))
+    .sort((a, b) => MOMENT_ORDER.indexOf(a.moment.kind) - MOMENT_ORDER.indexOf(b.moment.kind));
+  for (const { scene } of moments) if (scene && wantsScene(scene[0])) covered.add(scene[0]);
+  soundFor(events, covered);
 
   if (tryEvent) await wait(450 * speed());
-  ui.pitch.update(after);
+  ui.pitch.update(after, { slow: !!has('lineBreak') && wantsScene('linebreak') });
   renderBoard(after);
   renderSituation(after);
 
-  for (const moment of story.moments) await showMoment(moment);
+  // The second half (and the match) opens with a title card.
+  if (has('toss') || has('secondHalf')) {
+    if (wantsScene('kickoff')) await ui.cinema.play('kickoff', { teams: after.teams, half: after.half, target: after.target });
+  }
+
+  for (const { moment, scene } of moments) {
+    if (scene?.[0] === 'none') continue;
+    if (scene && wantsScene(scene[0])) await ui.cinema.play(scene[0], scene[1]);
+    else await showMoment(moment);
+  }
 }
 
-function soundFor(events) {
+// Scenes play their own sound; anything they cover is skipped here.
+function soundFor(events, covered) {
   const haptic = pattern => ui.prefs.haptics && buzz(pattern);
+  const quiet = scene => covered.has(scene);
   for (const e of events) {
     switch (e.type) {
       case 'tackle':
+        if (e.outcome !== 'tackle' && quiet('bighit')) break;
         play('thud', e.outcome !== 'tackle');
         if (e.outcome !== 'tackle') haptic([30, 40, 50]);
         break;
-      case 'lineBreak': play('cheer'); haptic(40); break;
-      case 'try': play('whistle'); play('cheer'); haptic([60, 50, 140]); break;
-      case 'noTry': play('groan'); break;
-      case 'kick': play(e.good ? 'cheer' : 'groan'); break;
+      case 'lineBreak': if (!quiet('linebreak')) { play('cheer'); haptic(40); } break;
+      case 'try': if (!quiet('try')) { play('whistle'); play('cheer'); } haptic([60, 50, 140]); break;
+      case 'noTry': if (!quiet('notry')) play('groan'); break;
+      case 'kick': if (!quiet('kick')) play(e.good ? 'cheer' : 'groan'); break;
       case 'error': play('whistle'); break;
-      case 'intercept': play('cheer'); haptic(40); break;
-      case 'penalty': play('whistle'); break;
-      case 'card': play('whistle'); haptic([80, 60, 80]); break;
-      case 'injury': play('groan'); break;
-      case 'ruck': if (e.won) play('whistle'); break;
-      case 'halftime': play('whistle', true); break;
-      case 'fulltime': play('whistle', true); play('cheer'); break;
-      case 'secondHalf': play('whistle'); break;
+      case 'intercept': if (!quiet('turnover')) { play('cheer'); haptic(40); } break;
+      case 'penalty': if (!quiet('penalty')) play('whistle'); break;
+      case 'card': if (!quiet('card')) { play('whistle'); haptic([80, 60, 80]); } break;
+      case 'injury': if (!quiet('injury')) play('groan'); break;
+      case 'ruck': if (e.won && !quiet('turnover')) play('whistle'); break;
+      case 'videoRef': if (!quiet('tmo')) play('beep'); break;
+      case 'halftime':
+      case 'fulltime': if (!quiet('whistle')) { play('whistle', true); if (e.type === 'fulltime') play('cheer'); } break;
+      case 'secondHalf': if (!wantsScene('kickoff')) play('whistle'); break;
     }
   }
 }
@@ -344,9 +409,10 @@ function setHeadline(headline, detail) {
   $('#detail').textContent = detail || '';
 }
 
-async function showDice(ids, faces, roll, animate = false) {
+async function showDice(ids, faces, roll, animate = false, dramatic = false) {
   const host = $('#tray-dice');
   const tray = $('#tray');
+  tray.classList.toggle('dramatic', dramatic);
   tray.dataset.focus = roll.purpose === 'setpiece' ? roll.piece : FOCUS[roll.purpose] || '';
   host.innerHTML = '';
   const dice = ids.map((id, i) => createDie(id, faces[i]));
@@ -358,10 +424,12 @@ async function showDice(ids, faces, roll, animate = false) {
     });
     return;
   }
-  const duration = 950 * speed();
+  // Rolls that decide a try, a kick, a card or a ruck tumble for longer.
+  const duration = 950 * speed() * (dramatic ? 1.7 : 1);
   const reduced = reducedMotion.matches;
   dice.forEach(d => setFace(d, Math.floor(Math.random() * 6)));
   await Promise.all(dice.map((d, i) => rollTo(d, faces[i], { duration, delay: i * 160 * speed(), reduced })));
+  tray.classList.remove('dramatic');
 }
 
 function showCoin() {
@@ -391,7 +459,7 @@ async function flipCoin(result) {
 
 async function showMoment(moment) {
   const host = $('#moment');
-  if (moment.kind === 'whistle') return;
+  if (moment.kind === 'halftime' || moment.kind === 'fulltime') return;
   host.innerHTML = '';
   const band = el('div', 'moment-band');
   if (moment.kind === 'yellow' || moment.kind === 'red') {
@@ -479,12 +547,16 @@ function renderBoard(m) {
     kitVars(side, t);
     side.querySelector('.side-name').textContent = t.name;
     const score = side.querySelector('.side-score');
-    score.textContent = t.score;
     if (t.score !== ui.shownScores[team]) {
-      score.classList.remove('bump');
+      // Flip the digits like a stadium board: the new number shows at the halfway turn.
+      score.classList.remove('flip');
       void score.offsetWidth;
-      score.classList.add('bump');
+      score.classList.add('flip');
+      const value = t.score;
+      setTimeout(() => (score.textContent = value), 250);
       ui.shownScores[team] = t.score;
+    } else {
+      score.textContent = t.score;
     }
     side.querySelector('.side-bar i').style.width = `${Math.min(100, (t.score / m.target.full) * 100)}%`;
     const hasBall = m.attacker === team && !over && m.step.type !== 'halftime';
@@ -493,8 +565,8 @@ function renderBoard(m) {
 
     const status = side.querySelector('.side-status');
     status.innerHTML = '';
-    if (t.yellows >= 2) status.append(chip('−2 tackle', 'red'));
-    else if (t.sinBin) status.append(chip('Sin bin −1', 'yellow'));
+    if (t.yellows >= 2) status.append(chip('Red −2/die', 'red'));
+    else if (t.sinBin) status.append(chip('Sin bin −1/die', 'yellow'));
     for (const pos of POSITIONS) {
       if (t.injuries[pos]) {
         const c = chip(`${pos} −${t.injuries[pos]}`, null, 'inj');
@@ -878,6 +950,7 @@ function renderSettings() {
   $('#set-fast').checked = ui.prefs.fast;
   $('#set-autodef').checked = ui.prefs.autoDefence;
   $('#set-haptics').checked = ui.prefs.haptics;
+  $('#set-cinema').value = ui.prefs.cinema;
 }
 
 function bindSettings() {
@@ -885,6 +958,7 @@ function bindSettings() {
   for (const [id, key] of Object.entries(map)) {
     $(`#${id}`).addEventListener('change', e => setPref(key, e.target.checked));
   }
+  $('#set-cinema').addEventListener('change', e => setPref('cinema', e.target.value));
 }
 
 function setPref(key, value) {
@@ -896,6 +970,7 @@ function setPref(key, value) {
 
 function applyPrefs() {
   setSoundEnabled(ui.prefs.sound);
+  ui.pitch.setCamera(cinemaLevel() !== 'off');
   const btn = $('#btn-sound');
   btn.setAttribute('aria-pressed', String(ui.prefs.sound));
   btn.setAttribute('aria-label', ui.prefs.sound ? 'Sound on' : 'Sound off');
@@ -927,7 +1002,9 @@ function bindKeys() {
         e.preventDefault();
         primary.click();
       } else if (ui.busy) {
-        ui.skip?.();
+        e.preventDefault();
+        if (ui.cinema.active) ui.cinema.skip();
+        else ui.skip?.();
       }
     }
     const n = Number(e.key);
@@ -959,6 +1036,7 @@ function releaseWakeLock() {
 
 function start(data = {}) {
   ui.pitch = createPitch($('#pitch'));
+  ui.cinema = createCinema($('#cinema'), $('#view-match'), { speed: cinemaSpeed, haptics: () => ui.prefs.haptics });
   buildHeroDice();
   buildDiceReference();
   bindSetup();

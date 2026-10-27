@@ -5,6 +5,14 @@ import { METRES_PER_POINT, PLAYERS } from './dice.js';
 const pick = lines => lines[Math.floor(Math.random() * lines.length)];
 const pct = p => `${Math.round(p * 100)}%`;
 export const metres = n => `${n * METRES_PER_POINT} m`;
+const signed = n => (n < 0 ? `−${-n}` : `+${n}`);
+
+// "5 (3 + 3, −1 each for the card)": the dice as rolled, then any card penalty.
+function tackleSum(e) {
+  const rolled = e.values.map(v => v - e.modifier);
+  const card = e.modifier ? `, ${signed(e.modifier)} each for the card` : '';
+  return `${e.total} (${rolled.join(' + ')}${card})`;
+}
 
 // Returns { lines: [{text, team, tone}], headline, detail, moments: [{kind, team, title, sub}] }
 export function narrate(events, match) {
@@ -41,7 +49,8 @@ export function narrate(events, match) {
         const hurt = match.teams[e.team].injuries[e.pos];
         if (hurt) notes.push(`−${hurt} injury`);
         const why = notes.length ? ` (${e.value} ${notes.join(', ')})` : '';
-        head(`${e.label} ${e.intensity}`, `Defence need ${e.intensity}+ from two brown dice${why}.`);
+        const ruckNote = e.ruck ? ' A Big Hit on the first die sets up a ruck contest.' : '';
+        head(`${e.label} ${e.intensity}`, `Defence need ${e.intensity}+ from two brown dice${why}.${ruckNote}`);
         break;
       }
 
@@ -76,11 +85,11 @@ export function narrate(events, match) {
         break;
 
       case 'tackle': {
-        const sum = `${e.total}${e.modifier ? ` (incl. ${e.modifier})` : ''} vs ${e.need}`;
+        const sum = `${tackleSum(e)} vs ${e.need}`;
         if (e.outcome === 'ruck') {
           say(`BIG HIT! ${name(e.team)} drive them back and go for the ball.`, e.team, 'big');
           head('Big hit!', `Low hit up. ${name(e.team)} contest the ruck: they need RUCK WIN on the black die.`);
-          out.moments.push({ kind: 'bighit', team: e.team, title: 'Big hit', sub: 'Ruck contest' });
+          out.moments.push({ kind: 'bighit', team: e.team, title: 'Big hit', sub: 'Ruck contest', ruck: true });
         } else if (e.outcome === 'bighit') {
           say(pick([`BIG HIT! ${name(e.team)} smash the ${pos(e.pos)} backwards.`, `What a hit by ${name(e.team)}! Stopped dead.`]), e.team, 'big');
           head('Big hit!', 'A Big Hit on the second die always completes the tackle.');
@@ -94,13 +103,13 @@ export function narrate(events, match) {
 
       case 'lineBreak':
         say(pick([`LINE BREAK! The ${pos(e.pos)} is through!`, `They can't hold the ${pos(e.pos)}! LINE BREAK!`]), e.team, 'big');
-        head('Line break!', `Tackle total ${e.total}${e.modifier ? ` (incl. ${e.modifier})` : ''} couldn't reach ${e.need}. Roll the black die for the try.`);
-        out.moments.push({ kind: 'break', team: e.team, title: 'Line break', sub: `${pos(e.pos)} is away` });
+        head('Line break!', `Tackle total ${tackleSum(e)} couldn't reach ${e.need}. Roll the black die for the try.`);
+        out.moments.push({ kind: 'break', team: e.team, pos: e.pos, title: 'Line break', sub: `${pos(e.pos)} is away` });
         break;
 
       case 'injury':
         say(`The ${name(e.team)} ${pos(e.pos)} is hurt after two big hits. −${e.penalty} on their runs for the match.`, e.team, 'bad');
-        out.moments.push({ kind: 'injury', team: e.team, title: 'Injury', sub: `${pos(e.pos)} −${e.penalty} for the match` });
+        out.moments.push({ kind: 'injury', team: e.team, pos: e.pos, penalty: e.penalty, title: 'Injury', sub: `${pos(e.pos)} −${e.penalty} for the match` });
         break;
 
       case 'ruck':
@@ -117,17 +126,19 @@ export function narrate(events, match) {
       case 'videoRef':
         say('Over to the video referee…', e.team);
         head('Video ref', 'Roll the black die again.');
+        out.moments.push({ kind: 'tmo', team: e.team, title: 'Video ref', sub: 'Roll again' });
         break;
 
       case 'try':
         say(pick([`TRY! The ${name(e.team)} ${pos(e.pos)} dots it down!`, `TRY! ${name(e.team)} score through the ${pos(e.pos)}!`]), e.team, 'score');
         head('Try!', '5 points. Roll the brown die for the conversion range.');
-        out.moments.push({ kind: 'try', team: e.team, title: 'Try!', sub: `${name(e.team)} +5` });
+        out.moments.push({ kind: 'try', team: e.team, pos: e.pos, title: 'Try!', sub: `${name(e.team)} +5` });
         break;
 
       case 'noTry':
         say(e.heldUp ? 'Held up over the line! No try.' : 'Ruled out. No try, and it\'s a changeover.', e.team, 'bad');
         head('No try', `Changeover. ${name(1 - e.team)} have the ball.`);
+        out.moments.push({ kind: 'notry', team: e.team, heldUp: e.heldUp, title: 'No try', sub: e.heldUp ? 'Held up' : 'Changeover' });
         break;
 
       case 'range': {
@@ -186,12 +197,12 @@ export function narrate(events, match) {
 
       case 'card':
         if (e.color === 'yellow') {
-          say(`YELLOW CARD! ${name(e.team)} lose a player to the sin bin. −1 on their tackles this half.`, e.team, 'bad');
-          out.moments.push({ kind: 'yellow', team: e.team, title: 'Yellow card', sub: `${name(e.team)} −1 on tackles this half` });
+          say(`YELLOW CARD! ${name(e.team)} lose a player to the sin bin. −1 on each tackle die this half.`, e.team, 'bad');
+          out.moments.push({ kind: 'yellow', team: e.team, title: 'Yellow card', sub: `${name(e.team)} −1 on each tackle die this half` });
           cardNote = `Yellow card for ${name(e.team)}. `;
         } else {
-          say(`Second yellow. RED CARD! ${name(e.team)} are −2 on tackles for the rest of the match.`, e.team, 'bad');
-          out.moments.push({ kind: 'red', team: e.team, title: 'Red card', sub: `${name(e.team)} −2 on tackles for the match` });
+          say(`Second yellow. RED CARD! ${name(e.team)} are −2 on each tackle die for the rest of the match.`, e.team, 'bad');
+          out.moments.push({ kind: 'red', team: e.team, title: 'Red card', sub: `${name(e.team)} −2 on each tackle die for the match` });
           cardNote = `Red card for ${name(e.team)}. `;
         }
         break;
@@ -202,6 +213,7 @@ export function narrate(events, match) {
 
       case 'quickTap':
         say(`${name(e.team)} tap and go! +1 intensity for the next 3 runs.`, e.team, 'big');
+        out.moments.push({ kind: 'quicktap', team: e.team, title: 'Tap and go', sub: '+1 for 3 runs' });
         break;
       case 'advantageOver':
         say('Quick-tap advantage over.', e.team);
@@ -209,13 +221,14 @@ export function narrate(events, match) {
 
       case 'halftime':
         say(`Half time. ${scoreLine(match)}.`, null, 'score');
-        out.moments.push({ kind: 'whistle', team: null, title: 'Half time', sub: scoreLine(match) });
+        out.moments.push({ kind: 'halftime', team: null, title: 'Half time', sub: scoreLine(match) });
         break;
       case 'secondHalf':
         say('The second half is under way.', null);
         break;
       case 'fulltime':
         say(`FULL TIME! ${name(e.winner)} win. ${scoreLine(match)}.`, e.winner, 'score');
+        out.moments.push({ kind: 'fulltime', team: e.winner, title: 'Full time', sub: scoreLine(match) });
         break;
     }
   }

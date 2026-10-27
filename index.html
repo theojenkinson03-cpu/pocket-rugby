@@ -147,6 +147,7 @@
       <div class="actions" id="actions"></div>
     </footer>
     <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+    <div class="cinema" id="cinema" hidden></div>
   </section>
 </div>
 
@@ -174,6 +175,8 @@
 <dialog class="sheet" id="dlg-settings" aria-labelledby="settings-title">
   <h2 id="settings-title">Settings</h2>
   <div class="settings">
+    <label class="toggle select-row" for="set-cinema"><span><b>Cinematics</b><small>Replays, slow motion and the kick cam</small></span>
+      <select id="set-cinema"><option value="full">Full</option><option value="short">Short</option><option value="off">Off</option></select></label>
     <label class="toggle"><span><b>Sound</b><small>Dice, whistles and the crowd</small></span><input type="checkbox" id="set-sound"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Show odds</b><small>Chances next to every decision</small></span><input type="checkbox" id="set-odds"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Fast dice</b><small>Shorter rolls and CPU turns</small></span><input type="checkbox" id="set-fast"><i aria-hidden="true"></i></label>
@@ -193,7 +196,7 @@
   <div class="rules" id="rules">
     <section>
       <h3>The aim</h3>
-      <p>Be first to 30 points. Half time is called when either side reaches 15. Shorter and longer matches change both numbers.</p>
+      <p>Be first to 30 points. Half time is called when either side reaches 15. Shorter and longer matches change both numbers. The match ends the moment a side reaches the full-time score, even before a conversion.</p>
       <dl class="points">
         <div><dt>Try</dt><dd>5</dd></div>
         <div><dt>Conversion</dt><dd>2</dd></div>
@@ -208,8 +211,8 @@
     </section>
     <section>
       <h3>Tackling</h3>
-      <p>The defence rolls the brown die twice and adds the numbers. Reach the intensity and the tackle is made; play goes back to the Scrum Half. Fall short and it's a <b>line break</b>: the attacker rolls the black die. <b>TRY</b> scores 5, <b>NO TRY</b> is a changeover, <b>VIDEO REF</b> means roll again.</p>
-      <p><b>Big Hit</b> on the first brown die against a Hit Up of 3 or 4 sets up a ruck contest: the defence rolls the black die and steals the ball on <b>RUCK WIN</b>. Big Hit on the second die always completes the tackle. Two Big Hits injure the ball carrier: that position runs at −1 for the rest of the match.</p>
+      <p>The defence rolls the brown die twice and adds the numbers. Reach the intensity and the tackle is made; play goes back to the Scrum Half. Fall short and it's a <b>line break</b>: the attacker rolls the black die. <b>TRY</b> scores 5, <b>NO TRY</b> is a changeover (so is <b>RUCK WIN</b>: held up over the line), <b>VIDEO REF</b> means roll again.</p>
+      <p><b>Big Hit</b> on the first brown die against a plain Hit Up of 3 or 4 (not a big move) sets up a ruck contest: the defence rolls the black die and steals the ball on <b>RUCK WIN</b>. Big Hit on the second die always completes the tackle. Two Big Hits injure the ball carrier: that position runs at −1 for the rest of the match.</p>
     </section>
     <section>
       <h3>Kicking</h3>
@@ -222,8 +225,8 @@
     </section>
     <section>
       <h3>Penalties and cards</h3>
-      <p>The white die can award a penalty either way. The black die then checks for a card: the yellow dot sends a player to the sin bin and the offenders take −1 on every tackle total for the rest of the half. A second yellow makes it −2 for the rest of the match.</p>
-      <p>Then choose: kick for goal (3 points), or <b>quick tap</b> for +1 intensity on your next 3 runs. The advantage ends after 3 tackles or an error.</p>
+      <p>The white die can award a penalty either way. The black die then checks for a card: the yellow dot sends a player to the sin bin and the offenders take −1 off each brown die they roll in a tackle for the rest of the half. A second yellow makes it −2 a die for the rest of the match.</p>
+      <p>The range for the kick is rolled at the same time, so you know the distance before you choose: kick for goal (3 points), or <b>quick tap</b> for +1 intensity on your next 3 runs. The advantage ends after 3 tackles or an error.</p>
     </section>
     <section>
       <h3>Restarts</h3>

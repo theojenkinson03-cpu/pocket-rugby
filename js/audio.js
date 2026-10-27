@@ -119,6 +119,39 @@ const sounds = {
   tick(ac) {
     tone(ac, { freq: 900, length: 0.04, gain: 0.08, type: 'triangle' });
   },
+  // Two low thumps, for rolls where everything rides on one die.
+  heartbeat(ac, beats = 2) {
+    for (let i = 0; i < beats; i++) {
+      tone(ac, { at: i * 0.75, freq: 70, to: 45, length: 0.14, gain: 0.5 });
+      tone(ac, { at: i * 0.75 + 0.2, freq: 60, to: 40, length: 0.16, gain: 0.35 });
+    }
+  },
+  drumroll(ac, seconds = 1) {
+    const hits = Math.floor(seconds * 22);
+    for (let i = 0; i < hits; i++) noise(ac, { at: i / 22, length: 0.05, gain: 0.08 + (0.22 * i) / hits, type: 'bandpass', freq: 260, q: 1.4 });
+  },
+  beep(ac) {
+    tone(ac, { freq: 1320, length: 0.09, gain: 0.08, type: 'square' });
+    tone(ac, { at: 0.14, freq: 1320, length: 0.09, gain: 0.08, type: 'square' });
+  },
+  post(ac) {
+    for (const [f, g] of [[520, 0.25], [1310, 0.12], [2210, 0.06]]) tone(ac, { freq: f, length: 0.9, gain: g, type: 'triangle', attack: 0.002 });
+  },
+  whoosh(ac) {
+    noise(ac, { length: 0.45, gain: 0.25, type: 'bandpass', freq: 400, sweepTo: 2600, q: 0.7, attack: 0.12 });
+  },
+  roar(ac) {
+    noise(ac, { length: 3.2, gain: 0.5, type: 'bandpass', freq: 800, q: 0.5, attack: 0.25 });
+    noise(ac, { at: 0.05, length: 2.8, gain: 0.25, type: 'bandpass', freq: 1900, q: 0.8, attack: 0.3 });
+    noise(ac, { at: 0.1, length: 2.4, gain: 0.18, type: 'lowpass', freq: 400, attack: 0.3 });
+  },
+  ooh(ac) {
+    noise(ac, { length: 1.2, gain: 0.3, type: 'bandpass', freq: 520, sweepTo: 340, q: 2, attack: 0.25 });
+  },
+  stamp(ac) {
+    tone(ac, { freq: 95, to: 38, length: 0.3, gain: 0.7 });
+    noise(ac, { length: 0.12, gain: 0.45, type: 'lowpass', freq: 900 });
+  },
   coin(ac) {
     for (let i = 0; i < 6; i++) tone(ac, { at: i * 0.09, freq: 3200 + (i % 2) * 400, length: 0.05, gain: 0.05, type: 'triangle' });
   },
