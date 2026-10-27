@@ -1747,6 +1747,7 @@ async function reconnectOnline(saved) {
   const m = ui.match;
   const session = new OnlineSession({ room, code: saved.code, role: saved.role, team: m.teams[saved.team], build: BUILD, log: saved.log || [], onChange: kind => onSessionChange(session, kind) });
   Object.assign(session.presence, { ready: true, mid: saved.mid, seq: m.seq, hash: hashState(m), ...(saved.role === 'host' ? { start: saved.start } : {}) });
+  session.mid = saved.mid;
   ui.online = { session, role: saved.role, team: saved.team, code: saved.code, mid: saved.mid, start: saved.start };
   try {
     await session.join();

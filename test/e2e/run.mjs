@@ -176,9 +176,10 @@ async function playOn(page, { label, tapStyle = 'random', skipScenes = true, bud
       const title = await page.textContent('#break-title');
       if (/half time/i.test(title)) {
         // Online, only the side receiving the second-half kick-off starts it.
+        // The waiting phone's dialog closes by itself when the other phone starts it.
         const start = await page.$('#break-actions .btn-primary');
         if (start) await start.click();
-        else await page.click('#break-actions .btn-quiet');
+        else await page.click('#break-actions .btn-quiet', { timeout: 3000 }).catch(() => {});
         seen.add('halftime-dialog');
         continue;
       }

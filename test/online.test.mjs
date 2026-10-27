@@ -284,6 +284,25 @@ test('whole online matches: both phones end up with the same match, inside the p
   }
 });
 
+test('once a match starts, someone else joining with the same code is ignored', async () => {
+  const server = createRoomServer();
+  const host = new OnlineSession({ room: server.client(), code: 'ccc234', role: 'host', team: team('Ravens'), build: 'b1' });
+  const guest = new OnlineSession({ room: server.client(), code: 'ccc234', role: 'guest', team: team('Gulls'), build: 'b1' });
+  await host.join();
+  await guest.join();
+  await settle(server);
+  const start = await host.kickOff({ length: 'quick', cards: true, guestTeam: guest.team, rng: seededRng(5) });
+  await settle(server);
+  await guest.beginGuest(start.mid);
+  await settle(server);
+  const intruder = new OnlineSession({ room: server.client(), code: 'ccc234', role: 'guest', team: team('Intruders'), build: 'b1' });
+  await intruder.join();
+  await intruder.publish({ seq: 5, log: [{ s: 0, a: { t: 'c', v: 'heads' }, r: [0.1] }] });
+  await settle(server);
+  assert.equal(host.peer.team.name, 'Gulls', 'still following the guest in the match');
+  assert.equal(host.peer.mid, start.mid);
+});
+
 test('a rematch never picks up moves from the match before', async () => {
   const server = createRoomServer();
   const { host, guest } = await playOnline(server, 9);

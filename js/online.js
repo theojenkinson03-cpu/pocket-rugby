@@ -187,13 +187,15 @@ export class OnlineSession {
     this.onChange?.('error');
   }
 
-  // The other player: the most recent peer in the other role on this page
-  // version. Only this tab is left out, so one account can play itself on
-  // two phones.
+  // The other player: a peer in the other role, preferring the one playing
+  // this match (so someone else typing the same code can't cut in), then
+  // the most recent. Only this tab is left out, so one account can play
+  // itself on two phones.
   readPeers(peers) {
+    const inMatch = p => (this.mid && p.presence.mid === this.mid ? 1 : 0);
     const theirs = peers
       .filter(p => !p.sameTab && p.presence?.app === 'pocket-rugby' && p.presence.role === (this.role === 'host' ? 'guest' : 'host'))
-      .sort((a, b) => b.updatedAt - a.updatedAt)[0] || null;
+      .sort((a, b) => inMatch(b) - inMatch(a) || b.updatedAt - a.updatedAt)[0] || null;
     const before = this.raw;
     this.raw = theirs?.presence || null;
     if (this.raw === before) return;
@@ -223,6 +225,7 @@ export class OnlineSession {
   // from the match before.
   kickOff({ length, cards, guestTeam, rng = strongRandom }) {
     const mid = makeCode(rng);
+    this.mid = mid;
     this.log = [];
     const start = { mid, length, cards, teams: [this.team, sanitiseTeam(guestTeam)] };
     return this.publish({ start, mid, log: [], seq: 0, hash: null }).then(() => start);
@@ -230,6 +233,7 @@ export class OnlineSession {
 
   // Guest: the host's match has begun; start an empty log for it.
   beginGuest(mid) {
+    this.mid = mid;
     this.log = [];
     return this.publish({ mid, log: [], seq: 0, hash: null });
   }
