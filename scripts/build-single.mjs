@@ -12,7 +12,7 @@ const read = path => readFileSync(join(root, path), 'utf8');
 const fragment = process.argv.includes('--fragment');
 
 // Dependencies before dependants.
-const ORDER = ['dice', 'cards', 'engine', 'ai', 'commentary', 'color', 'dice-view', 'pitch', 'audio', 'cinema', 'store', 'app'];
+const ORDER = ['dice', 'cards', 'engine', 'winprob', 'ai', 'players', 'commentary', 'tournament', 'career', 'coach', 'online', 'color', 'dom', 'dice-view', 'card-view', 'career-view', 'tournament-view', 'online-view', 'report', 'pitch', 'audio', 'cinema', 'store', 'app'];
 
 function wrapModule(name) {
   const exported = [];

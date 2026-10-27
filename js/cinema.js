@@ -5,6 +5,8 @@ import { inkFor } from './color.js';
 import { metres } from './commentary.js';
 import { PLAYERS } from './dice.js';
 import { buzz, play } from './audio.js';
+import { cardArt } from './card-view.js';
+import { medal } from './career-view.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -135,8 +137,8 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
   // ---------------------------------------------------------------- scenes
 
   const scenes = {
-    kickoff({ teams, half, target }) {
-      return run({ duration: 2000 }, (scene, later) => {
+    kickoff({ teams, half, target, label = null }) {
+      return run({ duration: label ? 2300 : 2000 }, (scene, later) => {
         scene.classList.add('kickoff');
         const sides = teams.map((t, i) => {
           const side = el('div', `ko-side ${i ? 'right' : 'left'}`);
@@ -150,6 +152,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
           el('div', 'ko-top', half === 1 ? 'Kick off' : 'Second half'),
           el('div', 'ko-bottom', half === 1 ? `First to ${target.full} · half time at ${target.half}` : `First to ${target.full}`),
         );
+        if (label) scene.append(el('div', 'ko-label', label));
         later(550, () => play('whistle'));
       });
     },
@@ -233,7 +236,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
       });
     },
 
-    kickcam({ team, kick, range, distance, good }) {
+    kickcam({ team, kick, range, distance, good, note = null }) {
       const miss = range - distance;
       const outcome = good ? 'good' : miss === 1 ? 'post' : miss === 2 ? 'wide' : 'short';
       const verdict = {
@@ -246,7 +249,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
       return run({ duration: 3000 }, (scene, later, k) => {
         scene.classList.add('kickcam');
         kit(scene, team.color);
-        scene.append(el('div', 'kc-label', `${team.name} · ${label} · ${metres(range)}`));
+        scene.append(el('div', 'kc-label', `${team.name} · ${label} · ${metres(range)}${note ? ` · ${note}` : ''}`));
 
         const view = svg('svg', { viewBox: '0 0 360 300', class: 'kc-view', role: 'img', 'aria-label': `${label} from ${metres(range)}` });
         const defs = svg('defs', {}, view);
@@ -463,6 +466,99 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
           later(300, () => play('roar'));
           later(400, () => confetti(scene, [teams[winner].color, '#ffffff', '#f5cf1d', inkFor(teams[winner].color)], 180));
         }
+      });
+    },
+
+    // Both sides' team cards, face to face, before the kick-off.
+    draft({ teams }) {
+      return run({ duration: 2600 }, (scene, later) => {
+        scene.classList.add('draft-scene');
+        scene.append(el('div', 'ds-kicker', 'Team cards'));
+        const row = el('div', 'ds-row');
+        teams.forEach((t, i) => {
+          const col = el('div', `ds-col ${i ? 'right' : 'left'}`);
+          kit(col, t.color);
+          col.append(el('div', 'ds-team', t.name), cardArt(t.card));
+          row.append(col);
+          if (i === 0) row.append(el('div', 'ds-v', 'v'));
+        });
+        scene.append(row);
+        play('whoosh');
+        later(420, () => play('stamp'));
+        later(620, () => play('stamp'));
+      });
+    },
+
+    // A team card changes what the dice said.
+    cardplay({ team, card, line }) {
+      return run({ tone: 'clear', letterbox: false, duration: 1700, color: team.color }, (scene, later) => {
+        scene.classList.add('cardplay');
+        const glow = el('div', 'cp-glow');
+        const art = cardArt(card);
+        art.classList.add('cp-card');
+        scene.append(glow, art, sub(`${team.name} · ${line}`, 'cp-line'));
+        play('whoosh');
+        later(260, () => {
+          play('stamp');
+          if (haptics()) buzz(30);
+        });
+      });
+    },
+
+    // Player of the Match, in the spotlight.
+    potm({ name, team, position, line }) {
+      return run({ duration: 2800 }, (scene, later) => {
+        scene.classList.add('potm-scene');
+        scene.append(el('div', 'spot'));
+        const card = el('div', 'pm-card');
+        kit(card, team.color);
+        card.append(el('div', 'pm-kicker', 'Player of the Match'), el('div', 'pm-name', name), el('div', 'pm-pos', `${position} · ${team.name}`));
+        scene.append(card, sub(line, 'late'));
+        later(200, () => play('cheer'));
+      });
+    },
+
+    // One or more achievements unlocked at full time.
+    achievement({ items }) {
+      return run({ duration: 2000 + 500 * (items.length - 1) }, (scene, later) => {
+        scene.classList.add('ach-scene');
+        scene.append(el('div', 'ach-kicker', items.length > 1 ? `${items.length} achievements unlocked` : 'Achievement unlocked'));
+        const list = el('div', 'ach-cards');
+        items.forEach((a, i) => {
+          const card = el('div', 'ach-card');
+          card.style.animationDelay = `calc(${180 + i * 260}ms * var(--k))`;
+          const text = el('div', 'ach-card-text');
+          text.append(el('b', null, a.name), el('span', null, a.text));
+          card.append(medal('ach-medal'), text);
+          list.append(card);
+          later(180 + i * 260, () => play('stamp'));
+        });
+        scene.append(list);
+        later(120, () => play('cheer'));
+      });
+    },
+
+    // The trophy goes up.
+    trophy({ team, title }) {
+      return run({ tone: 'team', duration: 3600, color: team.color }, (scene, later) => {
+        scene.classList.add('trophy-scene');
+        scene.append(el('div', 'rays'));
+        const cup = svg('svg', { viewBox: '0 0 120 150', class: 'cup', 'aria-hidden': 'true' });
+        const gold = svg('linearGradient', { id: 'cup-gold', x1: 0, y1: 0, x2: 1, y2: 0 }, svg('defs', {}, cup));
+        svg('stop', { offset: '0', 'stop-color': '#a8740c' }, gold);
+        svg('stop', { offset: '0.45', 'stop-color': '#fbe08a' }, gold);
+        svg('stop', { offset: '1', 'stop-color': '#b9810f' }, gold);
+        svg('path', { d: 'M30 10h60v28c0 22-13 38-30 40-17-2-30-18-30-40z', fill: 'url(#cup-gold)' }, cup);
+        svg('path', { d: 'M30 18H14c0 18 8 28 18 30M90 18h16c0 18-8 28-18 30', fill: 'none', stroke: 'url(#cup-gold)', 'stroke-width': 6, 'stroke-linecap': 'round' }, cup);
+        svg('path', { d: 'M54 78h12v22H54z', fill: 'url(#cup-gold)' }, cup);
+        svg('path', { d: 'M36 100h48l6 18H30z', fill: 'url(#cup-gold)' }, cup);
+        svg('rect', { x: 24, y: 118, width: 72, height: 16, rx: 3, fill: '#3a2a10' }, cup);
+        svg('ellipse', { cx: 50, cy: 30, rx: 6, ry: 14, fill: '#fff', opacity: 0.35 }, cup);
+        scene.append(cup, el('div', 'cine-title small late', 'Champions'), sub(`${team.name} · ${title}`, 'late'));
+        play('whistle', true);
+        later(300, () => play('roar'));
+        later(500, () => confetti(scene, [team.color, '#ffffff', '#f5cf1d', inkFor(team.color)], 220));
+        later(1400, () => confetti(scene, ['#f5cf1d', '#ffffff', team.color], 120));
       });
     },
   };

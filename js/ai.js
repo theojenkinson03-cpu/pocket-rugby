@@ -143,13 +143,13 @@ function pickFromWinChances(match, chances, personality) {
 }
 
 // Team cards matter over a whole match, so the draft goes on measured value.
-const expertDraft = (match, personality) => bestCard(match.step.options, personality);
+const expertDraft = match => bestCard(match.step.options, PERSONALITIES.balanced);
 
 export function expertChoice(match, { rollouts = 200, seed = match.seq + 1 } = {}) {
   const step = match.step;
   const personality = personalityOf(match);
   if (step.purpose === 'toss') return 'heads';
-  if (step.purpose === 'draft') return expertDraft(match, personality);
+  if (step.purpose === 'draft') return expertDraft(match);
   const gen = evaluateOptions(match, rollouts, seed);
   let next = gen.next();
   while (!next.done) next = gen.next();
@@ -161,7 +161,7 @@ export async function expertChoiceAsync(match, { rollouts = 200, seed = match.se
   const step = match.step;
   const personality = personalityOf(match);
   if (step.purpose === 'toss') return 'heads';
-  if (step.purpose === 'draft') return expertDraft(match, personality);
+  if (step.purpose === 'draft') return expertDraft(match);
   const gen = evaluateOptions(match, rollouts, seed);
   let next = gen.next();
   let n = 0;

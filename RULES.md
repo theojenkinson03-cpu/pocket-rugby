@@ -66,11 +66,33 @@ Every rule on the printed Pocket Sports Rugby sheet, how this game applies it, a
 | The advantage ends after 3 completed tackles or an attacking error | Each completed tackle uses one run (ruck contests included). An error or any change of possession ends it | `countTackle`, `setPiece`, `startPossession` | `exhaustive`; mutations "Quick tap never runs out" and "Errors do not end quick tap" |
 | Another penalty during quick tap resets it to 3 runs | Any new quick tap starts at 3 | `onChoose` | `exhaustive` |
 
+## House rules: team cards
+
+Team cards aren't on the printed sheet. They're an optional extra, on by default, and every effect is a small change at one named point in the engine, so the printed rules underneath are untouched. Each card's text in the game is the whole of its effect.
+
+| Card | Effect | Code | Tested by |
+| --- | --- | --- | --- |
+| The draft | Three different cards are dealt after the toss. The toss **loser** picks first from all three; the toss winner, who also receives the kick-off, picks from the other two. Measured over 10,000 simulated drafts, the side picking first wins 49.9% | `dealCards`, `onChoose` (draft) | `cards`: 3,000 deals; mutations "Toss winner picks first", "Second pick may take the same card", "A deal can repeat a card" |
+| Big Pack | Forward Hit Ups +1; Line Break 8 | `intensityParts` (`runBonus`) | `cards`; mutations "Card run bonus ignored", "Big Pack: no bonus on the big move" |
+| Up and Under | Back's High Ball 8, Back Hit Ups +1, the Back's Into Touch becomes a pass | `intensityParts`, `onAttack` (`faceSwap`) | `cards` |
+| Midfield Maestro | The Centre's Intercepted face becomes a free pass | `onAttack` (`faceSwap`) | `cards`; mutation "Card face swaps ignored" |
+| Sure Hands | The Wing's Knock On and Into Touch become passes | `onAttack` (`faceSwap`) | `cards`; mutation "Sure Hands for every player" |
+| Golden Boot | +2 (20 m) on conversion and penalty kicks | `onKick`, `kickBonus` | `cards`: every range and kick face; mutations "Kick bonus left off the kick", "Golden Boot helps drop goals too" |
+| Drop-Goal Artist | +2 on drop goals, and the Wing's open Pass face is a drop-goal chance | `onKick`, `onAttack` (`passToDrop`) | `cards`; mutation "Drop-Goal Artist: every open pass a drop chance" |
+| Rush Defence | +1 on the first brown die against Hit Ups (not big moves) | `resolveTackle` (`firstBonus`) | `cards`: all 36 dice pairs; mutations "Rush Defence on both dice", "Rush Defence against big moves" |
+| Jackal | A Big Hit on either die contests the ruck against Hit Ups up to 5; VIDEO REF also wins the ruck | `ruckEligible`, `resolveTackle`, `onRuck` | `cards`; mutations "Second-die ruck for everyone", "Jackal: video ref does not win the ruck" |
+| Fortress | The other side's big moves are 2 lower against you (never below 1) | `intensityParts` (`specialDefence`) | `cards`; mutations "Fortress protects the attackers", "Fortress against Hit Ups too" |
+| Clinical Finisher | Once a match, a NO TRY or held-up roll is rolled again | `onTry`, `useCharge` | `cards`; mutations "Limited cards never run out", "Once-a-match cards refreshed at half time" |
+| Set-Piece Kings | Reset scrums and crooked lineouts go to them; +1 on their first run after a set piece they win | `onSetPiece` | `cards`: every feeder and piece; mutations "Set-Piece Kings ignored at resets", "Set-piece advantage for three runs" |
+| Squeaky Clean | Once a match, PENALTY AGAINST on their own feed becomes PENALTY WON | `onSetPiece`, `useCharge` | `cards`; mutation "Squeaky Clean on the other side's feed" |
+
+**Balance.** `scripts/balance-cards.mjs` plays 5,000 CPU matches for each card against a side with no card. Every card lifts the win rate by between 6.8 and 9.7 points, inside the simulation's ±1.4% noise of each other, so no pick is a trap. The odds the game shows before a pass (break and error chances) include both sides' cards; `cards` checks them against a count of every face and every pair of tackle dice for all 24 card-and-side combinations.
+
 ## How the checking works
 
 - **`test/helpers.mjs`** holds a second, independent reading of the rules. It's written straight from the sheet and uses nothing from the engine except the dice data. The engine must agree with it in every case.
 - **`test/exhaustive.test.mjs`** plays every combination rather than a sample: every face of every die, all 36 tackle dice pairs at every intensity and card state, every kick, every set piece, and every score threshold.
-- **`test/invariants.test.mjs`** plays 1,500 full matches (`npm run test:fuzz` plays 20,000) with random, Rookie and Pro decisions. After every action it checks more than 30 invariants: scores add up, conversions follow tries, possession only changes for a reason, the state survives save and reload, the commentary never says "undefined", and more.
+- **`test/invariants.test.mjs`** plays 1,500 full matches (`npm run test:fuzz` plays 20,000) with random, Rookie and Pro decisions in every CPU style, two thirds of them with team cards. After every action it checks more than 40 invariants: scores add up, conversions follow tries, possession only changes for a reason, each run's intensity is the die plus quick tap and cards minus injuries, every tackle agrees with the rules reading (cards included), every player's numbers add up to the team's, the state survives save and reload, the commentary never says "undefined", and more. It also confirms every card effect actually happened somewhere.
 - **`test/odds.test.mjs`** checks that the dice are fair (chi-square) and that the odds shown to players match tens of thousands of real rolls.
-- **`scripts/mutate.mjs`** (`npm run test:mutation`) plants 35 rules bugs, one at a time, and confirms the tests catch each one.
-- **`test/e2e/run.mjs`** (`npm run test:e2e`) plays complete matches in a real browser. Every time the game waits for a tap, it checks that the scoreboard, possession marker, cards, injuries, prompt and buttons match the saved match exactly.
+- **`scripts/mutate.mjs`** (`npm run test:mutation`) plants 85 bugs, one at a time (in the rules, the cards, the draft, player stats, the CPU, tournaments, achievements, the coach and online play), and confirms the tests catch each one.
+- **`test/e2e/run.mjs`** (`npm run test:e2e`) plays complete matches in a real browser: against Pro and Expert, two players, keyboard only, the guided match, a Nations Cup round and a two-phone online match. Every time the game waits for a tap, it checks that the scoreboard, possession marker, team cards, win meter, injuries, prompt, buttons and draft match the saved match exactly.

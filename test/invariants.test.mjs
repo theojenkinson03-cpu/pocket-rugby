@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import { act, controllerOf, defenceModifier, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
+import { CARD_BY_ID, CARD_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
 import { DICE, POSITIONS } from '../js/dice.js';
 import { BROKEN_TEXT, RULES } from './helpers.mjs';
@@ -36,6 +37,29 @@ function pickAction(m, rng, style) {
   if (m.step.type === 'halftime') return { type: 'continue' };
   if (style === 'random') return { type: 'choose', value: m.step.options[Math.floor(rng() * m.step.options.length)] };
   return { type: 'choose', value: cpuChoice({ ...m, cpuLevel: style }, rng) };
+}
+
+// A side's card effects, read straight from the card list.
+const fx = (m, team) => CARD_BY_ID[m.teams[team].card]?.effects || {};
+const PLAYER_SUMS = [['tries', 'tries'], ['carries', 'runs'], ['lineBreaks', 'lineBreaks'], ['tackles', 'tackles'], ['bigHits', 'bigHits'], ['turnovers', 'turnoversWon'], ['errors', 'errors']];
+
+function checkCards(m, label) {
+  const drafted = m.teams.map(t => t.card);
+  if (!m.cards) {
+    assert.deepEqual(drafted, [null, null], `${label}: no cards when they are off`);
+    return;
+  }
+  if (m.attacker !== null) {
+    assert.ok(drafted.every(id => CARD_IDS.includes(id)), `${label}: both sides have a card once play starts`);
+    assert.notEqual(drafted[0], drafted[1], `${label}: different cards`);
+    assert.ok(drafted.every(id => m.deal.includes(id)), `${label}: cards come from the deal`);
+  }
+  m.teams.forEach((t, i) => {
+    for (const [key, used] of Object.entries(t.cardUses)) {
+      const limit = fx(m, i).uses?.[key];
+      assert.ok(used <= (limit ? limit.n : 0), `${label}: team ${i} ${key} used ${used}`);
+    }
+  });
 }
 
 function checkState(m, label) {
@@ -79,7 +103,11 @@ function checkState(m, label) {
     const pending = step.purpose === 'tackle' && m.attacker === i ? 1 : 0;
     assert.equal(s.runs, m.teams[1 - i].stats.tackles + s.lineBreaks + pending, `${label}: team ${i} runs = tackles faced + breaks`);
     assert.equal(s.lineBreaks, m.teams[1 - i].stats.missedTackles, `${label}: breaks = missed tackles`);
+    for (const [player, team] of PLAYER_SUMS) {
+      assert.equal(POSITIONS.reduce((n, p) => n + t.players[p][player], 0), s[team], `${label}: team ${i} players' ${player} add up`);
+    }
   });
+  checkCards(m, label);
 
   const scores = m.teams.map(t => t.score);
   if (step.type === 'fulltime') {
@@ -136,13 +164,43 @@ function checkEvents(before, after, events, label) {
     assert.ok(DICE.D.faces[a].kind === 'bighit' && DICE.D.faces[b].kind === 'bighit', `${label}: injury needs two Big Hits`);
   }
 
-  // A tackle outcome always agrees with the rules reading.
+  // A tackle outcome always agrees with the rules reading, cards included.
   if (before.step.purpose === 'tackle') {
     const [a, b] = after.roll.faces;
-    const want = RULES.tackle(a, b, before.step.intensity, { perDie: defenceModifier(before, before.step.team), plainHitUp: before.step.ruck });
+    const def = before.step.team;
+    const card = fx(before, def);
+    const special = !!before.step.special;
+    const ruckMax = card.ruckMax || 4;
+    assert.equal(before.step.ruck, !special && before.step.intensity <= ruckMax, `${label}: who can contest the ruck`);
+    const want = RULES.tackle(a, b, before.step.intensity, {
+      perDie: defenceModifier(before, def),
+      plainHitUp: !special,
+      firstBonus: (special ? card.tackleBonus?.special : card.tackleBonus?.hitUp) || 0,
+      ruckMax,
+      ruckOnSecond: !!card.ruckOnSecond,
+    });
     const brokeThrough = events.some(e => e.type === 'lineBreak');
     assert.equal(brokeThrough, want.result === 'break', `${label}: tackle outcome`);
     assert.equal(after.step.purpose === 'ruck', want.result === 'ruck', `${label}: ruck`);
+  }
+
+  // A run's intensity: the die, quick tap, cards and injuries, never below 1.
+  for (const e of events.filter(x => x.type === 'run')) {
+    const face = DICE[e.pos].faces[after.roll.faces[0]];
+    assert.equal(e.value, face.value, `${label}: the die's value`);
+    const bonus = fx(before, e.team).runBonus?.[e.pos];
+    assert.equal(e.card, bonus ? (face.special ? bonus.special : bonus.hitUp) : 0, `${label}: card bonus`);
+    assert.equal(e.fortress, face.special ? fx(before, 1 - e.team).specialDefence || 0 : 0, `${label}: Fortress`);
+    assert.equal(e.quickTap, before.attacker === e.team && before.quickTap > 0 ? 1 : 0, `${label}: quick tap`);
+    assert.equal(e.injury, before.teams[e.team].injuries[e.pos], `${label}: injury`);
+    assert.equal(e.intensity, Math.max(1, e.value + e.quickTap + e.card - e.fortress - e.injury), `${label}: intensity`);
+  }
+
+  // Cards: never change once picked; only play for the side holding them.
+  for (const i of [0, 1]) if (before.teams[i].card) assert.equal(after.teams[i].card, before.teams[i].card, `${label}: cards stay`);
+  for (const e of events.filter(x => x.type === 'cardPlayed')) {
+    assert.ok(before.cards, `${label}: a card played with cards off`);
+    assert.equal(e.card, after.teams[e.team].card, `${label}: ${e.card} played by the side that holds it`);
   }
 }
 
@@ -153,7 +211,7 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
     const rng = seededRng(1000 + g);
     const length = LENGTHS[g % LENGTHS.length];
     const style = styles[g % styles.length];
-    let m = newMatch({ mode: g % 2 ? '1p' : '2p', length, cpuLevel: g % 4 ? 'pro' : 'rookie' });
+    let m = newMatch({ mode: g % 2 ? '1p' : '2p', length, cpuLevel: g % 4 ? 'pro' : 'rookie', cards: g % 3 !== 2, cpuPersonality: ['balanced', 'boot', 'run', 'pack'][g % 4] });
     checkState(m, `match ${g} start`);
     let actions = 0;
     while (m.step.type !== 'fulltime') {
@@ -183,7 +241,10 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
       for (const t of [story.headline, story.detail]) if (t) assert.doesNotMatch(t, BROKEN_TEXT, `${label}: "${t}"`);
       for (const mo of story.moments) assert.doesNotMatch(`${mo.title} ${mo.sub}`, BROKEN_TEXT, label);
 
-      for (const e of events) totals.events.add(e.type);
+      for (const e of events) {
+        totals.events.add(e.type);
+        if (e.type === 'cardPlayed') totals.events.add(`cardPlayed:${e.what}`);
+      }
       totals.steps.add(`${state.step.type}:${state.step.purpose || ''}`);
       m = state;
       actions++;
@@ -196,10 +257,11 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
   // The fuzzing really did reach every corner of the game.
   const everyEvent = ['toss', 'possession', 'run', 'pass', 'passChoice', 'dropChance', 'error', 'intercept', 'tackle', 'lineBreak',
     'injury', 'ruck', 'videoRef', 'try', 'noTry', 'range', 'dropAttempt', 'dropDeclined', 'penaltyAttempt', 'kick', 'setPiece',
-    'penalty', 'card', 'noCard', 'quickTap', 'advantageOver', 'score', 'halftime', 'secondHalf', 'fulltime'];
+    'penalty', 'card', 'noCard', 'quickTap', 'advantageOver', 'score', 'halftime', 'secondHalf', 'fulltime', 'deal', 'draft',
+    ...['knockon', 'touch', 'intercept', 'dropChance', 'ruck', 'heldUp', 'noTry', 'penalty', 'reset', 'notstraight', 'advantage'].map(w => `cardPlayed:${w}`)];
   for (const e of everyEvent) assert.ok(totals.events.has(e), `event ${e} was reached`);
   for (const s of ['roll:attack', 'roll:tackle', 'roll:ruck', 'roll:try', 'roll:range', 'roll:penalty', 'roll:kick', 'roll:setpiece',
-    'choose:pass', 'choose:drop', 'choose:penalty', 'halftime:', 'fulltime:']) {
+    'choose:pass', 'choose:drop', 'choose:penalty', 'choose:draft', 'halftime:', 'fulltime:']) {
     assert.ok(totals.steps.has(s), `step ${s} was reached`);
   }
   assert.ok(totals.winners[0] > MATCHES * 0.35 && totals.winners[1] > MATCHES * 0.35, `both sides win (${totals.winners})`);

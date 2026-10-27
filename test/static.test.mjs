@@ -29,12 +29,15 @@ test('every element id the scripts look up exists in the page', () => {
   }
   // Ids built from templates.
   const templated = [
-    ...['home', 'setup', 'match'].map(v => `view-${v}`),
+    ...['home', 'setup', 'match', 'tournament', 'career', 'online'].map(v => `view-${v}`),
     ...['1p', '2p'].map(v => `mode-${v}`),
     ...['quick', 'standard', 'long'].map(v => `len-${v}`),
-    ...['rookie', 'pro'].map(v => `cpu-${v}`),
-    ...[0, 1].flatMap(t => [`team${t}-name`, `team${t}-kits`, `team${t}-tag`]),
-    ...['sound', 'odds', 'fast', 'autodef', 'haptics', 'cinema'].map(v => `set-${v}`),
+    ...['rookie', 'pro', 'expert'].map(v => `cpu-${v}`),
+    ...['balanced', 'boot', 'run', 'pack'].map(v => `style-${v}`),
+    ...[0, 1].flatMap(t => [`team${t}-name`, `team${t}-kits`, `team${t}-tag`, `team${t}-squad`]),
+    ...['sound', 'odds', 'fast', 'autodef', 'haptics', 'cinema', 'meter', 'coach'].map(v => `set-${v}`),
+    ...['team', 'players', 'momentum'].flatMap(v => [`tab-${v}`, `panel-${v}`]),
+    ...[0, 1].map(t => `meter-${t}`),
   ];
   for (const id of templated) if (!ids.has(id)) missing.push(`template: #${id}`);
   assert.deepEqual(missing, []);

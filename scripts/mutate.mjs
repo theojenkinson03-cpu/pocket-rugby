@@ -13,8 +13,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // [rule broken, file, original text, replacement]
 const MUTANTS = [
-  ['Ruck steal against a Hit Up of 5', 'js/engine.js', "!face.special && intensity <= 4", "!face.special && intensity <= 5"],
-  ['Ruck steal against big moves too', 'js/engine.js', "face.kind === 'run' && !face.special && intensity <= 4", "face.kind === 'run' && intensity <= 4"],
+  // The rules.
+  ['Ruck steal against a Hit Up of 5', 'js/engine.js', 'ruckEligible(face, parts.intensity, cardEffects(m, def).ruckMax || 4)', 'ruckEligible(face, parts.intensity, cardEffects(m, def).ruckMax || 5)'],
+  ['Ruck steal against big moves too', 'js/engine.js', "return face.kind === 'run' && !face.special && intensity <= max;", "return face.kind === 'run' && intensity <= max;"],
   ['Card penalty on one die only', 'js/engine.js', 'second.value + modifier]', 'second.value]'],
   ['Second-die Big Hit does not complete the tackle', 'js/engine.js', "else if (secondHit) outcome = 'bighit';", ''],
   ['Tackle must beat the intensity, not equal it', 'js/engine.js', 'total >= intensity', 'total > intensity'],
@@ -22,7 +23,7 @@ const MUTANTS = [
   ['Try worth 4', 'js/engine.js', "addPoints(m, ev, team, 5, 'try')", "addPoints(m, ev, team, 4, 'try')"],
   ['Conversion worth 3', 'js/engine.js', "conversion: ['conversions', 'conversionAttempts', 2]", "conversion: ['conversions', 'conversionAttempts', 3]"],
   ['Conceding side receives after a score', 'js/engine.js', "startPossession(m, ev, team, 'kickoff');\n}", "startPossession(m, ev, other(team), 'kickoff');\n}"],
-  ['No conversion: straight to restart', 'js/engine.js', "m.step = { type: 'roll', purpose: 'range', dice: ['D'], team, kick: 'conversion' };", "afterScore(m, ev, team);"],
+  ['No conversion: straight to restart', 'js/engine.js', "m.step = { type: 'roll', purpose: 'range', dice: ['D'], team, kick: 'conversion' };", 'afterScore(m, ev, team);'],
   ['Kick must beat the range, not equal it', 'js/engine.js', 'const good = distance >= range;', 'const good = distance > range;'],
   ['Video ref counts as no try', 'js/engine.js', "if (face.result === 'video') {", "if (face.result === 'never') {"],
   ['Missed drop goal keeps the ball', 'js/engine.js', "startPossession(m, ev, other(team), 'missedKick');", "startPossession(m, ev, team, 'missedKick');"],
@@ -30,29 +31,91 @@ const MUTANTS = [
   ['Quick tap never runs out', 'js/engine.js', '  m.quickTap--;\n', ''],
   ['Quick tap gives no bonus', 'js/engine.js', 'match.quickTap > 0 ? 1 : 0', 'match.quickTap > 0 ? 0 : 0'],
   ['Errors do not end quick tap', 'js/engine.js', "function setPiece(m, ev, piece, feeder) {\n  m.quickTap = 0;", 'function setPiece(m, ev, piece, feeder) {'],
-  ['Injuries ignored', 'js/engine.js', '- match.teams[team].injuries[pos]', '- 0'],
+  ['Injuries ignored', 'js/engine.js', 'const injury = match.teams[team].injuries[pos];', 'const injury = 0;'],
   ['Half time in the second half too', 'js/engine.js', 'if (m.half === 1 && m.teams.some', 'if (m.teams.some'],
-  ['Sin bin carries into the second half', 'js/engine.js', 'for (const t of m.teams) t.sinBin = false;', ''],
+  ['Sin bin carries into the second half', 'js/engine.js', '      t.sinBin = false;\n', ''],
   ['Second yellow is not a red', 'js/engine.js', 'if (O.yellows >= 2) {', 'if (O.yellows >= 3) {'],
   ['Red card only -1', 'js/engine.js', 'if (t.yellows >= 2) return -2;', 'if (t.yellows >= 2) return -1;'],
-  ['Crooked lineout rethrown by the same side', 'js/engine.js', "else if (outcome === 'notstraight') m.step = { ...m.step, team: other(team) };", "else if (outcome === 'notstraight') m.step = { ...m.step };"],
-  ['Penalty Won goes to the wrong side', 'js/engine.js', "const awarded = face.penalty === 'won' ? team : other(team);", "const awarded = face.penalty === 'won' ? other(team) : team;"],
-  ['Knock on gives the attackers the scrum', 'js/engine.js', 'setPiece(m, ev, piece, other(team));', 'setPiece(m, ev, piece, team);'],
-  ['Intercept is not a turnover', 'js/engine.js', "startPossession(m, ev, other(team), 'intercept');", "startPossession(m, ev, team, 'intercept');"],
-  ['Ruck won does not turn the ball over', 'js/engine.js', "if (DICE.K.faces[faceIndex].result === 'ruck') {", "if (DICE.K.faces[faceIndex].result === 'never') {"],
+  ['Crooked lineout rethrown by the same side', 'js/engine.js', "if (outcome === 'notstraight') m.step = { ...m.step, team: other(team) };", "if (outcome === 'notstraight') m.step = { ...m.step };"],
+  ['Penalty Won goes to the wrong side', 'js/engine.js', "let awarded = face.penalty === 'won' ? team : other(team);", "let awarded = face.penalty === 'won' ? other(team) : team;"],
+  ['Knock on gives the attackers the scrum', 'js/engine.js', 'setPiece(m, ev, piece, def);', 'setPiece(m, ev, piece, team);'],
+  ['Intercept is not a turnover', 'js/engine.js', "startPossession(m, ev, def, 'intercept');", "startPossession(m, ev, team, 'intercept');"],
+  ['Ruck won does not turn the ball over', 'js/engine.js', "if (result === 'ruck' || byCard) {", "if (result === 'never' || byCard) {"],
   ['Full time only beyond 30', 'js/engine.js', 'if (m.teams[team].score < m.target.full) return false;', 'if (m.teams[team].score <= m.target.full) return false;'],
   ['Same side receives in both halves', 'js/engine.js', "startPossession(m, ev, other(m.firstReceiver), 'kickoff');", "startPossession(m, ev, m.firstReceiver, 'kickoff');"],
   ['Passing back to the Scrum Half allowed', 'js/engine.js', "POSITIONS.filter(p => p !== 'S' && p !== from)", 'POSITIONS.filter(p => p !== from)'],
   ['Toss winner kicks instead of receiving', 'js/engine.js', 'const winner = result === action.value ? step.team : other(step.team);', 'const winner = result === action.value ? other(step.team) : step.team;'],
   ['Wing big move is 7', 'js/dice.js', "special('Into the Corner', 8)", "special('Into the Corner', 7)"],
   ['Back cannot drop goal', 'js/dice.js', "faces: [hitUp(3), hitUp(4), special('High Ball', 6), drop(), pass(), touch()]", "faces: [hitUp(3), hitUp(4), special('High Ball', 6), pass(), pass(), touch()]"],
-  ['Pro CPU kicks at long odds', 'js/ai.js', 'return chance >= 0.5;', 'return chance >= 0.3;'],
-  ['Break chance ignores the card', 'js/engine.js', 'lineBreak += breakChance(intensity, modifier, ruckEligible(face, intensity)) / 6;', 'lineBreak += breakChance(intensity, 0, ruckEligible(face, intensity)) / 6;'],
+  ['Break chance ignores the card', 'js/engine.js', 'lineBreak += breakChance(intensity, modifier, canRuck', 'lineBreak += breakChance(intensity, 0, canRuck'],
+
+  // Team cards and the draft.
+  ['Card run bonus ignored', 'js/engine.js', 'const card = bonus ? (face.special ? bonus.special : bonus.hitUp) : 0;', 'const card = 0;'],
+  ['Big Pack: no bonus on the big move', 'js/cards.js', 'runBonus: { F: { hitUp: 1, special: 2 } }', 'runBonus: { F: { hitUp: 1, special: 0 } }'],
+  ['Fortress protects the attackers', 'js/engine.js', 'cardEffects(match, other(team)).specialDefence', 'cardEffects(match, team).specialDefence'],
+  ['Fortress against Hit Ups too', 'js/engine.js', 'const fortress = face?.special ?', 'const fortress = face ?'],
+  ['Card face swaps ignored', 'js/engine.js', "if (lost && cardEffects(m, team).faceSwap?.[pos]?.[lost] === 'pass') {", 'if (false) {'],
+  ["Sure Hands for every player", 'js/engine.js', "cardEffects(m, team).faceSwap?.[pos]?.[lost] === 'pass'", "cardEffects(m, team).faceSwap?.W?.[lost] === 'pass'"],
+  ['Drop-Goal Artist: every open pass a drop chance', 'js/engine.js', '(cardEffects(m, team).passToDrop || []).includes(pos)', '(cardEffects(m, team).passToDrop || []).length'],
+  ['Kick bonus left off the kick', 'js/engine.js', 'const distance = rolled + bonus;', 'const distance = rolled;'],
+  ['Kick bonus left out of the shown chance', 'js/engine.js', "ev.push({ type: 'range', team, kick, range, bonus, chance: kickChance(range, bonus) });", "ev.push({ type: 'range', team, kick, range, bonus, chance: kickChance(range) });"],
+  ['Golden Boot helps drop goals too', 'js/cards.js', 'kickBonus: { conversion: 2, penalty: 2 }', 'kickBonus: { conversion: 2, penalty: 2, drop: 2 }'],
+  ['Rush Defence on both dice', 'js/engine.js', 'const values = [first.value + modifier + firstBonus, second.value + modifier];', 'const values = [first.value + modifier + firstBonus, second.value + modifier + firstBonus];'],
+  ['Rush Defence against big moves', 'js/engine.js', 'return special ? bonus.special || 0 : bonus.hitUp || 0;', 'return bonus.hitUp || 0;'],
+  ['Second-die ruck for everyone', 'js/engine.js', "else if (secondHit && canRuck && ruckOnSecond) outcome = 'ruck';", "else if (secondHit && canRuck) outcome = 'ruck';"],
+  ['Jackal: video ref does not win the ruck', 'js/engine.js', 'const byCard = (cardEffects(m, def).ruckAlsoWins || []).includes(result);', 'const byCard = false;'],
+  ['Limited cards never run out', 'js/engine.js', 'if ((used[key] || 0) >= limit.n) return false;', 'if ((used[key] || 0) > 99) return false;'],
+  ['Once-a-match cards refreshed at half time', 'js/engine.js', "if (limits[key]?.per !== 'match') used[key] = 0;", 'used[key] = 0;'],
+  ['Set-Piece Kings ignored at resets', 'js/engine.js', 'const kings = [0, 1].find(t => cardEffects(m, t).setPieceTies);', 'const kings = undefined;'],
+  ['Set-piece advantage for three runs', 'js/cards.js', 'setPieceTies: true, setPieceAdvantage: 1', 'setPieceTies: true, setPieceAdvantage: 3'],
+  ['Squeaky Clean on the other side\'s feed', 'js/engine.js', "useCharge(m, team, 'ownFeedPenalty')", "useCharge(m, other(team), 'ownFeedPenalty')"],
+  ['Toss winner picks first', 'js/engine.js', 'const first = other(m.firstReceiver);', 'const first = m.firstReceiver;'],
+  ['Second pick may take the same card', 'js/engine.js', 'const rest = step.options.filter(id => id !== value);', 'const rest = step.options;'],
+  ['A deal can repeat a card', 'js/engine.js', 'deal.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);', 'deal.push(pool[Math.floor(rng() * pool.length)]);'],
+  ['After the draft the toss loser receives', 'js/engine.js', "startPossession(m, ev, m.firstReceiver, 'kickoff');", "startPossession(m, ev, other(m.firstReceiver), 'kickoff');"],
+
+  // Players.
+  ['Tackles credited to the Scrum Half', 'js/engine.js', 'player(m, def, carrier).tackles++;', "player(m, def, 'S').tackles++;"],
+  ['Tries credited to the Scrum Half', 'js/engine.js', 'player(m, team, m.step.carrier).tries++;', "player(m, team, 'S').tries++;"],
+  ['Every kick credited to the Back', 'js/engine.js', "const kicker = m.step.kicker || (kick === 'drop' ? m.carrier : 'B');", "const kicker = 'B';"],
+  ['No lift for the winners in Player of the Match', 'js/players.js', 'row.team === match.winner ? 1.15 : 1', '1'],
+
+  // The CPU.
+  ['Pro CPU kicks at long odds', 'js/ai.js', 'return chance >= threshold - 1e-9;', 'return chance >= 0.3;'],
+  ['Boot it no keener to kick', 'js/ai.js', 'dropAt: 1 / 3,\n    penaltyAt: 1 / 3,', 'dropAt: 0.5,\n    penaltyAt: 0.5,'],
+  ['Draft ignores the CPU style', 'js/ai.js', 'return (CARD_BY_ID[id].value || 0) + (personality.cards[id] || 0);', 'return CARD_BY_ID[id].value || 0;'],
+  ['Win model forgets the second-half kick-off', 'js/winprob.js', 'const shr = match.firstReceiver === null ? 0 : (1 - match.firstReceiver === team ? 0 : 1);', 'const shr = 0;'],
+
+  // Tournaments.
+  ['A win is worth 3', 'js/tournament.js', 'row.points += POINTS.win;', 'row.points += 3;'],
+  ['Losing bonus only within 6', 'js/tournament.js', '<= POINTS.losingBonusWithin', '< POINTS.losingBonusWithin'],
+  ['Try bonus for winners only', 'js/tournament.js', 'if (r.tries[side] >= POINTS.tryBonusAt) {', 'if (won && r.tries[side] >= POINTS.tryBonusAt) {'],
+  ['Table ignores points difference', 'js/tournament.js', ' || (b.for - b.against) - (a.for - a.against)', ''],
+  ['Pool winners meet in the semis', 'js/tournament.js', "fixture('SF1', 'semi', 0, a[0].id, b[1].id), fixture('SF2', 'semi', 0, b[0].id, a[1].id)", "fixture('SF1', 'semi', 0, a[0].id, b[0].id), fixture('SF2', 'semi', 0, a[1].id, b[1].id)"],
+  ['League play-off: first v second', 'js/tournament.js', "fixture('SF1', 'semi', 0, table[0].id, table[3].id)", "fixture('SF1', 'semi', 0, table[0].id, table[1].id)"],
+  ['Away side never changes kit', 'js/tournament.js', 'const awayColor = clash(home.color, away.color) ? away.alt : away.color;', 'const awayColor = away.color;'],
+  ['User plays as the CPU side', 'js/tournament.js', "return { mode: '1p', teams: [mine, theirs]", "return { mode: '1p', teams: [theirs, mine]"],
+
+  // Career, achievements and the coach.
+  ['Two-player matches count in the record', 'js/career.js', "if (context.mode === '2p') {", "if (context.mode === 'never') {"],
+  ['Comeback from 9 down', 'js/career.js', 't.maxDeficit >= 10', 't.maxDeficit >= 9'],
+  ['Achievements unlock again', 'js/career.js', '    if (c.achievements[a.id]) continue;\n', ''],
+  ['Every miss hits the post', 'js/career.js', 'if (!e.good && e.distance === e.range - 1) tracker.postHits++;', 'if (!e.good) tracker.postHits++;'],
+  ['Coach repeats tips', 'js/coach.js', 'const fresh = id => (seen.includes(id) ? null : id);', 'const fresh = id => id;'],
+  ["Coach talks on the CPU's turn", 'js/coach.js', '  if (!humanTurn) return null;\n', ''],
+
+  // Online play.
+  ['Moves accepted out of turn', 'js/online.js', "if (actingTeam(match) !== remoteTeam) return { ok: false, reason: 'not their turn' };", ''],
+  ['Unused dice accepted', 'js/online.js', "if (rng.consumed() !== values.length) return { ok: false, reason: 'bad dice' };", ''],
+  ['Dice of 1 accepted', 'js/online.js', 'v >= 0 && v < 1', 'v >= 0 && v <= 1'],
+  ['Move order not checked', 'js/online.js', "if (!entry || entry.s !== match.seq) return { ok: false, reason: 'out of order' };", "if (!entry) return { ok: false, reason: 'out of order' };"],
+  ['Phones compare who controls what', 'js/online.js', 'const { controllers, ...shared } = match;', 'const shared = match;'],
+  ['Team names not cut to length', 'js/online.js', "name: String(team?.name || 'Visitors').slice(0, 14),", "name: String(team?.name || 'Visitors'),"],
 ];
 
 function run(cwd) {
   return new Promise(resolve => {
-    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary'].map(f => `test/${f}.test.mjs`);
+    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob'].map(f => `test/${f}.test.mjs`);
     const child = spawn(process.execPath, ['--test', ...files], { cwd, env: { ...process.env, FUZZ_MATCHES: '120' }, stdio: 'ignore' });
     child.on('exit', code => resolve(code));
   });

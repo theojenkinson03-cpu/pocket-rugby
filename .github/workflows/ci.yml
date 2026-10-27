@@ -8,19 +8,19 @@ jobs:
   rules:
     name: Rules, fuzzing and mutation tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Unit, exhaustive, odds and static tests
+      - name: Unit, exhaustive, card, tournament, career, online, odds and static tests
         run: npm test
       - name: Deep fuzz (8,000 matches)
         run: node --test test/invariants.test.mjs
         env:
           FUZZ_MATCHES: 8000
-      - name: Mutation testing (every planted rules bug must be caught)
+      - name: Mutation testing (every planted bug must be caught)
         run: npm run test:mutation
       - name: Balance simulation
         run: node scripts/simulate.mjs 2000
@@ -40,7 +40,7 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Build the single-file version
         run: npm run build
-      - name: Play matches in the browser
+      - name: Play matches in the browser (CPU, two players, guided match, Nations Cup, online on two phones)
         run: node test/e2e/run.mjs
         env:
           E2E_SKIP: unskipped

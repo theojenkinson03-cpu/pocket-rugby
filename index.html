@@ -32,10 +32,17 @@
         <button type="button" class="btn btn-primary btn-resume" id="btn-resume" hidden>
           <span>Resume match</span><small id="resume-detail"></small>
         </button>
+        <button type="button" class="btn btn-learn" id="btn-learn" hidden><span>Learn to play</span><small>A guided first match with a coach at your side</small></button>
         <button type="button" class="btn btn-primary" data-start="1p"><span>1 player</span><small>You against the CPU</small></button>
-        <button type="button" class="btn" data-start="2p"><span>2 players</span><small>Share one phone, take turns</small></button>
+        <div class="home-grid">
+          <button type="button" class="btn" data-start="2p"><span>2 players</span><small>One phone, take turns</small></button>
+          <button type="button" class="btn" id="btn-online"><span>Online</span><small>Two phones</small></button>
+          <button type="button" class="btn btn-span btn-cup" id="btn-tournament"><span id="tournament-label">Nations Cup &amp; League</span><small id="tournament-detail">Pools, knockouts and a trophy</small></button>
+        </div>
       </div>
       <div class="home-links">
+        <button type="button" class="link-btn" id="link-learn" hidden>Guided match</button>
+        <button type="button" class="link-btn" id="btn-career">Career</button>
         <button type="button" class="link-btn" data-open="dlg-rules">How to play</button>
         <button type="button" class="link-btn" data-open="dlg-settings">Settings</button>
       </div>
@@ -62,12 +69,14 @@
           <label class="team-tag" for="team0-name" id="team0-tag">You</label>
           <input class="team-name" id="team0-name" maxlength="14" autocomplete="off" spellcheck="false">
           <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team0-kits"></div>
+          <button type="button" class="squad-btn" data-squad="0"><span class="squad-names" id="team0-squad"></span><span class="squad-edit">Squad</span></button>
         </div>
         <div class="team-vs" aria-hidden="true">v</div>
         <div class="team-editor" data-team="1">
           <label class="team-tag" for="team1-name" id="team1-tag">CPU</label>
           <input class="team-name" id="team1-name" maxlength="14" autocomplete="off" spellcheck="false">
           <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team1-kits"></div>
+          <button type="button" class="squad-btn" data-squad="1"><span class="squad-names" id="team1-squad"></span><span class="squad-edit">Squad</span></button>
         </div>
       </div>
 
@@ -78,14 +87,55 @@
         <label><input type="radio" name="length" value="long" id="len-long"><span>Marathon<small>HT 25 · FT 50</small></span></label>
       </fieldset>
 
-      <fieldset class="seg" id="seg-cpu">
+      <fieldset class="seg seg-3" id="seg-cpu">
         <legend>CPU skill</legend>
         <label><input type="radio" name="cpu" value="rookie" id="cpu-rookie"><span>Rookie<small>Plays on instinct</small></span></label>
         <label><input type="radio" name="cpu" value="pro" id="cpu-pro"><span>Pro<small>Plays the odds</small></span></label>
+        <label><input type="radio" name="cpu" value="expert" id="cpu-expert"><span>Expert<small>Thinks ahead</small></span></label>
       </fieldset>
+
+      <fieldset class="seg seg-grid" id="seg-style">
+        <legend>CPU style</legend>
+        <label><input type="radio" name="style" value="balanced" id="style-balanced"><span>Balanced<small>Takes the points on offer</small></span></label>
+        <label><input type="radio" name="style" value="boot" id="style-boot"><span>Boot it<small>Kicks at every chance</small></span></label>
+        <label><input type="radio" name="style" value="run" id="style-run"><span>Run it<small>Taps and spreads it wide</small></span></label>
+        <label><input type="radio" name="style" value="pack" id="style-pack"><span>Forwards<small>Keeps it tight</small></span></label>
+      </fieldset>
+
+      <label class="toggle toggle-card" for="setup-cards"><span><b>Team cards</b><small>Three cards are dealt after the toss. The toss loser picks first.</small></span><input type="checkbox" id="setup-cards"><i aria-hidden="true"></i></label>
 
       <button type="submit" class="btn btn-primary btn-wide">To the coin toss</button>
     </form>
+  </section>
+
+  <section class="view view-page" id="view-tournament" hidden aria-labelledby="tournament-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="tournament-title">Tournament</h2>
+    </header>
+    <div class="page-body" id="tournament-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-career" hidden aria-labelledby="career-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="career-title">Career</h2>
+    </header>
+    <div class="page-body" id="career-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-online" hidden aria-labelledby="online-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" id="btn-online-back" aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="online-title">Online</h2>
+    </header>
+    <div class="page-body" id="online-body"></div>
   </section>
 
   <section class="view view-match" id="view-match" hidden aria-label="Match">
@@ -94,6 +144,7 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
       <div class="period" id="period"></div>
+      <span class="net" id="net" role="status" hidden></span>
       <button type="button" class="icon-btn" id="btn-sound" aria-label="Sound" aria-pressed="true">
         <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-on"><path d="M4 10v4h4l5 4V6L8 10H4z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>
         <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-off"><path d="M4 10v4h4l5 4V6L8 10H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
@@ -108,6 +159,7 @@
         <div class="side-head"><span class="kit"></span><span class="side-name"></span><span class="poss" aria-label="In possession" hidden></span></div>
         <div class="side-score" aria-live="polite"></div>
         <div class="side-bar"><i></i></div>
+        <button type="button" class="side-card" hidden></button>
         <div class="side-status"></div>
       </div>
       <div class="board-mid">
@@ -118,9 +170,23 @@
         <div class="side-head"><span class="kit"></span><span class="side-name"></span><span class="poss" aria-label="In possession" hidden></span></div>
         <div class="side-score" aria-live="polite"></div>
         <div class="side-bar"><i></i></div>
+        <button type="button" class="side-card" hidden></button>
         <div class="side-status"></div>
       </div>
+      <div class="meter" id="meter" hidden>
+        <span class="meter-num" id="meter-0"></span>
+        <span class="meter-bar" role="img" id="meter-bar"><i id="meter-fill"></i></span>
+        <span class="meter-num" id="meter-1"></span>
+      </div>
     </div>
+
+    <section class="draft" id="draft" hidden aria-labelledby="draft-title">
+      <p class="draft-kicker">Team cards</p>
+      <h2 class="draft-title" id="draft-title"></h2>
+      <p class="draft-sub" id="draft-sub"></p>
+      <div class="draft-cards" id="draft-cards"></div>
+      <p class="draft-status" id="draft-status"></p>
+    </section>
 
     <div class="pitch-wrap">
       <svg class="pitch" id="pitch" role="img" aria-label="Pitch showing both teams and the ball"></svg>
@@ -141,6 +207,16 @@
       <button type="button" class="feed-more" data-open="dlg-log">Match log</button>
     </div>
     <div class="sr-only" aria-live="polite" id="announcer"></div>
+
+    <aside class="coach" id="coach" hidden aria-live="polite" aria-labelledby="coach-title">
+      <span class="coach-badge" aria-hidden="true">Coach</span>
+      <b class="coach-title" id="coach-title"></b>
+      <p class="coach-text" id="coach-text"></p>
+      <div class="coach-actions">
+        <button type="button" class="coach-off" id="coach-off">Turn tips off</button>
+        <button type="button" class="coach-ok" id="coach-ok">Got it</button>
+      </div>
+    </aside>
 
     <footer class="dock" id="dock">
       <p class="prompt" id="prompt"></p>
@@ -179,6 +255,8 @@
       <select id="set-cinema"><option value="full">Full</option><option value="short">Short</option><option value="off">Off</option></select></label>
     <label class="toggle"><span><b>Sound</b><small>Dice, whistles and the crowd</small></span><input type="checkbox" id="set-sound"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Show odds</b><small>Chances next to every decision</small></span><input type="checkbox" id="set-odds"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Win meter</b><small>Each side's chance of winning, live</small></span><input type="checkbox" id="set-meter"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Coach tips</b><small>Explains each part of the game the first time it comes up</small></span><input type="checkbox" id="set-coach"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Fast dice</b><small>Shorter rolls and CPU turns</small></span><input type="checkbox" id="set-fast"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Auto-tackle</b><small>1 player: roll your defence for you</small></span><input type="checkbox" id="set-autodef"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Vibration</b><small>On phones that support it</small></span><input type="checkbox" id="set-haptics"><i aria-hidden="true"></i></label>
@@ -233,6 +311,23 @@
       <p>After any score the team that scored receives the kick-off. The coin toss decides who receives first; the other side receives at the start of the second half.</p>
     </section>
     <section>
+      <h3>Team cards</h3>
+      <p>With team cards on, three of the twelve cards are dealt after the coin toss. The side that <b>lost</b> the toss picks first, from all three; the side that won the toss receives the kick-off and picks from the two left. Each card lasts the whole match. Every card was balanced over thousands of simulated matches, so none is a trap: pick the one that suits your style.</p>
+      <div class="rules-cards" id="rules-cards"></div>
+    </section>
+    <section>
+      <h3>The CPU</h3>
+      <p><b>Rookie</b> plays on instinct. <b>Pro</b> plays the odds. <b>Expert</b> plays out hundreds of continuations before every decision and picks the one that wins most often. In a dice game the dice decide most matches, so Expert is only a little stronger than Pro, but it rarely makes a poor call. The CPU's <b>style</b> flavours its choices: Boot it kicks at every chance, Run it taps penalties and spreads the ball wide, Forwards keeps it tight.</p>
+    </section>
+    <section>
+      <h3>Tournaments</h3>
+      <p>The <b>Nations Cup</b> has two pools of four; the top two in each go through to the semi-finals. The <b>League</b> is eight clubs playing each other once, then a top-four play-off. A win is worth 4 points, with a bonus point for scoring 4 tries and another for losing by 7 or fewer.</p>
+    </section>
+    <section>
+      <h3>Online</h3>
+      <p>Play a friend on two phones. One of you hosts and shares a six-letter code; the other joins with it. Both of you need to open this same page signed in, with access to it. Each phone rolls its own dice and checks every move the other phone makes against the rules.</p>
+    </section>
+    <section>
       <h3>The dice</h3>
       <div class="dice-ref" id="dice-ref"></div>
     </section>
@@ -243,8 +338,41 @@
   <p class="break-kicker" id="break-kicker"></p>
   <h2 id="break-title" tabindex="-1" autofocus></h2>
   <div class="break-score" id="break-score"></div>
-  <table class="stats" id="break-stats"></table>
+  <p class="break-note" id="break-note" hidden></p>
+  <div class="potm" id="break-potm" hidden></div>
+  <div class="awards" id="break-awards" hidden></div>
+  <div class="tabs" role="tablist" aria-label="Match report" id="break-tabs">
+    <button type="button" role="tab" id="tab-team" aria-controls="panel-team" aria-selected="true">Team</button>
+    <button type="button" role="tab" id="tab-players" aria-controls="panel-players" aria-selected="false">Players</button>
+    <button type="button" role="tab" id="tab-momentum" aria-controls="panel-momentum" aria-selected="false">Momentum</button>
+  </div>
+  <div class="tab-panel" role="tabpanel" id="panel-team" aria-labelledby="tab-team"><table class="stats" id="break-stats"></table></div>
+  <div class="tab-panel" role="tabpanel" id="panel-players" aria-labelledby="tab-players" hidden></div>
+  <div class="tab-panel" role="tabpanel" id="panel-momentum" aria-labelledby="tab-momentum" hidden></div>
   <div class="menu-list" id="break-actions"></div>
+</dialog>
+
+<dialog class="sheet" id="dlg-squad" aria-labelledby="squad-title">
+  <h2 id="squad-title">Squad</h2>
+  <p>Name your five players. Their names appear in the commentary and the match report.</p>
+  <div class="squad-list" id="squad-list"></div>
+  <div class="menu-list">
+    <button type="button" class="btn" id="btn-squad-shuffle">Shuffle names</button>
+    <button type="button" class="btn btn-primary" id="btn-squad-done">Done</button>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="dlg-card" aria-labelledby="card-title">
+  <p class="break-kicker" id="card-team"></p>
+  <h2 id="card-title">Team card</h2>
+  <div class="card-detail" id="card-detail"></div>
+  <div class="menu-list"><button type="button" class="btn btn-primary" data-close>Back to the match</button></div>
+</dialog>
+
+<dialog class="sheet" id="dlg-ask" aria-labelledby="ask-title">
+  <h2 id="ask-title"></h2>
+  <p id="ask-text"></p>
+  <div class="menu-list" id="ask-actions"></div>
 </dialog>
 <!-- /build:body -->
 
