@@ -1,5 +1,5 @@
 // Offline support: serve the app from cache, refresh the cache in the background.
-const CACHE = 'pocket-rugby-v2';
+const CACHE = 'pocket-rugby-v3';
 const FILES = [
   './',
   'index.html',
@@ -7,6 +7,7 @@ const FILES = [
   'js/app.js',
   'js/ai.js',
   'js/audio.js',
+  'js/cards.js',
   'js/cinema.js',
   'js/color.js',
   'js/commentary.js',

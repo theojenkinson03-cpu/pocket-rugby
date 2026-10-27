@@ -213,7 +213,7 @@ test('every conversion: all 36 range and kick pairs', () => {
       let m = stateAt({ step: { type: 'roll', purpose: 'range', dice: ['D'], team: 0, kick: 'conversion' }, scores: [5, 0] });
       m = roll(m, dice(r)).state;
       const range = DICE.D.faces[r].value;
-      assert.deepEqual(m.step, { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'conversion', range }, 'conversions are always kicked');
+      assert.deepEqual(m.step, { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'conversion', range, kicker: 'B' }, 'conversions are always kicked, by the Back');
       const { state: after, events } = roll(m, dice(k));
       const good = RULES.kickGood(r, k);
       assert.equal(after.teams[0].score, good ? 7 : 5, `range ${r} kick ${k}`);
@@ -294,7 +294,7 @@ test('every penalty kick and every quick tap', () => {
     const m = stateAt({ step: { type: 'choose', purpose: 'penalty', team: 1, range, options: ['kick', 'tap'] }, attacker: 1 });
     for (const k of range6) {
       const kicked = choose(m, 'kick').state;
-      assert.deepEqual(kicked.step, { type: 'roll', purpose: 'kick', dice: ['K'], team: 1, kick: 'penalty', range });
+      assert.deepEqual(kicked.step, { type: 'roll', purpose: 'kick', dice: ['K'], team: 1, kick: 'penalty', range, kicker: 'B' });
       const { state: after } = roll(kicked, dice(k));
       const good = DICE.K.faces[k].kick >= range;
       assert.equal(after.teams[1].score, good ? 3 : 0, `range ${range} kick ${k}`);

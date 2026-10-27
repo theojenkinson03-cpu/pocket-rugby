@@ -12,7 +12,7 @@ const read = path => readFileSync(join(root, path), 'utf8');
 const fragment = process.argv.includes('--fragment');
 
 // Dependencies before dependants.
-const ORDER = ['dice', 'engine', 'ai', 'commentary', 'color', 'dice-view', 'pitch', 'audio', 'cinema', 'store', 'app'];
+const ORDER = ['dice', 'cards', 'engine', 'ai', 'commentary', 'color', 'dice-view', 'pitch', 'audio', 'cinema', 'store', 'app'];
 
 function wrapModule(name) {
   const exported = [];
@@ -21,7 +21,7 @@ function wrapModule(name) {
       if (!ORDER.includes(from)) throw new Error(`${name} imports unknown module ${from}`);
       return `const {${names}} = __modules['${from}'];`;
     })
-    .replace(/^export (async function|function|const|let|class) ([\w$]+)/gm, (_, kind, id) => {
+    .replace(/^export (async function\*?|function\*?|const|let|class)\s+([\w$]+)/gm, (_, kind, id) => {
       exported.push(id);
       return `${kind} ${id}`;
     });
