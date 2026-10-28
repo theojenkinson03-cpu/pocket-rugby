@@ -1,22 +1,52 @@
 # Pocket Rugby
 
-A digital version of the Pocket Sports Rugby dice game, built for phones. Play the CPU, pass one phone between two players, or play a friend on two phones. Take a nation through the Nations Cup, a real club through a season of Super Rugby Pacific, Prem Rugby, the United Rugby Championship or the Top 14 (and on into the next, season after season), or a European club through the Champions Cup.
+A digital version of the Pocket Sports Rugby dice game, built for phones: quick to pick up, quick to play. Play the CPU, pass one phone between two players, or play a friend on two phones. Take a nation through the 2027 World Cup, a real club through a season of Super Rugby Pacific, Prem Rugby, the United Rugby Championship or the Top 14 (and on into the next, season after season), or a European club through the Champions Cup. Every side fields five of its real players.
 
-Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly Half (the printed set calls the last four the Forward, Centre, Wing and Back). The defence, referee and scoring dice settle tackles, scrums, lineouts, penalties, tries and kicks. First to 30 wins, and half time is called at 15.
+Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly Half (the printed set calls the last four the Forward, Centre, Wing and Back). The defence, referee and scoring dice settle tackles, scrums, lineouts, penalties, tries and kicks. Play **on the clock** (a set number of rolls, the higher score wins) or a **race** (first to 30, half time at 15).
 
 ## Ways to play
 
 - **1 player against the CPU.** Three levels: Rookie plays on instinct, Pro plays the odds, Expert plays out hundreds of continuations before each decision. Four styles: Balanced, Boot it (kicks at every chance), Run it (taps penalties and spreads it wide) and Forwards (keeps it tight).
 - **2 players** on one phone, taking turns.
 - **Online, on two phones.** One player hosts and gets a six-letter code; the other joins with it. See [Online play](#online-play) for what it needs.
-- **Nations Cup**: eight nations in two pools of four, then semi-finals and a final at the host nation's ground.
+- **World Cup 2027**: all 24 nations in the real pools, then a round of 16 and the real bracket to the final in Sydney (see [World Cup](#world-cup)).
 - **Four real leagues**, each with its real teams and its own play-offs (see [Leagues](#leagues)). Play a short season of six rounds or a full one where everyone meets once.
 - **Champions Cup**: the real 2026–27 draw, 24 clubs from the Prem, the URC and the Top 14 (see [Champions Cup](#champions-cup)).
 - **Club career**: when a league season ends, carry on into the next with the same club and squad (see [Club career](#club-career)).
 - **Daily challenge**: the same rigged situation for everyone each day, with a shared leaderboard and a score card to share (see [Daily challenge](#daily-challenge)).
 - **Friends league**: several phones each take a club in the same league, and the CPU plays the rest (see [Friends league](#friends-league)).
-- Tables use 4 points for a win and bonus points for 4 tries or losing by 7 or fewer. Other fixtures are played out by the engine, CPU against CPU, with each side's own level and style.
+- Tables use 4 points for a win and 2 for a draw, with a **bonus point for winning by 10 or more or losing by 5 or fewer** (not rugby's usual four-try bonus: the margin means the same in every format). Other fixtures are played out by the engine, CPU against CPU, with each side's own level and style, and the stronger side given the edge (see [Class](#class)).
 - **Learn to play**: a guided first match against a Rookie, with a coach who explains each part of the game the first time it comes up. New players see it first on the title screen.
+
+## Two ways to play a match
+
+- **On the clock** (the default): a set number of dice rolls, half each way: **60** (Quick), **100** (Standard) or **160** (Marathon). The scoreboard counts the rolls left in the half. When they run out it's the **last play**: play goes on until the ball is dead (a score and its conversion, an error, a turnover, a kick at goal), then it's half time or full time, whatever the score. A draw can happen; in a knockout it goes to **sudden death**, the next score of any kind wins. A penalty on the last play can still be kicked or tapped.
+- **Race**: first to 20, 30 or 50, with half time when a side reaches half that.
+
+The roll counts come from simulation. Over 600 Pro-against-Pro matches at each length, races to 20, 30 and 50 took 133, 210 and 350 rolls on average, with a long tail (one in ten ran past 206, 314 and 483). On the clock the same lengths take 72, 112 and 172 rolls (last plays add about 11) and never much more: one in ten runs past 83, 125 and 185. Each side scores 9, 14 and 21 points on average, and 8%, 6% and 3% of matches are drawn.
+
+## World Cup
+
+The real 2027 World Cup in Australia, all 24 nations in the six pools of the draw:
+
+| Pool | Nations |
+| --- | --- |
+| A | New Zealand, Australia, Chile, Hong Kong China |
+| B | South Africa, Italy, Georgia, Romania |
+| C | Argentina, Fiji, Spain, Canada |
+| D | Ireland, Scotland, Uruguay, Portugal |
+| E | France, Japan, USA, Samoa |
+| F | England, Wales, Tonga, Zimbabwe |
+
+Every nation plays the other three in its pool. The top two in each pool and the four best third-placed sides go into the round of 16, on the real bracket: 2nd C v 2nd F, 1st A v a third from C, E or F, 1st E v 2nd D, 1st B v a third from D, E or F, 1st C v a third from A, E or F, 1st D v a third from B, E or F, 2nd A v 2nd E and 1st F v 2nd B. The quarter-finals pair the winners of matches 2 and 4, 1 and 3, 5 and 6, and 7 and 8, and the semi-finals the first two and the last two. Every match is at one of the eight grounds (Stadium Australia and the Sydney Football Stadium, Brisbane, Melbourne's Docklands, Perth, Adelaide, Newcastle and Townsville), with the knockouts where the real ones are, and the final at Stadium Australia. Every ground is neutral except when Australia are playing.
+
+## Class
+
+Every side has a strength: the nations a rating from 1 (Chile, Hong Kong China, Zimbabwe) to 5 (New Zealand, South Africa, Ireland, France, England), the clubs one from their level. It only counts in the matches the CPU plays out, where the stronger side gets team cards for the gap (one Epic for a gap of one, up to two Mythics and two Epics for four): over 300 quick matches each, a gap of one won 61% to 68% of the time and a gap of four 85% to 95%. Your own matches are decided by the dice and your choices, whoever you play.
+
+## Real players
+
+Every nation and club fields five real players, one for each die: the Scrum Half, a Forward, a Centre, an Outside Back and the Fly Half. They come from recent squads (2025–26, and the 2026–27 line-ups where they were known), so some will have moved on. They're used only to name the dice in commentary, the stats and the Team of the Season. Your own side on the team sheet keeps names you can edit.
 
 ## Leagues
 
@@ -27,7 +57,7 @@ Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly
 | **United Rugby Championship** (2026–27) | Leinster, Munster, Ulster, Connacht, Cardiff, Dragons, Ospreys, Scarlets, Glasgow Warriors, Edinburgh, Benetton, Zebre Parma, Bulls, Lions, Sharks, Stormers | Top eight. Quarter-finals 1 v 8, 4 v 5, 2 v 7 and 3 v 6 on a fixed bracket, then the Grand Final |
 | **Top 14** (2026–27) | Toulouse, Bordeaux Bègles, Toulon, La Rochelle, Clermont, Racing 92, Stade Français, Castres, Montpellier, Pau, Bayonne, Lyon, Perpignan, Vannes | Top six. Barrages 3 v 6 and 4 v 5 while the top two wait; 1st meets the 4 v 5 winner and 2nd the 3 v 6 winner in the semi-finals, then the final |
 
-The better seed is at home in every knockout tie, except where the real competition goes to a neutral ground: the Prem final at Allianz Stadium, Twickenham, and the Top 14 semi-finals at the Stade Atlantique in Bordeaux and the final at the Stade de France. With an odd number of teams, as in Super Rugby Pacific, one side sits out each round. Each side has its own colours, a change strip for clashes, and a CPU level and style. The club names are real; the players are made up.
+The better seed is at home in every knockout tie, except where the real competition goes to a neutral ground: the Prem final at Allianz Stadium, Twickenham, and the Top 14 semi-finals at the Stade Atlantique in Bordeaux and the final at the Stade de France. With an odd number of teams, as in Super Rugby Pacific, one side sits out each round. Each side has its own colours, a change strip for clashes, a CPU level and style, and five real players.
 
 **Home grounds.** Every nation and club plays at its real home ground (Thomond Park, Kingsholm, Ellis Park, One New Zealand Stadium and so on), named on the kick-off title card, the next-match card and in the commentary, and marked when the ground is neutral.
 
@@ -90,13 +120,11 @@ Two optional rules, switched on or off on the team sheet, in the competition set
 
 ## Team cards
 
-Three of twelve cards are dealt after the coin toss. Each card bends one rule for the whole match: Sure Hands (the Outside Backs never lose it), Jackal (wins rucks on the video ref), Golden Boot (+20 m on place kicks), Fortress (the other side's big moves are 2 lower) and so on. The draft screen shows all three cards; the scoreboard shows each side's card, and tapping it shows what it does. When a card changes a roll, a short scene says so.
+Five of twelve cards are dealt after the coin toss and each side picks **two**. The toss **loser** picks 1st and 4th; the toss winner, who also has the first ball, picks 2nd and 3rd; the fifth card is discarded. Each card bends one rule for the whole match: Sure Hands (the Outside Backs never lose it), Jackal (wins rucks on the video ref), Golden Boot (+20 m on place kicks), Fortress (the other side's big moves are 2 lower) and so on, and a side's two cards work together (two kicking cards add up). The draft screen shows all five and the pick order; the scoreboard shows each side's two, and tapping them shows what they do. When a card changes a roll, a short scene says so.
 
-**Rarities.** Every card is dealt at a rarity: **Common** (55% of cards), **Rare** (28%), **Epic** (13%) or **Mythic** (4%), so about one deal in nine has a Mythic, and it gets a reveal of its own. The rarer the card, the stronger it is: each rarity keeps everything below it and adds more. Sure Hands, for example: Common, the Outside Backs never lose it; Rare, their Hit Ups are +1 too; Epic, +2 and Into the Corner 10; Mythic, the Fly Half never finds touch either. Cards show their rarity with a coloured gem and frame (grey, blue, purple, and a shining orange-gold for Mythic), and the rules sheet shows all twelve at each rarity.
+**Rarities.** Every card is dealt at a rarity of its own: **Common** (55% of cards), **Rare** (28%), **Epic** (13%) or **Mythic** (4%). With five dealt, about one deal in five has a Mythic, and it can be the first card on offer: no catch-up, what you see is what you get. The rarer the card, the stronger it is: each rarity keeps everything below it and adds more. Sure Hands, for example: Common, the Outside Backs never lose it; Rare, their Hit Ups are +1 too; Epic, +2 and Into the Corner 10; Mythic, the Fly Half never finds touch either. Cards show their rarity with a coloured gem and frame (grey, blue, purple, and a shining orange-gold for Mythic), and the rules sheet shows all twelve at each rarity.
 
-**The draft.** The side that **lost** the toss picks first, from all three; the toss winner, who receives the kick-off, picks from the two left. **Catch-up:** if the first pick is rarer than the card the second side takes, that card goes up one rarity.
-
-**Balance.** Every card at every rarity was measured over 10,000 simulated matches against a side with no card. Common cards lift the win rate by 6.7 to 9.6 points, Rare 10.3 to 13.6, Epic 14.7 to 19.9 and Mythic 21.5 to 27.3: every card of a rarity beats every card of the rarity below. Over 40,000 full drafts the side picking first won 51.9%: losing the toss gives you the better choice, and the catch-up keeps it close. Cards can be turned off on the team sheet. [RULES.md](RULES.md) lists every card's exact effect at every rarity.
+**Balance.** Every card at every rarity was measured over 10,000 simulated matches against a side with no card: Common cards lift the win rate by 6.7 to 9.6 points, Rare 10.3 to 13.6, Epic 14.7 to 19.9 and Mythic 21.5 to 27.3. Every card of a rarity beats every card of the rarity below. Over 4,000 matches with the full draft, the toss winner (picks 2 and 3, and the first ball) won 48.9% first to 20 and 49.4% on the clock, and 50.9% and 49.4% with cards off: the pick order is fair. Cards can be turned off on the team sheet. [RULES.md](RULES.md) lists every card's exact effect at every rarity.
 
 ## Players, stats and your record
 
@@ -109,12 +137,15 @@ Three of twelve cards are dealt after the coin toss. Each card bends one rule fo
 
 ## Presentation
 
-- **3D dice** that tumble onto the result, with the face that matters highlighted. Rolls that decide a try, kick, card or ruck spin longer, to a heartbeat.
+- **3D dice** that tumble onto the result, solid cubes with a shadow on the table, with the face that matters highlighted. Rolls that decide a try, kick, card or ruck spin longer, to a heartbeat.
+- **The dice guide.** Before every roll, the row under the dice shows the six faces of the die about to be rolled and what each would do, from your side's point of view: green good, red bad, grey neither, with a line-break chance on every run, the kick chance on every range, and so on. Each face is played through the rules engine, so injuries, the sin bin, the team cards, the weather and the clock all count. Tap a face for a sentence on it; when the dice land, the face they show lights up. A tackle shows the total needed and the chance of stopping the run.
+- **Badges.** A die's top-right corner shows what's changing its numbers: an injury (a red cross and −1 or −2), the sin bin (a yellow card, −1 on each tackle die), a red card (−2), advantage (+1), the wind (±10 m) or a team card (+10 m and up). The same badge shows on the roll button and on a receiver's chip when you pass.
+- **Auto-roll.** Rolls your dice for you, a beat apart so you can follow, and stops at every decision. Turn it on and off with the Auto button; it's on to start an online match.
 - **Cinematic moments**: kick-off and second-half title cards, the Mythic card reveal, the team-card face-off, line breaks in slow motion, tries, video-ref reviews, big hits, injuries, cards, turnovers, penalties, quick taps, half time, full time, Player of the Match, achievements and the trophy lift. Every kick at goal plays on a kick cam with a distance gauge. Tap to skip any scene; set them to Full, Short or Off. They switch off when your phone asks for reduced motion.
 - **Live pitch** with a camera that follows the runner, and a stadium scoreboard whose digits flip.
 - **Clear decisions.** Each pass, drop-goal and penalty choice shows its odds (break chance, error chance, kick chance, with team cards included) and a tip.
 - Commentary, a full match log, half-time and full-time reports.
-- Quick (10/20), Standard (15/30) and Marathon (25/50) match lengths.
+- Quick, Standard and Marathon: 60, 100 or 160 rolls on the clock, or first to 20, 30 or 50.
 - Saves after every roll, including tournaments and online matches.
 - Sound, vibration, fast dice, keyboard controls (Space to roll, 1–4 to choose, Esc for the menu), and works offline once loaded.
 
@@ -123,7 +154,8 @@ Three of twelve cards are dealt after the coin toss. Each card bends one rule fo
 Online matches run through the page's live room on claude.ai, so both players open the game there:
 
 - Both players must be **signed in** and have **access to the page**. The owner shares it from the **Share** menu. Someone who opens a public link can't join a match.
-- The host picks the match length, team cards, the bench and the weather. The guest calls the toss.
+- The host picks the match type and length, team cards, the bench and the weather. The guest calls the toss.
+- **Auto-roll** is on to start, so the dice keep moving. Each **decision has 10 seconds** (a clock runs on both phones): run out of time in play and the other side gets a penalty. The toss and the card picks are made for you instead (the best card on the table), and so is a roll left that long with auto-roll off.
 - If both choose the same kit colour, the guest changes strip.
 - Closing the page doesn't end the match: **Resume** rejoins the room and carries on from the last move.
 
@@ -132,6 +164,18 @@ How it works: each phone keeps the whole match and shares only its own moves, ea
 ## The CPU, honestly
 
 Expert plays every option forward to the end of the possession many times over, on the same dice for each option, and asks the win model which leaves it best placed. It rarely makes a poor call, but in a dice game the dice decide most matches. Measured with team cards on: Pro beat Rookie in 54.9% of 4,000 matches (±1.5%), Expert beat Rookie in 56.6% of 800 (±3.5%), and Expert beat Pro in 50.3% of 1,600 (±2.5%). So the levels are honest but close: good decisions are worth a few points in a hundred, not a walkover. The styles change how the CPU plays more than how often it wins.
+
+Since a score now hands the other side the ball, the Pro (and the Tip badge) goes for goal only at a 2-in-3 chance or better, where it used to kick at evens: over 4,000 matches in each format, that won 52.8% (on the clock) and 54.4% (first to 20) against the old habit. Boot it still kicks at every chance; Run it taps unless it's a sitter. On the clock, near the end the CPU takes three points only if they draw or win the match, and in sudden death any score will do.
+
+## What the simulations changed
+
+The rules were tuned by playing thousands of matches CPU against CPU (the scripts are in `scripts/`):
+
+- **The restart.** The printed rules give the ball to the side that scored. Over 2,000 matches that snowballs: the median winning margin in a race to 30 was 15 points, and 73% of matches were won by 10 or more. Giving the restart to the side that conceded made the median margin 11 (7 on the clock), made lead changes 40% to 65% more common, and turned "kick or tap" into a real choice.
+- **The clock lengths** (above), and **bonus points** set for the margins matches actually produce: on the clock, 21% to 44% of wins are by 10 or more and 30% to 44% of defeats by 5 or fewer.
+- **Kicking at goal** (above), and **the draft order**: picks 1 and 4 against 2 and 3 plus the first ball came out even.
+- **The win model** was re-measured for the new restart and extended to the clock: from 4,000 matches, a possession ends with no points and the ball lost 49.4% of the time, no points and the ball kept 14.7%, three points 14.9%, a try 6.6% and a converted try 14.3%. Its predictions agree with simulated matches to within a few points in every tenth of the range.
+- **Decisions** come about every 5 rolls (one in ten waits 19 or more), which is why the dice guide explains every roll in between and auto-roll can play them for you.
 
 ```sh
 node scripts/eval-ai.mjs 400 expert:balanced pro:balanced   # head-to-head CPU strength
@@ -162,7 +206,7 @@ The rules engine is checked from several directions. [RULES.md](RULES.md) maps e
 ```sh
 npm test               # 220+ tests: rules, cards at every rarity, weather and the bench, players, tournaments, the Champions Cup, season stats, club careers, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 162 bugs; every one must be caught
+npm run test:mutation  # plants 187 bugs; every one must be caught
 npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match, the daily challenge with its leaderboard and a two-phone friends league
 npm run check          # all of the above
 ```
@@ -187,7 +231,7 @@ The printed rules don't list every face, so the faces here are reconstructed fro
 npm run simulate     # node scripts/simulate.mjs [games] [quick|standard|long]
 ```
 
-A standard match averages about 5 tries and 2 drop goals, and the kick-off receiver wins about half the time (the other side receives the second half). All face definitions live in `js/dice.js`.
+A standard race to 30 averages about 5.7 tries and 4 drop-goal chances, and the side with the first ball wins about half the time (the other side has it to start the second half). The Fly Half kicks every goal: the Centres' Drop Goal face gives the chance to the Fly Half, so the dice keep their odds and the right player takes the kick. All face definitions live in `js/dice.js`.
 
 ## Project layout
 
@@ -199,7 +243,9 @@ A standard match averages about 5 tries and 2 drop goals, and the kick-off recei
 | `js/ai.js` | CPU levels and styles, including Expert's look-ahead |
 | `js/winprob.js` | Win model for the meter, the momentum chart and Expert |
 | `js/players.js` | Player names, ratings and Player of the Match |
-| `js/tournament.js` | Nations Cup, the four leagues and the Champions Cup: teams, grounds, fixtures, tables, play-offs |
+| `js/tournament.js` | The World Cup, the four leagues and the Champions Cup: teams, grounds, fixtures, tables, play-offs, class |
+| `js/squads.js` | Five real players for every nation and club |
+| `js/guide.js` | The dice guide (what each face of the next roll would do) and the dice badges |
 | `js/season.js` | Season stats: player totals, leaders, Team of the Season |
 | `js/club.js` | Club career: seasons, Champions Cup qualification, records and trophies |
 | `js/color.js` | Kit colours and patterns |
@@ -221,4 +267,4 @@ No build step and no runtime dependencies. It's plain HTML, CSS and ES modules. 
 
 ---
 
-An unofficial, fan-made adaptation. Not affiliated with or endorsed by Pocket Sports, or by any league, union or club. Team names are used only to name the sides; every player is made up.
+An unofficial, fan-made adaptation. Not affiliated with or endorsed by Pocket Sports, or by any player, league, union or club. Real team and player names are used only to name the sides and the dice; squads are a best guess at the current season and players move clubs.

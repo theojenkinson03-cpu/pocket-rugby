@@ -851,6 +851,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .dock {
   flex: none;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   padding: 10px var(--gutter-r) 12px var(--gutter-l);
   background: var(--surface);
@@ -871,9 +872,10 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 }
 .prompt .kit { width: 12px; height: 12px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent); }
 .prompt b { color: var(--ink); font-weight: 700; }
+.prompt > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions { display: grid; gap: 8px; }
-.actions.two { grid-template-columns: 1fr 1fr; }
-.actions.three { grid-template-columns: repeat(3, 1fr); }
+.actions.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.actions.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .roll-btn {
   display: flex;
@@ -2456,6 +2458,9 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 .gf.tone-bad::before { content: "✕"; }
 .gf-note { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 10.5px/1.1 var(--font-label); letter-spacing: 0.02em; color: var(--muted); }
 .gf.picked { box-shadow: inset 0 0 0 2px var(--tone), 0 0 0 2px var(--ink); }
+.guide[data-focus="kick"] .gf .fk { position: static; font-size: 2.6em; opacity: 1; }
+.guide[data-focus="kick"] .gf .fr { font-size: 0.8em; opacity: 0.7; }
+.guide[data-focus="kick"] .gf .card-dot { display: none; }
 .guide-text { margin: 0; min-height: 2.6em; font-size: 13px; line-height: 1.3; color: var(--muted); }
 .guide.rolled .gf:not(.hit) { opacity: 0.38; transform: scale(0.94); }
 .guide.rolled .gf.hit { transform: translateY(-3px) scale(1.06); box-shadow: inset 0 0 0 3px var(--tone), 0 6px 14px rgb(0 0 0 / 0.18); }
@@ -2478,9 +2483,48 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
   .tray.guided .tray-dice .die { --size: 76px; }
   .view-match:has(.tray.guided) .feed-list li:nth-child(2) { display: grid; }
 }
-@media (max-height: 700px) {
-  .view-match:has(.tray.guided) .feed { display: none; }
-  .tray.guided .tray-dice .die { --size: 52px; }
+/* Shorter phones: everything a little tighter so the match fits the screen. */
+@media (max-height: 780px) {
+  .board .side-card { flex-direction: row; gap: 4px; }
+  .board .side-card .tc-chip { position: relative; width: 24px; height: 22px; padding: 0; justify-content: center; }
+  .board .side-card .tc-chip span { display: none; }
+  .board .side-card .tc-chip .tc-gem { position: absolute; top: -3px; right: -3px; }
+  .side-score { font-size: 44px; }
+  .pitch-wrap { max-height: 19vh; max-height: 19dvh; }
+  .tray.guided { gap: 4px; padding-top: 4px; }
+  .tray.guided .tray-dice { min-height: 50px; }
+  .tray.guided .tray-dice .die { --size: 50px; }
+  .tray.guided .tray-dice .coin { width: 50px; height: 50px; }
+  .tray.guided .headline { font-size: 21px; }
+  .tray.guided .detail { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .gf { padding: 3px 1px 4px; }
+  .gf .face.flat.mini { max-width: 38px; font-size: 6.4px; }
+  .gf-cap { font-size: 11px; }
+  .gf-note { font-size: 10px; }
+  .guide-text { min-height: 0; font-size: 12px; }
+  .view-match:has(.tray.guided) .feed { padding-block: 5px; margin-bottom: 6px; }
+  .dock { padding-top: 8px; padding-bottom: 10px; gap: 6px; }
+  .roll-btn { min-height: 52px; }
+  /* Choices: a smaller die above them, and tighter buttons. */
+  .tray { gap: 6px; padding-top: 6px; }
+  .tray-dice { min-height: 58px; }
+  .tray-dice .die { --size: 58px; }
+  .tray-dice .coin { width: 58px; height: 58px; }
+  .tray .headline { font-size: 22px; }
+  .tray-text { min-height: 0; }
+  /* When something has to give, the pitch shrinks (the turf fills the
+     sides) and the feed keeps at least its newest line. */
+  .pitch-wrap { flex: 0 1 auto; min-height: 72px; }
+  .feed { min-height: 34px; flex-shrink: 0.4; }
+  /* Last of all the tray gives way from the bottom, so the buttons stay on screen. */
+  .tray { flex: 1 1 auto; min-height: 0; overflow: hidden; justify-content: safe center; }
+  .tray > * { flex-shrink: 0; }
+  .side-status { flex-wrap: nowrap; overflow: hidden; }
+  .side-status .chip { padding: 0 5px; }
+  .chip-more { display: none; }
+  .choice { min-height: 52px; padding-block: 7px; }
+  .actions.three .choice { padding: 6px 8px; }
+  .actions.three .choice small { margin-top: 1px; }
 }
 
 /* ---------- The match clock ---------- */

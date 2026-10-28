@@ -83,6 +83,13 @@ async function snapshot(page) {
       boardRarity: [0, 1].map(t => [...(document.querySelector(`.side[data-team="${t}"] .side-card .tc-chip`)?.classList || [])].find(c => c.startsWith('r-'))?.slice(2) || null),
       rain: !document.querySelector('#rain').hidden,
       wind: document.querySelector('#conditions .wind')?.textContent || null,
+      // The dice guide and the badges, and the match clock.
+      guide: document.querySelector('#guide').hidden ? null : [...document.querySelectorAll('#guide .gf')].map(b => [...b.classList].find(c => c.startsWith('tone-'))),
+      guideTitle: document.querySelector('#guide-head')?.textContent || '',
+      rollBadge: document.querySelector('#actions .roll-btn .die-badge')?.textContent || null,
+      clock: document.querySelector('#board-clock').hidden ? null : document.querySelector('#board-clock b').textContent,
+      boardCount: [0, 1].map(t => document.querySelectorAll(`.side[data-team="${t}"] .side-card .tc-chip`).length),
+      order: [...document.querySelectorAll('#draft-order .dp')].map(li => li.textContent),
     };
   });
 }
@@ -113,7 +120,7 @@ function verify(snap, label) {
     for (const [pos, n] of Object.entries(t.injuries)) if (n) check(snap.sides[i].chips.includes(`${pos} −${n}`), `${label}: injury chip ${pos}`);
   });
   const step = m.step;
-  const halfText = step.type === 'halftime' ? 'Half time' : m.half === 1 ? '1st half' : '2nd half';
+  const halfText = step.type === 'halftime' ? 'Half time' : m.suddenDeath ? 'Sudden death' : m.half === 1 ? '1st half' : '2nd half';
   check(snap.half === halfText, `${label}: board says "${snap.half}", expected "${halfText}"`);
   if (step.type === 'roll' || step.type === 'choose') {
     check(snap.prompt.includes(m.teams[step.team].name), `${label}: prompt "${snap.prompt}" names ${m.teams[step.team].name}`);
@@ -133,22 +140,37 @@ function verify(snap, label) {
     if (!snap.buttons.some(b => b.waiting)) check(choices.length === step.options.length, `${label}: ${choices.length} choices for ${step.options.length} options`);
     if (step.purpose === 'pass') for (const p of step.options) check(choices.some(c => c.text.includes(NAMES[p])), `${label}: pass option ${p}`);
   }
-  // The draft shows all three cards, the picked ones stamped; play starts once both sides have one.
+  // The draft shows all five cards at their dealt rarities, the picked ones
+  // stamped, and the pick order; play starts once both sides have two.
   check(snap.drafting === (step.purpose === 'draft'), `${label}: draft panel ${snap.drafting} at ${step.purpose}`);
   if (step.purpose === 'draft') {
-    check(snap.buttons.length === 3, `${label}: three cards dealt`);
+    check(snap.buttons.length === 5, `${label}: five cards dealt`);
     for (const id of step.options) check(snap.buttons.some(b => b.card === id && b.choice), `${label}: ${id} can be picked`);
-    // Cards show their rarity: a picked card its holder's, the rest as the picker would get them (caught up on the second pick).
-    const RANK = ['common', 'rare', 'epic', 'mythic'];
-    const firstPick = step.first ? null : m.teams[1 - step.team].cardRarity;
-    for (const b of snap.buttons) {
-      const holder = m.teams.find(t => t.card === b.card);
-      const dealt = m.dealRarity[b.card];
-      const want = holder ? holder.cardRarity : firstPick && RANK.indexOf(firstPick) > RANK.indexOf(dealt) ? RANK[RANK.indexOf(dealt) + 1] : dealt;
-      check(b.rarity === want, `${label}: ${b.card} shown ${b.rarity}, want ${want}`);
-    }
-    for (const t of m.teams) if (t.card) check(snap.buttons.some(b => b.card === t.card && !b.choice && b.text.includes(t.name)), `${label}: ${t.card} stamped for ${t.name}`);
+    for (const b of snap.buttons) check(b.rarity === m.dealRarity[b.card], `${label}: ${b.card} shown ${b.rarity}, dealt ${m.dealRarity[b.card]}`);
+    for (const t of m.teams) for (const c of t.cards) check(snap.buttons.some(b => b.card === c.id && !b.choice && b.text.includes(t.name)), `${label}: ${c.id} stamped for ${t.name}`);
+    check(snap.order.length === 4, `${label}: four picks in the order`);
+    const loser = m.teams[1 - m.firstReceiver].name;
+    const winner = m.teams[m.firstReceiver].name;
+    [loser, winner, winner, loser].forEach((name, i) => check(snap.order[i].includes(name), `${label}: pick ${i + 1} is ${name}'s ("${snap.order[i]}")`));
   }
+  // The guide under the dice: six faces, each good, bad or neither.
+  if (step.type === 'roll' && m.attacker !== null) {
+    check(snap.guide && snap.guide.length === 6 && snap.guide.every(Boolean), `${label}: dice guide ${JSON.stringify(snap.guide)}`);
+    if (step.purpose === 'attack') check(snap.guideTitle.includes(NAMES[step.dice[0]]), `${label}: guide for the ${NAMES[step.dice[0]]} die`);
+  } else check(snap.guide === null, `${label}: no guide without a roll`);
+  // Badges: an injured player's die shows the penalty.
+  if (step.purpose === 'attack' && !snap.buttons[0].waiting) {
+    const hurt = m.teams[step.team].injuries[step.dice[0]];
+    const tap = m.quickTap > 0 ? 1 : 0;
+    const want = hurt || tap ? `${tap - hurt > 0 ? '+' : tap - hurt < 0 ? '−' : ''}${Math.abs(tap - hurt)}` : null;
+    check(want === null ? snap.rollBadge === null : snap.rollBadge === want, `${label}: badge "${snap.rollBadge}", want "${want}"`);
+  }
+  // The clock: rolls left in the half, last play, sudden death.
+  if (m.format === 'rolls' && step.type !== 'fulltime') {
+    const half = Math.round(m.target.rolls / 2);
+    const want = m.suddenDeath ? 'Next' : step.type === 'halftime' ? String(half) : m.lastPlay ? 'Last' : String(Math.max(0, half - m.clock));
+    check(snap.clock === want, `${label}: clock "${snap.clock}", want "${want}"`);
+  } else if (m.format !== 'rolls') check(snap.clock === null, `${label}: no clock first to a score`);
   // Weather on the pitch: rain, and an arrow towards the end the wind blows to.
   check(snap.rain === !!m.weather?.rain, `${label}: rain shown ${snap.rain}`);
   const wind = m.weather?.wind ?? null;
@@ -159,8 +181,8 @@ function verify(snap, label) {
     check(choices.some(c => /Play on/.test(c.text)), `${label}: the bench offers to play on`);
     for (const p of step.options.filter(o => o !== 'stay')) check(choices.some(c => c.text.startsWith(p === 'S' ? 'SH' : p === 'F' ? 'FW' : p === 'C' ? 'C' : p === 'W' ? 'OB' : 'FH')), `${label}: replace ${p}`);
   }
-  m.teams.forEach((t, i) => check(!!snap.boardCards[i] === !!t.card, `${label}: team ${i} card on the board`));
-  m.teams.forEach((t, i) => check(snap.boardRarity[i] === (t.card ? t.cardRarity : null), `${label}: team ${i} card's rarity on the board`));
+  m.teams.forEach((t, i) => check(snap.boardCount[i] === t.cards.length, `${label}: team ${i} has ${t.cards.length} cards on the board, shows ${snap.boardCount[i]}`));
+  m.teams.forEach((t, i) => check(snap.boardRarity[i] === (t.cards[0]?.rarity || null), `${label}: team ${i} card's rarity on the board`));
   if (m.attacker !== null && snap.meter) {
     const [a, b] = snap.meter.map(x => Number(x.replace('%', '')));
     check(Math.abs(a + b - 100) <= 1, `${label}: win meter adds up (${snap.meter})`);
@@ -178,8 +200,9 @@ const tapAny = page => page.evaluate(() => {
   buttons[Math.floor(Math.random() * buttons.length)]?.click();
 });
 
-async function setUp(page, { mode = '1p', length = 'quick', cpu = null, style = null, cards = null, weather = null }) {
+async function setUp(page, { mode = '1p', length = 'quick', format = null, cpu = null, style = null, cards = null, weather = null }) {
   await page.click(`[data-start="${mode}"]`);
+  if (format) await page.click(`#format-${format}`, { force: true });
   await page.click(`#len-${length}`, { force: true });
   if (cpu) await page.click(`#cpu-${cpu}`, { force: true });
   if (style) await page.click(`#style-${style}`, { force: true });
@@ -188,8 +211,8 @@ async function setUp(page, { mode = '1p', length = 'quick', cpu = null, style = 
   await page.click('#setup-form button[type=submit]');
 }
 
-async function playMatch(page, { label, mode = '1p', length = 'quick', tapStyle = 'random', skipScenes = true, budgetMs = 420000, setup = true, cpu, style, cards, weather }) {
-  if (setup) await setUp(page, { mode, length, cpu, style, cards, weather });
+async function playMatch(page, { label, mode = '1p', length = 'quick', format = null, tapStyle = 'random', skipScenes = true, budgetMs = 420000, setup = true, cpu, style, cards, weather }) {
+  if (setup) await setUp(page, { mode, length, format, cpu, style, cards, weather });
   return playOn(page, { label, tapStyle, skipScenes, budgetMs });
 }
 
@@ -392,7 +415,7 @@ const SCENARIOS = {
     await page.click('.next-card .btn-primary');
     const result = await playOn(page, { label: 'champions cup' });
     const note = await page.textContent('#break-note');
-    check(/^Munster are \d+(st|nd|rd|th) in Pool 3\.$/.test(note), `pool note "${note}"`);
+    check(/^(A draw\. )?Munster are \d+(st|nd|rd|th) in Pool 3\.$/.test(note), `pool note "${note}"`);
     await page.click('#break-actions .btn-primary');
     // A URC season played out, then on into the Champions Cup and the next season.
     const playOut = async () => page.evaluate(async () => {
@@ -521,7 +544,9 @@ const SCENARIOS = {
   async 'two-player-no-cinematics'(browser, base) {
     const { page, errors } = await newPage(browser, { prefs: { cinema: 'off', fast: true }, device: 'iPhone SE', colorScheme: 'dark' });
     await page.goto(base);
-    const result = await playMatch(page, { label: '2p off', mode: '2p' });
+    // First to 20, the race.
+    const result = await playMatch(page, { label: '2p off', mode: '2p', format: 'points' });
+    check(result.seen.has('halftime-dialog'), 'half time');
     check(!result.seen.has('cinema'), 'no scenes when cinematics are off');
     return { errors, ...result };
   },
@@ -529,6 +554,24 @@ const SCENARIOS = {
     const { page, errors } = await newPage(browser, { prefs: { cinema: 'short', fast: true }, device: 'Desktop Chrome' });
     await page.goto(base);
     const result = await playMatch(page, { label: 'keyboard', mode: '2p', tapStyle: 'keyboard' });
+    return { errors, ...result };
+  },
+  async 'auto-roll'(browser, base) {
+    // Auto-roll on: the dice roll themselves and only decisions wait for a tap.
+    const { page, errors } = await newPage(browser, { prefs: { cinema: 'off', fast: true, autoRoll: true } });
+    await page.goto(base);
+    const result = await playMatch(page, { label: 'auto', mode: '1p', format: 'points', cards: false });
+    check(!result.seen.has('roll:attack') && !result.seen.has('roll:tackle'), `no rolls waited for a tap: ${[...result.seen]}`);
+    check(result.seen.has('choose:pass') || result.seen.has('choose:penalty') || result.seen.has('choose:drop'), 'decisions still wait for you');
+    // Turning it off hands the dice back.
+    await page.click('#break-actions .btn-primary');
+    await page.waitForSelector('#actions button:not([disabled])');
+    await page.click('#actions button:not([disabled]) >> nth=0');
+    await page.waitForSelector('.auto-btn', { timeout: 20000 });
+    await page.click('.auto-btn');
+    check(await page.$eval('.auto-btn', b => b.getAttribute('aria-pressed')) === 'false', 'auto off');
+    const prefs = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:prefs')));
+    check(prefs.autoRoll === false, 'remembered');
     return { errors, ...result };
   },
   async 'reduced-motion'(browser, base) {
@@ -628,7 +671,7 @@ const SCENARIOS = {
     check((await page.$$('.ach')).length === 36, 'all 36 achievements listed');
     return { errors, ...result, actions: result.actions + tips };
   },
-  async 'nations-cup'(browser, base) {
+  async 'world-cup'(browser, base) {
     const { page, errors } = await newPage(browser, { prefs: { cinema: 'off', fast: true } });
     await page.goto(base);
     await page.click('#btn-tournament');
@@ -636,22 +679,26 @@ const SCENARIOS = {
     await page.click('#tournament-body .btn-primary');
     check(await page.isVisible('.next-card'), 'the hub shows the next match');
     const rows = await page.$$('.standings tbody tr');
-    check(rows.length === 8, `two pools of four (${rows.length} rows)`);
+    check(rows.length === 24, `six pools of four (${rows.length} rows)`);
+    check((await page.textContent('.next-card')).includes('Stadium'), 'a World Cup ground');
     await page.click('.next-card .btn-primary');
     const label = await page.textContent('#period');
-    check(/Nations Cup · Pool [AB] · Round 1 of 3/.test(label), `match label "${label}"`);
+    check(/World Cup · Pool F · Round 1 of 3/.test(label), `match label "${label}"`);
+    // Real players: Wales's five.
+    const squad = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:match')).match.teams[0].roster);
+    check(squad.S === 'T. Williams' && squad.B === 'D. Edwards', `Wales's squad: ${JSON.stringify(squad)}`);
     const result = await playOn(page, { label: 'cup' });
     const note = await page.textContent('#break-note');
-    check(/Wales are \d(st|nd|rd|th) in Pool [AB]/.test(note), `tournament note "${note}"`);
+    check(/Wales are \d(st|nd|rd|th) in Pool F/.test(note), `tournament note "${note}"`);
     await page.click('#break-actions .btn-primary');
     check(await page.isVisible('#view-tournament'), 'back to the hub');
     const played = await page.$$eval('.standings tr.mine td', td => td.map(x => x.textContent));
     check(played[2] === '1', `Wales have played 1 (${played})`);
     const results = await page.$$('.results .fx');
-    check(results.length === 4, `round 1 results: ${results.length}`);
+    check(results.length === 12, `round 1 results: ${results.length}`);
     // The tournament survives a reload.
     await page.reload();
-    check((await page.textContent('#tournament-label')).includes('Continue the Nations Cup'), 'home offers to continue');
+    check((await page.textContent('#tournament-label')).includes('Continue the World Cup'), 'home offers to continue');
     await page.click('#btn-tournament');
     check((await page.textContent('.next-card .nc-kicker')).includes('Round 2 of 3'), 'next is round 2');
     return { errors, ...result };
@@ -661,9 +708,9 @@ const SCENARIOS = {
     await page.goto(base);
     await setUp(page, { mode: '2p', length: 'quick', cards: true });
     await page.waitForSelector('#actions button');
-    // The toss, then the deal: Golden Boot (Mythic), Jackal (Epic), Sure Hands (Rare).
+    // The toss, then the deal: Golden Boot (Mythic), Jackal (Epic), Sure Hands (Rare), Big Pack and Midfield Maestro (Common).
     await page.evaluate(() => {
-      const script = [0.1, 4 / 12 + 0.01, 0.99, 6 / 11 + 0.01, 0.9, 2 / 10 + 0.01, 0.6];
+      const script = [0.1, 4 / 12 + 0.01, 0.99, 6 / 11 + 0.01, 0.9, 2 / 10 + 0.01, 0.6, 0.01, 0.1, 0.01, 0.2];
       const real = Math.random;
       Math.random = () => (script.length ? script.shift() : real());
     });
@@ -674,10 +721,18 @@ const SCENARIOS = {
     await page.click('#cinema', { force: true });
     await page.waitForSelector('#draft:not([hidden]) #draft-cards button[data-choice]');
     const dealt = await page.$$eval('#draft-cards .tcard', x => x.map(n => `${n.dataset.card}:${n.dataset.rarity}:${n.querySelector('.tc-rarity').textContent}`));
-    check(dealt.join() === 'golden-boot:mythic:Mythic,jackal:epic:Epic,sure-hands:rare:Rare', `the deal at its rarities: ${dealt}`);
+    check(dealt.join() === 'golden-boot:mythic:Mythic,jackal:epic:Epic,sure-hands:rare:Rare,big-pack:common:Common,midfield-maestro:common:Common', `the deal at its rarities: ${dealt}`);
     check(await page.isVisible('#draft-cards .tcard.r-mythic .tc-foil'), 'the Mythic card shines');
     check((await page.textContent('#draft-cards .tcard.r-mythic .tc-text')).startsWith('Every kick is +40 m and never misses'), 'the Mythic text');
     await page.click('#draft-cards button[data-card="golden-boot"]');
+    // Three more picks: two each, and the last card goes back in the pack.
+    for (let i = 0; i < 3; i++) {
+      await page.waitForSelector('#draft:not([hidden]) #draft-cards button[data-choice]:not([disabled])');
+      await page.click('#draft-cards button[data-choice]:not([disabled]) >> nth=0');
+    }
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('pocket-rugby:match'))?.match.attacker !== null);
+    const drafted = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:match')).match.teams.map(t => t.cards.map(c => c.id)));
+    check(drafted.every(c => c.length === 2) && new Set(drafted.flat()).size === 4 && drafted.flat().includes('golden-boot'), `two cards each: ${JSON.stringify(drafted)}`);
     const result = await playOn(page, { label: 'mythic' });
     return { errors, ...result };
   },
@@ -761,14 +816,24 @@ const SCENARIOS = {
     // Same colour picked by both: the guest changes strip.
     const colours = await guest.page.$$eval('.side .kit', k => k.map(x => getComputedStyle(x).backgroundColor));
     check(colours[0] !== colours[1], `kits differ: ${colours}`);
+    // The guest calls the toss, or doesn't: after 10 seconds it's called for them.
+    check(await guest.page.isVisible('.decision-clock.mine'), 'the guest sees their decision clock');
+    check(await host.page.isVisible('.decision-clock:not(.mine)'), 'the host sees the guest\'s clock');
+    await guest.page.waitForFunction(() => JSON.parse(localStorage.getItem('pocket-rugby:match'))?.match.toss, null, { timeout: 20000 });
+    // Auto-roll shows once the draft is done and the ball is in play.
+    const autoOn = guest.page.waitForSelector('.auto-btn', { timeout: 180000 })
+      .then(b => b.getAttribute('aria-pressed'))
+      .then(v => check(v === 'true', 'auto-roll is on online'));
     const results = await Promise.all([
       playOn(host.page, { label: 'host', budgetMs: 600000 }),
       playOn(guest.page, { label: 'guest', budgetMs: 600000 }),
     ]);
+    await autoOn;
     const scores = await Promise.all([host, guest].map(p => p.page.textContent('#break-score')));
     check(scores[0] === scores[1], `both phones agree: ${scores}`);
     const titles = results.map(r => r.title);
-    check(titles.filter(t => t === 'You win!').length === 1, `one winner: ${titles}`);
+    const drawn = titles.every(t => t === 'A draw');
+    check(drawn || titles.filter(t => t === 'You win!').length === 1, `one winner, or a draw on both: ${titles}`);
     for (const p of [host, guest]) {
       const career = await saved(p.page, 'career');
       check(career.online.played === 1, 'online match recorded');

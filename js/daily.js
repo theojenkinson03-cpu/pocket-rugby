@@ -8,6 +8,7 @@ import { POSITIONS } from './dice.js';
 import { CARD_IDS, rollRarity } from './cards.js';
 import { MATCH_LENGTHS, newMatch, rollWeather, seededRng, TRY_RUN_IN } from './engine.js';
 import { randomRoster } from './players.js';
+import { realRoster } from './squads.js';
 import { LEAGUES } from './tournament.js';
 import { winMeter } from './winprob.js';
 
@@ -90,7 +91,7 @@ export function dailyScenario(key) {
     home: rng() < 0.5 ? 0 : 1,
     length: 'standard',
     personality: them.personality,
-    rosters: [randomRoster(you.flavour, rng), randomRoster(them.flavour, rng)],
+    rosters: [realRoster(you.id) || randomRoster(you.flavour, rng), realRoster(them.id) || randomRoster(them.flavour, rng)],
     // For the made-up history of the match so far.
     seed: (daySeed(key) ^ 0x9e3779b9) >>> 0,
   };

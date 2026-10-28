@@ -108,7 +108,7 @@ export const ACHIEVEMENTS = [
   { id: 'on-a-roll', name: 'On a Roll', text: 'Win five matches in a row against the CPU.', check: (m, me, t, c, career) => career.streak >= 5 },
   { id: 'card-sharp', name: 'Card Sharp', text: 'Win with six different team cards.', check: (m, me, t, c, career) => career.cardsWon.length >= 6 },
   { id: 'mythic', name: 'Mythic', text: 'Win a match with a Mythic team card.', check: (m, me) => m.winner === me && (m.teams[me].cards || []).some(card => card.rarity === 'mythic') },
-  { id: 'cup-winners', name: 'Nations Cup Winners', text: 'Win the Nations Cup.', check: (m, me, t, c) => c.tournament?.kind === 'cup' && c.tournament.champion },
+  { id: 'cup-winners', name: 'World Champions', text: 'Win the World Cup.', check: (m, me, t, c) => c.tournament?.kind === 'cup' && c.tournament.champion },
   { id: 'champions', name: 'League Champions', text: 'Win a league: Super Rugby, the Prem, the URC or the Top 14.', check: (m, me, t, c) => c.tournament?.kind === 'league' && c.tournament.champion },
   { id: 'european-champions', name: 'Champions of Europe', text: 'Win the Champions Cup.', check: (m, me, t, c) => c.tournament?.kind === 'champions' && c.tournament.champion },
   { id: 'the-double', name: 'The Double', text: 'Win your league and the Champions Cup in the same season.', check: (m, me, t, c) => !!c.tournament?.double },

@@ -15,9 +15,9 @@ const penaltyAt = (range, scores = [0, 0], cpuLevel = 'pro') => {
   return m;
 };
 
-test('Pro kicks penalties at evens or better and taps otherwise', () => {
+test('Pro kicks penalties at 2 in 3 or better and taps otherwise', () => {
   for (let range = 1; range <= 5; range++) {
-    const want = kickChance(range) >= 0.5 ? 'kick' : 'tap';
+    const want = kickChance(range) >= 2 / 3 - 1e-9 ? 'kick' : 'tap';
     assert.equal(cpuChoice(penaltyAt(range)), want, `range ${range}`);
   }
 });
@@ -31,7 +31,7 @@ test('Pro drop-goals in range and passes out of it', () => {
   for (let range = 1; range <= 5; range++) {
     const m = stateAt({ step: { type: 'choose', purpose: 'drop', team: 1, range, from: 'C', options: ['kick', 'pass'] }, attacker: 1, carrier: 'C' });
     m.cpuLevel = 'pro';
-    assert.equal(cpuChoice(m), kickChance(range) >= 0.5 ? 'kick' : 'pass', `range ${range}`);
+    assert.equal(cpuChoice(m), kickChance(range) >= 2 / 3 - 1e-9 ? 'kick' : 'pass', `range ${range}`);
   }
 });
 
@@ -95,8 +95,9 @@ test('styles: Boot it kicks long, Run it taps unless it is a sitter', () => {
   assert.equal(cpuChoice(at(5, 'balanced')), 'tap');
   assert.equal(cpuChoice(at(2, 'run')), 'kick', '5 in 6');
   assert.equal(cpuChoice(at(3, 'run')), 'tap', '4 in 6');
-  assert.equal(cpuChoice(at(3, 'balanced')), 'kick');
-  assert.equal(cpuChoice(at(4, 'balanced')), 'kick', 'evens');
+  assert.equal(cpuChoice(at(3, 'balanced')), 'kick', '4 in 6');
+  assert.equal(cpuChoice(at(4, 'balanced')), 'tap', 'evens: not worth handing over the ball');
+  assert.equal(cpuChoice(at(4, 'boot')), 'kick', 'Boot it kicks at evens');
   // Every style takes three points that win the match.
   for (const style of Object.keys(PERSONALITIES)) assert.equal(cpuChoice(withStyle(penaltyAt(4, [0, 27]), 'pro', style)), 'kick', style);
 });

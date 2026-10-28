@@ -1,7 +1,7 @@
 // Measures how much each team card helps at each rarity, by playing
 // CPU-vs-CPU matches where one side holds the card and the other holds none,
 // then full drafts to see who the draft favours.
-// Usage: node scripts/balance-cards.mjs [games per card] [length]
+// Usage: node scripts/balance-cards.mjs [games per card] [length] [format]
 //        CARDS=jackal,fortress RARITIES=mythic node scripts/balance-cards.mjs 4000
 
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const GAMES = Number(process.argv[2] || 10000);
 const LENGTH = process.argv[3] || 'standard';
+const FORMAT = process.argv[4] || 'points';
 
 async function work({ jobs }) {
   const { act, newMatch, seededRng } = await import('../js/engine.js');
@@ -30,17 +31,19 @@ async function work({ jobs }) {
       const rng = seededRng(job.seed + g);
       if (job.kind === 'card') {
         const holder = g % 2;
-        const m = newMatch({ mode: '2p', length: LENGTH });
-        m.teams[holder].card = job.card;
-        m.teams[holder].cardRarity = job.rarity;
+        const m = newMatch({ mode: '2p', length: LENGTH, format: FORMAT });
+        m.teams[holder].cards = [{ id: job.card, rarity: job.rarity }];
         const end = play(m, rng);
+        // A draw (on the clock) counts as half a win.
         if (end.winner === holder) wins++;
+        else if (end.winner === null) wins += 0.5;
         points += end.teams[holder].score - end.teams[1 - holder].score;
       } else {
-        const m = newMatch({ mode: '2p', length: LENGTH, cards: true });
+        const m = newMatch({ mode: '2p', length: LENGTH, format: FORMAT, cards: true });
         const end = play(m, rng);
         const firstPicker = 1 - end.firstReceiver;
         if (end.winner === firstPicker) firstPickWins++;
+        else if (end.winner === null) firstPickWins += 0.5;
       }
     }
     results.push({ ...job, wins, firstPickWins, points });

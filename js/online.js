@@ -153,7 +153,7 @@ export const sanitiseTeam = team => ({
   color: HEX.test(team?.color) ? team.color : '#4aa2df',
   kit: sanitiseKit(team?.kit),
   roster: team?.roster && typeof team.roster === 'object'
-    ? Object.fromEntries(['S', 'F', 'C', 'W', 'B'].map(p => [p, String(team.roster[p] || '').slice(0, 20)]))
+    ? Object.fromEntries(['S', 'F', 'C', 'W', 'B'].map(p => [p, String(team.roster[p] || '').slice(0, 26)]))
     : null,
 });
 

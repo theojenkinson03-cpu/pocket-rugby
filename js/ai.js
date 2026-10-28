@@ -12,10 +12,13 @@ export const LEVELS = {
   expert: { name: 'Expert', blurb: 'Thinks ahead' },
 };
 
-// dropAt / penaltyAt: the kick chance at which they go for goal.
+// dropAt / penaltyAt: the kick chance at which they go for goal. Since a
+// score hands the other side the ball, a kick has to be likely to be worth
+// it: over 4,000 matches in each format, kicking at 2 in 3 or better beat
+// kicking at 1 in 2 or better by 3 to 4 points in a hundred.
 // pass: extra liking for a receiver. cards: extra liking for a team card.
 export const PERSONALITIES = {
-  balanced: { name: 'Balanced', blurb: 'Takes the points when they are there', dropAt: 0.5, penaltyAt: 0.5, pass: {}, cards: {} },
+  balanced: { name: 'Balanced', blurb: 'Takes the points when they are there', dropAt: 2 / 3, penaltyAt: 2 / 3, pass: {}, cards: {} },
   boot: {
     name: 'Boot it',
     blurb: 'Kicks for goal at every chance',
@@ -35,8 +38,8 @@ export const PERSONALITIES = {
   pack: {
     name: 'Forward-heavy',
     blurb: 'Keeps it tight through the Forwards',
-    dropAt: 0.5,
-    penaltyAt: 0.5,
+    dropAt: 2 / 3,
+    penaltyAt: 2 / 3,
     pass: { F: 0.3 },
     cards: { 'big-pack': 0.05, 'set-piece-kings': 0.05, 'rush-defence': 0.03 },
   },

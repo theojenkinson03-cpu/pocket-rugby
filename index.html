@@ -27,7 +27,7 @@
     <div class="home-inner">
       <div class="hero-dice" id="hero-dice" aria-hidden="true"></div>
       <h1 class="wordmark" id="home-title"><span class="wm-small">Pocket</span> Rugby</h1>
-      <p class="tagline">Eight dice, five positions, first to 30.</p>
+      <p class="tagline">Eight dice, five positions, real teams.</p>
       <div class="home-actions">
         <button type="button" class="btn btn-primary btn-resume" id="btn-resume" hidden>
           <span>Resume match</span><small id="resume-detail"></small>
@@ -37,7 +37,7 @@
         <div class="home-grid">
           <button type="button" class="btn" data-start="2p"><span>2 players</span><small>One phone, take turns</small></button>
           <button type="button" class="btn" id="btn-online"><span>Online</span><small>Two phones</small></button>
-          <button type="button" class="btn btn-span btn-cup" id="btn-tournament"><span id="tournament-label">Cups &amp; leagues</span><small id="tournament-detail">Champions Cup, four leagues, Nations Cup</small></button>
+          <button type="button" class="btn btn-span btn-cup" id="btn-tournament"><span id="tournament-label">Cups &amp; leagues</span><small id="tournament-detail">World Cup, Champions Cup, four leagues</small></button>
           <button type="button" class="btn btn-daily" id="btn-daily"><span id="daily-label">Daily challenge</span><small id="daily-detail">A new situation every day</small></button>
           <button type="button" class="btn" id="btn-friends"><span>Friends league</span><small id="friends-detail">Your league, several phones</small></button>
         </div>
@@ -49,7 +49,7 @@
         <button type="button" class="link-btn" data-open="dlg-settings">Settings</button>
       </div>
       <p class="build-tag" id="build-tag" hidden></p>
-      <p class="fineprint">An unofficial, fan-made digital version of the Pocket Sports Rugby dice game. Not affiliated with or endorsed by Pocket Sports, or by any league, union or club.</p>
+      <p class="fineprint">An unofficial, fan-made digital version of the Pocket Sports Rugby dice game. Not affiliated with or endorsed by Pocket Sports, or by any player, league, union or club. Real teams and players are named for fun.</p>
     </div>
   </section>
 
@@ -318,7 +318,8 @@
   <div class="rules" id="rules">
     <section>
       <h3>The aim</h3>
-      <p>Be first to 30 points. Half time is called when either side reaches 15. Shorter and longer matches change both numbers. The match ends the moment a side reaches the full-time score, even before a conversion.</p>
+      <p>Two ways to play. <b>On the clock</b>: a set number of dice rolls (60, 100 or 160), half each way, and the higher score wins. When a half's rolls run out it's the <b>last play</b>: play goes on until the ball is dead (a score, an error, a turnover or a kick at goal). A draw can happen; in a knockout match it goes to <b>sudden death</b>, where the next score of any kind wins.</p>
+      <p><b>Race</b>: first to 30 points (20 or 50 in shorter or longer matches), with half time when either side reaches half that. The match ends the moment a side reaches the full-time score, even before a conversion.</p>
       <dl class="points">
         <div><dt>Try</dt><dd>5</dd></div>
         <div><dt>Conversion</dt><dd>2</dd></div>
@@ -330,6 +331,8 @@
       <h3>Attacking</h3>
       <p>Your team is five dice. The <b>Scrum Half</b> always rolls first, after the kick-off, after every tackle and whenever you win the ball. Most of its faces pass to a named player, who rolls their own die next.</p>
       <p>A <b>&lsaquo;Pass&rsaquo;</b> face lets you choose the Forwards, Centres, Outside Backs or Fly Half. A run shows an <b>intensity</b> number: the higher it is, the harder it is to stop. Each has one big move: Forwards <i>Line Break 6</i>, Centres <i>Thru the Gap 7</i>, Outside Backs <i>Into the Corner 8</i>, Fly Half <i>High Ball 6</i>. (The printed game calls them the Forward, Centre, Wing and Back.)</p>
+      <p><b>The dice guide</b>: before every roll, the row under the dice shows what each face would do, with injuries, cards and the weather counted. Green is good for you, red is bad, grey is neither; tap a face for more. A badge in a die's corner shows anything changing its numbers: an injury (−1), the sin bin (−1), a red card (−2), advantage (+1), the wind or a team card.</p>
+      <p><b>Auto-roll</b> rolls your dice for you and stops at every decision. Turn it on and off with the Auto button above the Roll button.</p>
     </section>
     <section>
       <h3>Tackling</h3>
@@ -339,7 +342,7 @@
     <section>
       <h3>Kicking</h3>
       <p>Roll the brown die for the range, then the black die's number for the kick. The kick must be at least the range. Each number is 10 metres on the pitch.</p>
-      <p>Every try is followed by a conversion, taken by the Fly Half. The Centres and Fly Half can try a <b>drop goal</b>: check the range first, then decide whether to kick or pass. A missed drop goal or penalty kick hands the ball over.</p>
+      <p>The <b>Fly Half</b> kicks every goal. Every try is followed by a conversion. The Fly Half's die and the Centres' die have a <b>Drop Goal</b> face: on the Centres' die the Centre gives it back to the Fly Half, who has the chance. Check the range first, then decide whether to kick or pass. A missed drop goal or penalty kick hands the ball over.</p>
     </section>
     <section>
       <h3>Errors and set pieces</h3>
@@ -352,12 +355,12 @@
     </section>
     <section>
       <h3>Restarts</h3>
-      <p>After any score the team that scored receives the kick-off. The coin toss decides who receives first; the other side receives at the start of the second half.</p>
+      <p>After any score the side that <b>conceded</b> gets the ball back from the restart, so a lead is never safe. (The printed game gives it to the scorers; over 2,000 simulated matches that let one side run away with too many games.) The coin toss decides who has the ball first; the other side starts the second half with it.</p>
     </section>
     <section>
       <h3>Team cards</h3>
-      <p>With team cards on, three of the twelve cards are dealt after the coin toss. The side that <b>lost</b> the toss picks first, from all three; the side that won the toss receives the kick-off and picks from the two left, and <b>catches up</b>: if the first pick is rarer than the card they take, theirs goes up one rarity. Each card lasts the whole match.</p>
-      <p>Every card is dealt at a <b>rarity</b>: Common (55% of cards), Rare (28%), Epic (13%) or Mythic (4%, about one deal in nine). The rarer the card, the stronger it is: each rarity keeps everything below it and adds more. Within a rarity the cards were balanced over thousands of simulated matches, so pick the one that suits your style, or the rarest one on the table.</p>
+      <p>With team cards on, five of the twelve cards are dealt after the coin toss and each side picks <b>two</b>. The side that <b>lost</b> the toss picks 1st and 4th; the side that won it (and has the first ball) picks 2nd and 3rd. The fifth card is discarded. Both cards last the whole match and work together.</p>
+      <p>Every card is dealt at a <b>rarity</b>: Common (55% of cards), Rare (28%), Epic (13%) or Mythic (4%, so about one deal in five has a Mythic, and it can be the first card you pick). The rarer the card, the stronger it is: each rarity keeps everything below it and adds more. Within a rarity the cards were balanced over thousands of simulated matches, so pick the one that suits your style, or the rarest one on the table.</p>
       <div class="rarity-tabs" id="rules-rarity" role="group" aria-label="Show the cards at a rarity"></div>
       <div class="rules-cards" id="rules-cards"></div>
     </section>
@@ -373,7 +376,7 @@
     </section>
     <section>
       <h3>Tournaments</h3>
-      <p>The <b>Nations Cup</b> has two pools of four; the top two in each go through to the semi-finals, played with the final at the host nation's ground. Or take a club through a real league, each with its real play-offs:</p>
+      <p>The <b>World Cup</b> is the real 2027 tournament in Australia: all 24 nations in the six pools of the draw. The top two in each pool and the four best third-placed sides go into the round of 16, then the real bracket to the final at Stadium Australia, Sydney. Or take a club through a real league, each with its real play-offs:</p>
       <ul class="rules-list">
         <li><b>Super Rugby Pacific</b>: 11 teams, one sitting out each round. The top six play qualifying finals; the three winners and the best-placed loser reach the semi-finals.</li>
         <li><b>Prem Rugby</b>: 10 clubs. The top four play semi-finals; the final is at Twickenham.</li>
@@ -382,11 +385,11 @@
       </ul>
       <p>The <b>Champions Cup</b> has the 24 clubs from the 2026–27 draw in four pools of six. Each plays the four clubs in its pool from the other two leagues. The top three in each pool and the four best of the rest go into a round of 16, then quarter-finals, semi-finals and a final in Lyon.</p>
       <p>Everyone plays at their real home ground, except the neutral finals. When a league season ends you can carry on with your club into the next, squad and all, building a trophy cabinet and a records book; the top eight in each European league qualify for the next Champions Cup. The hub keeps the season's top try and points scorers and a Team of the Season.</p>
-      <p>A short season is 6 rounds; a full season has everyone play everyone once. A win is worth 4 points, with a bonus point for scoring 4 tries and another for losing by 7 or fewer. Team names are the real clubs'; the players are made up.</p>
+      <p>A short season is 6 rounds; a full season has everyone play everyone once. A win is worth 4 points and a draw 2, with a <b>bonus point</b> for winning by 10 or more or losing by 5 or fewer. Every side fields five of its real players. In matches you don't play, the stronger side has the edge.</p>
     </section>
     <section>
       <h3>Online</h3>
-      <p>Play a friend on two phones. One of you hosts and shares a six-letter code; the other joins with it. Both of you need to open this same page signed in, with access to it. Each phone rolls its own dice and checks every move the other phone makes against the rules.</p>
+      <p>Play a friend on two phones. One of you hosts and shares a six-letter code; the other joins with it. Both of you need to open this same page signed in, with access to it. Each phone rolls its own dice and checks every move the other phone makes against the rules. Online, auto-roll starts on, and each decision has <b>10 seconds</b>: run out of time and the other side gets a penalty (the toss and the card picks are made for you instead).</p>
       <p>In a <b>friends league</b>, each friend takes a club in the same league and the CPU plays the rest. Matches between friends are played online; a round moves on once every friend's match is played.</p>
       <p>The <b>daily challenge</b> is one situation a day, the same for everyone: your first attempt goes on the day's leaderboard. Both need the page on claude.ai, shared with your friends as Contributors.</p>
     </section>

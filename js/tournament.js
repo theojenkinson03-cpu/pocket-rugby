@@ -1,26 +1,79 @@
-// Tournaments: a Nations Cup (two pools of four, then semi-finals and a
-// final) and four real leagues, each with its own play-off format. Other
-// fixtures are played out by the engine, CPU against CPU.
+// Tournaments: the 2027 World Cup (six pools, then a round of 16 and on to
+// the final), the Champions Cup and four real leagues, each with its own
+// play-off format. Other fixtures are played out by the engine, CPU against
+// CPU, with the stronger side given the edge.
 
 import { act, newMatch, rollWeather } from './engine.js';
 import { cpuChoice } from './ai.js';
+import { CARD_IDS } from './cards.js';
 import { playerOfTheMatch, randomRoster } from './players.js';
 import { packPlayers } from './season.js';
+import { realRoster } from './squads.js';
 
+// The 24 nations at the 2027 World Cup. rating: how strong a side is, 1 to
+// 5, which gives the stronger side the edge in matches the CPU plays out
+// (see classCards). Level and style are this game's own flavour.
 export const NATIONS = [
-  { id: 'nzl', name: 'New Zealand', short: 'NZL', color: '#121314', alt: '#f4f4f0', flavour: 'kiwi', personality: 'run', level: 'expert', ground: 'Eden Park' },
-  { id: 'rsa', name: 'South Africa', short: 'RSA', color: '#0b6e3b', alt: '#f2c230', flavour: 'southern', personality: 'pack', level: 'expert', ground: 'Ellis Park' },
-  { id: 'irl', name: 'Ireland', short: 'IRL', color: '#12854a', alt: '#f4f4f0', flavour: 'irish', personality: 'balanced', level: 'expert', ground: 'Aviva Stadium' },
-  { id: 'fra', name: 'France', short: 'FRA', color: '#1d3577', alt: '#f4f4f0', flavour: 'french', personality: 'run', level: 'pro', ground: 'Stade de France' },
-  { id: 'eng', name: 'England', short: 'ENG', color: '#f4f4f0', alt: '#1c2b4a', flavour: 'english', personality: 'boot', level: 'pro', ground: 'Allianz Stadium, Twickenham' },
-  { id: 'aus', name: 'Australia', short: 'AUS', color: '#f2c230', alt: '#1a4d2e', flavour: 'aussie', personality: 'run', level: 'pro', ground: 'Accor Stadium' },
-  { id: 'sco', name: 'Scotland', short: 'SCO', color: '#20305f', alt: '#9fb7d9', flavour: 'scottish', personality: 'balanced', level: 'pro', ground: 'Murrayfield' },
-  { id: 'arg', name: 'Argentina', short: 'ARG', color: '#74acdf', alt: '#1d3577', flavour: 'latin', personality: 'pack', level: 'pro', ground: 'Estadio José Amalfitani', kit: ['hoops', '#74acdf', '#f4f4f0'] },
-  { id: 'wal', name: 'Wales', short: 'WAL', color: '#c8102e', alt: '#f4f4f0', flavour: 'welsh', personality: 'balanced', level: 'pro', ground: 'Principality Stadium' },
-  { id: 'fij', name: 'Fiji', short: 'FIJ', color: '#e9eef2', alt: '#121314', flavour: 'pacific', personality: 'run', level: 'pro', ground: 'HFC Bank Stadium' },
-  { id: 'jpn', name: 'Japan', short: 'JPN', color: '#d4001a', alt: '#f4f4f0', flavour: 'japanese', personality: 'run', level: 'pro', ground: 'Japan National Stadium', kit: ['hoops', '#d4001a', '#f4f4f0'] },
-  { id: 'ita', name: 'Italy', short: 'ITA', color: '#0a5ec0', alt: '#f4f4f0', flavour: 'italian', personality: 'boot', level: 'rookie', ground: 'Stadio Olimpico' },
+  { id: 'nzl', name: 'New Zealand', short: 'NZL', color: '#121314', alt: '#f4f4f0', flavour: 'kiwi', personality: 'run', level: 'expert', rating: 5, ground: 'Eden Park' },
+  { id: 'rsa', name: 'South Africa', short: 'RSA', color: '#0b6e3b', alt: '#f2c230', flavour: 'southern', personality: 'pack', level: 'expert', rating: 5, ground: 'Ellis Park' },
+  { id: 'irl', name: 'Ireland', short: 'IRL', color: '#12854a', alt: '#f4f4f0', flavour: 'irish', personality: 'balanced', level: 'expert', rating: 5, ground: 'Aviva Stadium' },
+  { id: 'fra', name: 'France', short: 'FRA', color: '#1d3577', alt: '#f4f4f0', flavour: 'french', personality: 'run', level: 'expert', rating: 5, ground: 'Stade de France' },
+  { id: 'eng', name: 'England', short: 'ENG', color: '#f4f4f0', alt: '#1c2b4a', flavour: 'english', personality: 'boot', level: 'expert', rating: 5, ground: 'Allianz Stadium, Twickenham' },
+  { id: 'aus', name: 'Australia', short: 'AUS', color: '#f2c230', alt: '#1a4d2e', flavour: 'aussie', personality: 'run', level: 'pro', rating: 4, ground: 'Stadium Australia' },
+  { id: 'sco', name: 'Scotland', short: 'SCO', color: '#20305f', alt: '#9fb7d9', flavour: 'scottish', personality: 'balanced', level: 'pro', rating: 4, ground: 'Murrayfield' },
+  { id: 'arg', name: 'Argentina', short: 'ARG', color: '#74acdf', alt: '#1d3577', flavour: 'latin', personality: 'pack', level: 'pro', rating: 4, ground: 'Estadio José Amalfitani', kit: ['hoops', '#74acdf', '#f4f4f0'] },
+  { id: 'fij', name: 'Fiji', short: 'FIJ', color: '#e9eef2', alt: '#121314', flavour: 'pacific', personality: 'run', level: 'pro', rating: 3, ground: 'HFC Bank Stadium' },
+  { id: 'ita', name: 'Italy', short: 'ITA', color: '#0a5ec0', alt: '#f4f4f0', flavour: 'italian', personality: 'boot', level: 'pro', rating: 3, ground: 'Stadio Olimpico' },
+  { id: 'wal', name: 'Wales', short: 'WAL', color: '#c8102e', alt: '#f4f4f0', flavour: 'welsh', personality: 'balanced', level: 'pro', rating: 3, ground: 'Principality Stadium' },
+  { id: 'jpn', name: 'Japan', short: 'JPN', color: '#d4001a', alt: '#f4f4f0', flavour: 'japanese', personality: 'run', level: 'pro', rating: 3, ground: 'Japan National Stadium', kit: ['hoops', '#d4001a', '#f4f4f0'] },
+  { id: 'geo', name: 'Georgia', short: 'GEO', color: '#b01e2f', alt: '#f4f4f0', flavour: 'any', personality: 'pack', level: 'pro', rating: 3, ground: 'Boris Paichadze Dinamo Arena' },
+  { id: 'sam', name: 'Samoa', short: 'SAM', color: '#1d4f91', alt: '#f4f4f0', flavour: 'pacific', personality: 'run', level: 'pro', rating: 2, ground: 'Apia Park' },
+  { id: 'ton', name: 'Tonga', short: 'TGA', color: '#c8102e', alt: '#f4f4f0', flavour: 'pacific', personality: 'run', level: 'rookie', rating: 2, ground: 'Teufaiva Sport Stadium' },
+  { id: 'uru', name: 'Uruguay', short: 'URU', color: '#7fb8e8', alt: '#1c2b4a', flavour: 'latin', personality: 'pack', level: 'rookie', rating: 2, ground: 'Estadio Charrúa' },
+  { id: 'por', name: 'Portugal', short: 'POR', color: '#b5121b', alt: '#0f7a44', flavour: 'latin', personality: 'run', level: 'rookie', rating: 2, ground: 'Estádio Nacional, Jamor' },
+  { id: 'esp', name: 'Spain', short: 'ESP', color: '#d0103a', alt: '#f2c230', flavour: 'latin', personality: 'balanced', level: 'rookie', rating: 2, ground: 'Estadio Central, Madrid' },
+  { id: 'usa', name: 'USA', short: 'USA', color: '#1c2b4a', alt: '#f4f4f0', flavour: 'any', personality: 'balanced', level: 'rookie', rating: 2, ground: 'Dignity Health Sports Park', kit: ['band', '#1c2b4a', '#f4f4f0', '#c8102e'] },
+  { id: 'can', name: 'Canada', short: 'CAN', color: '#d52b1e', alt: '#18191b', flavour: 'any', personality: 'pack', level: 'rookie', rating: 2, ground: 'Starlight Stadium' },
+  { id: 'rou', name: 'Romania', short: 'ROU', color: '#f2c230', alt: '#1d3577', flavour: 'any', personality: 'pack', level: 'rookie', rating: 2, ground: 'Arcul de Triumf Stadium' },
+  { id: 'chi', name: 'Chile', short: 'CHL', color: '#d52b1e', alt: '#1d3577', flavour: 'latin', personality: 'run', level: 'rookie', rating: 1, ground: 'Estadio Santa Laura' },
+  { id: 'hkg', name: 'Hong Kong China', short: 'HKG', color: '#e8eef2', alt: '#c8102e', flavour: 'any', personality: 'balanced', level: 'rookie', rating: 1, ground: 'Kai Tak Stadium', kit: ['band', '#e8eef2', '#c8102e'] },
+  { id: 'zim', name: 'Zimbabwe', short: 'ZIM', color: '#0f7a44', alt: '#f4f4f0', flavour: 'southern', personality: 'pack', level: 'rookie', rating: 1, ground: 'Hartsfield Rugby Ground', kit: ['hoops', '#0f7a44', '#f4f4f0'] },
 ];
+
+// The 2027 World Cup in Australia: the real draw, six pools of four. The top
+// two in each pool and the four best third-placed sides go through to the
+// round of 16, then a fixed bracket to the final at Stadium Australia.
+export const WORLD_CUP = {
+  name: 'World Cup 2027',
+  short: 'World Cup',
+  pools: {
+    A: ['nzl', 'aus', 'chi', 'hkg'],
+    B: ['rsa', 'ita', 'geo', 'rou'],
+    C: ['arg', 'fij', 'esp', 'can'],
+    D: ['irl', 'sco', 'uru', 'por'],
+    E: ['fra', 'jpn', 'usa', 'sam'],
+    F: ['eng', 'wal', 'ton', 'zim'],
+  },
+  // The eight grounds, in the seven host cities.
+  venues: ['Perth Stadium', 'Brisbane Stadium', 'Stadium Australia, Sydney', 'Sydney Football Stadium', 'Docklands Stadium, Melbourne', 'Adelaide Oval', 'Newcastle Stadium', 'North Queensland Stadium, Townsville'],
+  // The round of 16: [home slot, away slot, ground]. Slots: '1A' pool A
+  // winners, '2B' runners-up, '3:CEF' a best third from pool C, E or F.
+  r16: [
+    ['2C', '2F', 'Sydney Football Stadium'],
+    ['1A', '3:CEF', 'Brisbane Stadium'],
+    ['1E', '2D', 'Docklands Stadium, Melbourne'],
+    ['1B', '3:DEF', 'Perth Stadium'],
+    ['1C', '3:AEF', 'Sydney Football Stadium'],
+    ['1D', '3:BEF', 'Docklands Stadium, Melbourne'],
+    ['2A', '2E', 'Brisbane Stadium'],
+    ['1F', '2B', 'Perth Stadium'],
+  ],
+  // Quarter-finals from the round of 16's matches (1-8), then the semis.
+  qf: [[2, 4, 'Stadium Australia, Sydney'], [1, 3, 'Brisbane Stadium'], [5, 6, 'Brisbane Stadium'], [7, 8, 'Stadium Australia, Sydney']],
+  semi: [[1, 2, 'Stadium Australia, Sydney'], [3, 4, 'Stadium Australia, Sydney']],
+  final: 'Stadium Australia, Sydney',
+  host: 'aus',
+};
 
 // The real leagues and their teams. Names identify the real clubs; kit
 // colours are approximations; level and style are this game's own flavour.
@@ -212,23 +265,43 @@ function fixture(id, stage, round, home, away, group = null) {
   return { id, stage, round, group, home, away, result: null };
 }
 
+// Every side with its real players (made-up names for a side we don't know).
 function makeTeams(roster, rng) {
-  return roster.map(team => ({ ...team, roster: randomRoster(team.flavour, rng) }));
+  return roster.map(team => ({ ...team, roster: realRoster(team.id) || randomRoster(team.flavour, rng) }));
 }
 
+// The World Cup: the real pools, three matches each, at the eight grounds.
 export function createCup({ userTeam, length = 'quick', format = 'points', cards = true, bench = false, weather = false, rng = Math.random }) {
-  const others = shuffle(NATIONS.filter(n => n.id !== userTeam), rng).slice(0, 7);
-  const field = shuffle([NATIONS.find(n => n.id === userTeam), ...others], rng);
-  const pools = { A: field.slice(0, 4).map(n => n.id), B: field.slice(4).map(n => n.id) };
+  const W = WORLD_CUP;
+  const pools = Object.fromEntries(Object.entries(W.pools).map(([group, ids]) => [group, [...ids]]));
   const fixtures = [];
+  let n = 0;
   for (const [group, ids] of Object.entries(pools)) {
     roundRobin(ids).forEach((pairs, round) => pairs.forEach(([home, away]) => {
-      fixtures.push(fixture(`${group}${round}${home}`, 'pool', round, home, away, group));
+      const f = fixture(`${group}${round}${home}`, 'pool', round, home, away, group);
+      f.venue = W.venues[n++ % W.venues.length];
+      fixtures.push(f);
     }));
   }
-  // One of the eight hosts the semi-finals and the final.
-  const host = field[Math.floor(rng() * field.length)].id;
-  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, format, cards, bench, weather, userTeam, host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
+  const field = Object.values(pools).flat().map(id => NATIONS.find(x => x.id === id));
+  return { kind: 'cup', worldCup: true, name: W.name, short: W.short, length, format, cards, bench, weather, userTeam, host: W.host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
+}
+
+// The round of 16 from the pool tables: winners and runners-up into their
+// slots, then the four best thirds, each into the slot open to its pool.
+export function worldCupRound16(t) {
+  const W = WORLD_CUP;
+  const tables = Object.fromEntries(Object.keys(t.pools).map(group => [group, standings(t, group)]));
+  const thirds = Object.entries(tables).map(([group, rows]) => ({ ...rows[2], group })).sort(tableOrder).slice(0, 4);
+  const slots = W.r16.flatMap(([a, b]) => [a, b]).filter(slot => slot.startsWith('3:'));
+  // A third from pools A to D fits one slot only; E's and F's take what's left, in order.
+  const placed = {};
+  for (const third of [...thirds].sort((a, b) => 'EF'.includes(a.group) - 'EF'.includes(b.group))) {
+    const slot = slots.find(x => !placed[x] && x.slice(2).includes(third.group));
+    placed[slot] = third.id;
+  }
+  const team = slot => (slot.startsWith('3:') ? placed[slot] : tables[slot[1]][Number(slot[0]) - 1].id);
+  return W.r16.map(([a, b, ground], i) => ({ ...fixture(`R${i + 1}`, 'r16', 0, team(a), team(b)), venue: ground }));
 }
 
 // season: 'full' (everyone plays everyone once) or 'short' (the first
@@ -357,6 +430,7 @@ export function migrateTournament(t) {
     const known = TEAM_BY_ID[side.id];
     if (!known) continue;
     side.ground ??= known.ground;
+    side.rating ??= known.rating;
     if (known.kit) side.kit ??= known.kit;
   }
   t.byes ??= [];
@@ -364,9 +438,11 @@ export function migrateTournament(t) {
   return t;
 }
 
-// Where a fixture is played: {name, neutral}. The Nations Cup's knockouts go
-// to the host nation's ground, which is neutral unless the hosts are playing.
+// Where a fixture is played: {name, neutral}. World Cup matches have a
+// ground of their own, neutral unless the hosts are playing; the old eight-
+// nation cup's knockouts went to the host nation's ground.
 export function venue(t, f) {
+  if (f.venue) return { name: f.venue, neutral: f.home !== t.host && f.away !== t.host };
   const home = teamOf(t, f.home);
   const fixed = NEUTRAL_GROUNDS[t.league]?.[f.stage] || t.neutral?.[f.stage];
   const hosted = t.host && f.stage !== 'pool' ? teamOf(t, t.host) : null;
@@ -452,11 +528,28 @@ export function resultFromMatch(f, match, userIsHome) {
   };
 }
 
+// A side's strength, 1 to 5: a nation's rating, or from a club's level.
+export const ratingOf = team => team?.rating ?? { expert: 4, pro: 3, rookie: 2 }[team?.level] ?? 3;
+
+// Class tells in matches the CPU plays out: the stronger side gets team
+// cards for the gap in ratings, in place of the draft (one Epic for a gap of
+// one, up to two Mythics and two Epics for four). Over 300 quick matches
+// each, the stronger side won 61% (on the clock) to 68% (first to 20) with a
+// gap of one, and 85% to 95% with a gap of four. Picked by `rng`, so a
+// seeded fixture always gets the same cards.
+const CLASS_CARDS = [[], ['epic'], ['epic', 'epic'], ['mythic', 'epic', 'epic'], ['mythic', 'mythic', 'epic', 'epic']];
+export function classCards(gap, rng) {
+  const pool = [...CARD_IDS];
+  return CLASS_CARDS[Math.min(4, Math.abs(gap))].map(rarity => ({ id: pool.splice(Math.floor(rng() * pool.length), 1)[0], rarity }));
+}
+
 // Plays a CPU-vs-CPU fixture to the end and returns its result.
 export function simulateFixture(t, f, rng = Math.random) {
   const [home, away] = kits(t, f);
   const sides = [teamOf(t, f.home), teamOf(t, f.away)];
-  let m = newMatch({ mode: '2p', teams: [home, away], ...matchRules(t, rng, f) });
+  let m = newMatch({ mode: '2p', teams: [home, away], ...matchRules(t, rng, f), cards: false });
+  const gap = ratingOf(sides[0]) - ratingOf(sides[1]);
+  if (gap) m.teams[gap > 0 ? 0 : 1].cards = classCards(gap, rng);
   for (let guard = 0; m.step.type !== 'fulltime' && guard < 5000; guard++) {
     const step = m.step;
     let action;
@@ -593,6 +686,20 @@ export function advance(t) {
     // 1 v 16, 2 v 15 ... 8 v 9, the better seed at home.
     for (let i = 0; i < 8; i++) t.fixtures.push(tie(t, `R${i + 1}`, 'r16', seeds[i], seeds[15 - i]));
     t.stage = 'r16';
+  } else if (t.stage === 'pool' && t.worldCup) {
+    t.fixtures.push(...worldCupRound16(t));
+    t.stage = 'r16';
+  } else if (t.stage === 'r16' && t.worldCup) {
+    const w = n => winnerOf(byId(t, `R${n}`));
+    WORLD_CUP.qf.forEach(([a, b, ground], i) => t.fixtures.push({ ...fixture(`QF${i + 1}`, 'qf', 0, w(a), w(b)), venue: ground }));
+    t.stage = 'qf';
+  } else if (t.stage === 'qf' && t.worldCup) {
+    const w = n => winnerOf(byId(t, `QF${n}`));
+    WORLD_CUP.semi.forEach(([a, b, ground], i) => t.fixtures.push({ ...fixture(`SF${i + 1}`, 'semi', 0, w(a), w(b)), venue: ground }));
+    t.stage = 'semi';
+  } else if (t.stage === 'semi' && t.worldCup) {
+    t.fixtures.push({ ...fixture('F', 'final', 0, winnerOf(byId(t, 'SF1')), winnerOf(byId(t, 'SF2'))), venue: WORLD_CUP.final });
+    t.stage = 'final';
   } else if (t.stage === 'r16') {
     // A fixed bracket: the 1/16 winner meets the 8/9 winner, and so on;
     // from the quarter-finals on it runs like the URC's.

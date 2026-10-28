@@ -95,7 +95,7 @@ function startPage(state, handlers) {
   });
   join.append(el('h3', 'page-h', 'Join a league'), el('p', null, 'Type the six-letter code from your friend’s screen, then pick a club.'), form);
   page.append(join);
-  page.append(el('p', 'fineprint', 'Real team names, made-up players. Not affiliated with or endorsed by any league, union or club.'));
+  page.append(el('p', 'fineprint', 'Real teams and players, named for fun: squads are a best guess at the current season and players move clubs. Not affiliated with or endorsed by any player, league, union or club.'));
   return page;
 }
 

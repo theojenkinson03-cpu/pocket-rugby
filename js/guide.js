@@ -117,8 +117,9 @@ function ruckFace(m, i) {
   const { events } = rollWith(m, i);
   const won = find(events, 'ruck')?.won;
   const card = find(events, 'cardPlayed') ? ' (team card)' : '';
+  const end = whistle(events, m.step.team);
   return won
-    ? { tone: 'good', caption: 'Turnover', note: card ? 'card' : 'ball won', text: `The ruck is won${card}: the ball changes hands.` }
+    ? { tone: 'good', caption: 'Turnover', note: end?.note || (card ? 'card' : 'ball won'), text: `The ruck is won${card}: the ball changes hands${end ? `, and the ball is dead: ${end.note.toLowerCase()}` : ''}.` }
     : { tone: 'bad', caption: 'Held', note: 'their ball', text: 'The attackers keep the ball and go again.' };
 }
 
@@ -127,7 +128,7 @@ function tryFace(m, i) {
   const { events } = rollWith(m, i);
   if (find(events, 'try')) {
     const end = whistle(events, team);
-    return { tone: 'good', caption: 'TRY', note: end?.note === 'Full time' ? 'wins it' : '+5', text: end?.note === 'Full time' ? 'A try, and in sudden death that wins the match.' : 'A try: 5 points, then the conversion.' };
+    return { tone: 'good', caption: 'TRY', note: end?.note === 'Full time' ? 'wins it' : '+5', text: end?.note === 'Full time' ? 'A try, and that wins the match.' : 'A try: 5 points, then the conversion.' };
   }
   if (find(events, 'videoRef')) return { tone: 'ok', caption: 'Video ref', note: 'roll again', text: 'Over to the video referee: roll the black die again.' };
   if (find(events, 'cardPlayed')) return { tone: 'ok', caption: 'Roll again', note: 'team card', text: 'Not this time, but the team card gives another roll.' };
@@ -150,9 +151,10 @@ function kickFace(m, i) {
   const k = find(events, 'kick');
   const end = whistle(events, team);
   const what = { conversion: 'Conversion', penalty: 'Penalty goal', drop: 'Drop goal' }[k.kick];
+  const after = end ? ` ${end.note}.` : '';
   return k.good
-    ? { tone: 'good', caption: 'Over', note: end?.note === 'Full time' && end.tone === 'good' ? 'wins it' : metres(k.distance), text: `${what}: ${metres(k.distance)} reaches the ${metres(k.range)} needed.` }
-    : { tone: 'bad', caption: 'Short', note: metres(k.distance), text: `${metres(k.distance)} falls short of the ${metres(k.range)} needed.` };
+    ? { tone: 'good', caption: 'Over', note: end?.note === 'Full time' && end.tone === 'good' ? 'wins it' : end?.note || metres(k.distance), text: `${what}: ${metres(k.distance)} reaches the ${metres(k.range)} needed.${after}` }
+    : { tone: 'bad', caption: 'Short', note: end?.note || metres(k.distance), text: `${metres(k.distance)} falls short of the ${metres(k.range)} needed.${after}` };
 }
 
 function penaltyFace(m, i) {

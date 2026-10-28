@@ -1,7 +1,7 @@
 // Tournament screens: picking a competition and team, then the hub with the
 // next match, the tables, the knockout bracket and every result.
 
-import { CHAMPIONS_CUP, currentRound, isUserFixture, LEAGUE_OF, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, TEAM_BY_ID, teamOf, userAlive, userFixture, userRecord, venue } from './tournament.js';
+import { CHAMPIONS_CUP, WORLD_CUP, currentRound, isUserFixture, LEAGUE_OF, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, TEAM_BY_ID, teamOf, userAlive, userFixture, userRecord, venue } from './tournament.js';
 import { LEVELS, PERSONALITIES } from './ai.js';
 import { leaders, LEADER_STATS, playerOfTheSeason, seasonPlayers, teamOfTheSeason } from './season.js';
 import { statLine } from './players.js';
@@ -11,6 +11,8 @@ import { canContinue, nextStep } from './club.js';
 import { clubSection } from './club-view.js';
 import { MATCH_LENGTHS } from './engine.js';
 import { button, el, tallButton, toggleRow } from './dom.js';
+
+const WORLD_CUP_TEXT = 'The top two in each pool and the four best third-placed sides go through to the round of 16.';
 
 // How the table works, in a sentence.
 export const POINTS_TEXT = `A win is worth ${POINTS.win} points and a draw ${POINTS.draw}, with a bonus point for winning by ${POINTS.bigWinBy} or more or losing by ${POINTS.losingBonusWithin} or fewer.`;
@@ -57,7 +59,7 @@ export const PLAYOFF_TEXT = {
 };
 
 const COMPETITIONS = [
-  { id: 'cup', name: 'Nations Cup', note: '8 nations · two pools, then knockouts' },
+  { id: 'cup', name: WORLD_CUP.name, note: '24 nations · the real pools in Australia, then knockouts' },
   { id: 'champions', name: CHAMPIONS_CUP.name, note: '24 clubs from the Prem, URC and Top 14 · four pools of six, then knockouts', season: CHAMPIONS_CUP.season },
   { id: 'super', name: LEAGUES.super.name, note: `${LEAGUES.super.teams.length} teams · top six to the finals`, season: LEAGUES.super.season },
   { id: 'prem', name: LEAGUES.prem.name, note: `${LEAGUES.prem.teams.length} clubs · top four to the semi-finals`, season: LEAGUES.prem.season },
@@ -140,12 +142,12 @@ export function tournamentSetup(state, { onChange, onStart }) {
     ? `${rounds} rounds${league.teams.length % 2 ? ' (one side sits out each round)' : ''}. ${PLAYOFF_TEXT[league.playoff]}`
     : europe
       ? `Up to 8 matches: 4 in your pool, against the clubs from the other two leagues, then a round of 16, quarter-finals, semi-finals and the final in Lyon. ${CHAMPIONS_TEXT}`
-      : 'Up to 5 matches: 3 in your pool, then a semi-final and the final.';
+      : `Up to 7 matches: 3 in your pool, then the round of 16, quarter-finals, semi-finals and the final at Stadium Australia. ${WORLD_CUP_TEXT}`;
   page.append(el('p', 'page-note', `${what} ${POINTS_TEXT}${(state.format || 'rolls') === 'rolls' ? ' A knockout match level at full time goes to sudden death: the next score wins.' : ''}`));
-  const name = league ? league.short : europe ? CHAMPIONS_CUP.short : 'Nations Cup';
+  const name = league ? league.short : europe ? CHAMPIONS_CUP.short : WORLD_CUP.short;
   page.append(button(`Start the ${name}`, () => onStart({ ...state, team }), 'btn btn-primary btn-wide', { primary: true }));
   if (league) page.append(el('p', 'page-note', 'When the season ends, carry on with your club into the next one, squad and all. Clubs in the Champions Cup play it after the league; the top eight qualify for the next.'));
-  if (league || europe) page.append(el('p', 'fineprint', 'Real team names, made-up players. Not affiliated with or endorsed by any league, union or club.'));
+  page.append(el('p', 'fineprint', 'Real teams and players, named for fun: squads are a best guess at the current season and players move clubs. Not affiliated with or endorsed by any player, league, union or club.'));
   return page;
 }
 
@@ -258,7 +260,7 @@ export function table(t, group) {
   });
   tbl.append(thead, body);
   wrap.append(tbl);
-  wrap.append(el('p', 'table-note', `${group === 'L' ? PLAYOFF_TEXT[t.playoff || 'top4'] : europe ? CHAMPIONS_TEXT : 'The top two go through to the semi-finals.'} ${POINTS_TEXT}`));
+  wrap.append(el('p', 'table-note', `${group === 'L' ? PLAYOFF_TEXT[t.playoff || 'top4'] : europe ? CHAMPIONS_TEXT : t.worldCup ? WORLD_CUP_TEXT : 'The top two go through to the semi-finals.'} ${POINTS_TEXT}`));
   return wrap;
 }
 

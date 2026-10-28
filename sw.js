@@ -7,6 +7,7 @@ const FILES = [
   'js/app.js',
   'js/ai.js',
   'js/guide.js',
+  'js/squads.js',
   'js/audio.js',
   'js/card-view.js',
   'js/cards.js',

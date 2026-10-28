@@ -142,7 +142,7 @@ export function dailyPage(state, handlers) {
     past.append(ul);
     page.append(past);
   }
-  page.append(el('p', 'fineprint', 'A new challenge every day at midnight UTC. Real club names, made-up players. Not affiliated with or endorsed by any league, union or club.'));
+  page.append(el('p', 'fineprint', `A new challenge every day at midnight UTC. Real teams and players, named for fun: squads are a best guess at the current season and players move clubs. Not affiliated with or endorsed by any player, league, union or club.`));
   return page;
 }
 

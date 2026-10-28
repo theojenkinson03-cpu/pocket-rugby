@@ -156,7 +156,7 @@ function renderHome() {
     $('#tournament-detail').textContent = `${teamOf(t, t.userTeam).name}${t.club ? ` · ${t.seasonName}` : ''} · ${stageName(t)}`;
   } else {
     $('#tournament-label').textContent = 'Cups & leagues';
-    $('#tournament-detail').textContent = 'Champions Cup, four leagues, Nations Cup';
+    $('#tournament-detail').textContent = 'World Cup, Champions Cup, four leagues';
   }
 }
 
@@ -339,7 +339,7 @@ function renderSquadList() {
     const row = el('label', 'squad-row');
     const input = el('input', 'squad-input');
     input.value = ui.squad.roster[pos] || '';
-    input.maxLength = 20;
+    input.maxLength = 26;
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.addEventListener('input', () => {
@@ -357,7 +357,7 @@ function bindSquad() {
   });
   $('#btn-squad-done').addEventListener('click', () => {
     const fresh = randomRoster(ui.squad.flavour);
-    const roster = Object.fromEntries(POSITIONS.map(p => [p, (ui.squad.roster[p] || '').trim().slice(0, 20) || fresh[p]]));
+    const roster = Object.fromEntries(POSITIONS.map(p => [p, (ui.squad.roster[p] || '').trim().slice(0, 26) || fresh[p]]));
     ui.squad.onSave(roster);
     $('#dlg-squad').close();
   });
@@ -575,12 +575,12 @@ function schedule() {
   clearTimeout(ui.cpuTimer);
   const m = ui.match;
   if (ui.view !== 'match' || !m || ui.busy) return;
+  startDecisionClock(m);
   if (controllerOf(m) === 'remote') {
     applyPendingRemote();
     return;
   }
   if (ui.coach || document.querySelector('dialog[open]')) return;
-  startDecisionClock(m);
   if (!isAutomatic(m)) return;
   // Long enough to glance at the dice guide before each roll.
   const thinking = m.step.type === 'choose' ? 1000 : controllerOf(m) === 'human' ? 900 : 750;
@@ -1149,7 +1149,8 @@ function renderBoard(m) {
     if (m.attacker === team && m.quickTap > 0) status.append(chip(`Tap +1 ×${m.quickTap}`, null, 'tap'));
     // A replacement waiting on the bench matters once someone is hurt.
     if (t.bench > 0 && POSITIONS.some(p => t.injuries[p])) {
-      const c = chip('Bench ready', null, 'bench');
+      const c = chip('Bench', null, 'bench');
+      c.append(el('span', 'chip-more', ' ready'));
       c.title = `${t.name} can bring on a replacement this half`;
       status.append(c);
     }
@@ -1351,6 +1352,7 @@ function renderGuide(m) {
   if (!on) return;
   const viewer = viewerOf(m);
   const g = rollGuide(m, viewer ?? m.step.team);
+  host.dataset.focus = g.purpose === 'kick' ? 'kick' : '';
   const roller = m.teams[g.team];
   const head = $('#guide-head');
   const badge = dieBadges(m)[0];
@@ -1362,8 +1364,9 @@ function renderGuide(m) {
   faces.innerHTML = '';
   const text = $('#guide-text');
   const mine = viewer === null || viewer === g.team;
-  const tally = `${g.good} good, ${g.bad} bad${mine ? '' : ' for you'}`;
-  text.textContent = g.summary ? `${g.summary} ` : `${tally}. Tap a face for more.`;
+  const who = mine ? '' : ' for you';
+  const tally = g.good || g.bad ? `${g.good} good, ${g.bad} bad${who}` : `No risk either way${who}`;
+  text.textContent = g.summary || `${tally}. Tap a face for more.`;
   for (const f of g.faces) {
     const b = el('button', `gf tone-${f.tone}`);
     b.type = 'button';

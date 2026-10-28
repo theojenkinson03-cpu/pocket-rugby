@@ -28,7 +28,7 @@ test('codes: six easy-to-read characters, typed any way you like', () => {
 });
 
 test('actions travel small and come back the same', () => {
-  for (const a of [{ type: 'roll' }, { type: 'continue' }, { type: 'choose', value: 'tails' }, { type: 'choose', value: 'sure-hands' }]) {
+  for (const a of [{ type: 'roll' }, { type: 'continue' }, { type: 'timeout' }, { type: 'choose', value: 'tails' }, { type: 'choose', value: 'sure-hands' }]) {
     assert.deepEqual(decodeAction(JSON.parse(JSON.stringify(encodeAction(a)))), a);
   }
   for (const bad of [null, {}, { t: 'x' }, { t: 'c' }, { t: 'c', v: 3 }]) assert.equal(decodeAction(bad), null);
@@ -71,8 +71,11 @@ test('a move replays exactly on the other phone', () => {
   for (let i = 0; i < 400 && guest.step.type !== 'fulltime'; i++) {
     const team = actingTeam(guest);
     const mine = team === 1 ? guest : host;
-    const action = mine.step.type === 'roll' ? { type: 'roll' } : mine.step.type === 'halftime' ? { type: 'continue' } : { type: 'choose', value: cpuChoice({ ...mine, cpuLevel: 'pro' }, source) };
+    // Now and then a decision runs out of time: a timeout travels like any move.
+    const timedOut = mine.step.type === 'choose' && isLegal(mine, { type: 'timeout' }) && i % 5 === 0;
+    const action = mine.step.type === 'roll' ? { type: 'roll' } : mine.step.type === 'halftime' ? { type: 'continue' } : timedOut ? { type: 'timeout' } : { type: 'choose', value: cpuChoice({ ...mine, cpuLevel: 'pro' }, source) };
     const made = move(mine, action, source);
+    if (timedOut) assert.ok(made.events.some(e => e.type === 'timeout'));
     const other = team === 1 ? host : guest;
     const got = applyRemote(other, JSON.parse(JSON.stringify(made.entry)), team);
     assert.ok(got.ok, got.reason);
@@ -220,7 +223,7 @@ test('team details from the other phone are cleaned up', async () => {
   await settle(server);
   assert.equal(host.peer.team.name.length, 14);
   assert.equal(host.peer.team.color, '#4aa2df', 'not a colour: a safe default');
-  assert.equal(host.peer.team.roster.S.length, 20);
+  assert.equal(host.peer.team.roster.S.length, 26);
   assert.equal(host.peer.team.roster.F, '3');
   assert.ok(!('extra' in host.peer.team.roster));
   assert.equal(host.peer.team.kit, null, 'no kit sent: plain');
