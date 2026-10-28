@@ -1,7 +1,7 @@
 // Mutation testing: plants one deliberate rules bug at a time in a copy of
 // the code and checks the test suite catches it. A bug that slips through
 // ("survived") means a rule is not really tested.
-// Usage: node scripts/mutate.mjs
+// Usage: node scripts/mutate.mjs   (MUTANT=catch-up node scripts/mutate.mjs for some of them)
 
 import { spawn } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -114,9 +114,9 @@ const MUTANTS = [
   ['Mythic as common as Epic', 'js/cards.js', "{ id: 'mythic', name: 'Mythic', odds: 0.04 }", "{ id: 'mythic', name: 'Mythic', odds: 0.13 }"],
   ['Rarity ignored: every card plays as Common', 'js/cards.js', 'return TIERS[id]?.[rarity] || TIERS[id]?.common || null;', 'return TIERS[id]?.common || null;'],
   ['A drafted card loses its rarity', 'js/engine.js', 'm.teams[step.team].cardRarity = rarity;', "m.teams[step.team].cardRarity = 'common';"],
-  ['No catch-up for the second pick', 'js/engine.js', 'return catchUp(match.teams[other(step.team)].cardRarity, dealt);', 'return dealt;'],
+  ['No catch-up for the second pick', 'js/engine.js', 'return catchUp(match.teams[other(match.step.team)].cardRarity, dealt);', 'return dealt;'],
   ['Catch-up all the way to the first pick', 'js/cards.js', 'return first > mine ? RARITY_IDS[mine + 1] : rarity;', 'return first > mine ? firstRarity : rarity;'],
-  ['Catch-up for the first pick too', 'js/engine.js', "if (step.purpose !== 'draft' || step.first) return dealt;", "if (step.purpose !== 'draft') return dealt;"],
+  ['Catch-up against your own pick', 'js/engine.js', 'return catchUp(match.teams[other(match.step.team)].cardRarity, dealt);', 'return catchUp(match.teams[match.step.team].cardRarity, dealt);'],
   ['Rerolls on every try attempt never run out', 'js/engine.js', "if (limit.per === 'try') return (m.step.rerolled || 0) < limit.n;", "if (limit.per === 'try') return true;"],
   ["'Always' uses run out", 'js/engine.js', "  if (limit.per === 'always') return true;\n", ''],
   ['Jackal (Epic) never contests big moves', 'js/engine.js', 'return ruckEligible(face, intensity, fx.ruckMax || 4, !!fx.ruckOnSpecial);', 'return ruckEligible(face, intensity, fx.ruckMax || 4, false);'],
@@ -170,8 +170,10 @@ async function mutant([name, file, from, to]) {
   }
 }
 
+// MUTANT=catch-up runs only the mutants whose name contains that text.
+const only = process.env.MUTANT?.toLowerCase();
 const results = [];
-const queue = [...MUTANTS];
+const queue = MUTANTS.filter(([name]) => !only || name.toLowerCase().includes(only));
 await Promise.all(Array.from({ length: 4 }, async () => {
   while (queue.length) results.push(await mutant(queue.shift()));
 }));

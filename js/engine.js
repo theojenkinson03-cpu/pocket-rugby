@@ -676,12 +676,12 @@ function onChoose(m, ev, value) {
 }
 
 // The rarity a dealt card has for the side picking it now: as dealt, or one
-// up for the second pick when the first pick was rarer.
+// up for the second pick when the first pick was rarer. (On the first pick
+// the other side has no card yet, so there is nothing to catch up to.)
 export function draftRarity(match, id) {
-  const step = match.step;
   const dealt = match.dealRarity?.[id] || 'common';
-  if (step.purpose !== 'draft' || step.first) return dealt;
-  return catchUp(match.teams[other(step.team)].cardRarity, dealt);
+  if (match.step.purpose !== 'draft') return dealt;
+  return catchUp(match.teams[other(match.step.team)].cardRarity, dealt);
 }
 
 // Deal DEAL_SIZE different cards, each at a rarity of its own. The toss
