@@ -7,6 +7,8 @@ import { leaders, LEADER_STATS, playerOfTheSeason, seasonPlayers, teamOfTheSeaso
 import { statLine } from './players.js';
 import { PLAYERS, POSITIONS } from './dice.js';
 import { dieChip } from './dice-view.js';
+import { canContinue, nextStep } from './club.js';
+import { clubSection } from './club-view.js';
 import { MATCH_LENGTHS } from './engine.js';
 import { button, el, tallButton } from './dom.js';
 import { kitVars } from './color.js';
@@ -143,6 +145,7 @@ export function tournamentSetup(state, { onChange, onStart }) {
   page.append(el('p', 'page-note', `${what} A win is worth 4 points, with a bonus point for 4 tries and one for losing by ${POINTS.losingBonusWithin} or fewer.`));
   const name = league ? league.short : europe ? CHAMPIONS_CUP.short : 'Nations Cup';
   page.append(button(`Start the ${name}`, () => onStart({ ...state, team }), 'btn btn-primary btn-wide', { primary: true }));
+  if (league) page.append(el('p', 'page-note', 'When the season ends, carry on with your club into the next one, squad and all. Clubs in the Champions Cup play it after the league; the top eight qualify for the next.'));
   if (league || europe) page.append(el('p', 'fineprint', 'Real team names, made-up players. Not affiliated with or endorsed by any league, union or club.'));
   return page;
 }
@@ -160,6 +163,7 @@ const tName = t => t.short || t.name;
 function nextMatchCard(t, handlers) {
   const card = el('section', 'next-card');
   const f = userFixture(t);
+  const me = teamOf(t, t.userTeam);
   if (t.stage === 'done') {
     const champ = teamOf(t, t.champion);
     kitVars(card, champ);
@@ -170,10 +174,16 @@ function nextMatchCard(t, handlers) {
     card.append(el('p', 'nc-meta', `Your record: won ${rec.won}, lost ${rec.lost}.`));
     const best = playerOfTheSeason(seasonPlayers(t));
     if (best) card.append(el('p', 'nc-meta', `Player of the ${t.kind === 'league' ? 'season' : 'tournament'}: ${best.name}, ${teamOf(t, best.team).name} (${PLAYERS[best.pos].one}).`));
-    card.append(button('New tournament', handlers.onNew, 'btn btn-primary', { primary: true }));
+    // A league season (or a club career's Champions Cup) rolls on.
+    if (canContinue(t)) {
+      const next = nextStep(t);
+      card.append(el('p', 'nc-meta', next.europe ? `${me.name} are in this season's Champions Cup.` : `Carry on with ${me.name}: same squad, a new season.`));
+      card.append(button(next.label, handlers.onContinue, 'btn btn-primary', { primary: true }), button('New tournament', handlers.onNew, 'btn btn-quiet'));
+    } else {
+      card.append(button('New tournament', handlers.onNew, 'btn btn-primary', { primary: true }));
+    }
     return card;
   }
-  const me = teamOf(t, t.userTeam);
   if (!f && userAlive(t)) {
     // A bye: a round off in a league with an odd number of teams, or a top-two
     // finish straight into the semi-finals.
@@ -394,7 +404,7 @@ export function tournamentHub(t, handlers) {
   const text = el('div');
   const round = currentRound(t);
   const stage = stageName(t) + (round !== null && (t.stage === 'pool' || t.stage === 'league') ? ` · Round ${round + 1}` : '');
-  text.append(el('b', 'hub-name', me.name), el('small', null, `${tName(t)} · ${stage}`));
+  text.append(el('b', 'hub-name', me.name), el('small', null, `${tName(t)}${t.seasonName ? ` ${t.seasonName}` : ''} · ${stage}`));
   head.append(text);
   page.append(head);
   page.append(nextMatchCard(t, handlers));
@@ -403,6 +413,8 @@ export function tournamentHub(t, handlers) {
   for (const group of Object.keys(t.pools)) page.append(table(t, group));
   const stats = seasonStats(t);
   if (stats) page.append(stats);
+  const club = clubSection(t);
+  if (club) page.append(club);
   const res = results(t);
   if (res) page.append(res);
 

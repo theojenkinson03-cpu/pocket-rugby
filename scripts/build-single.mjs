@@ -24,7 +24,7 @@ const commit = (() => {
 const build = { channel: dev ? 'dev' : 'real', commit, date: new Date().toISOString().slice(0, 10) };
 
 // Dependencies before dependants.
-const ORDER = ['color', 'dice', 'cards', 'engine', 'winprob', 'ai', 'players', 'season', 'commentary', 'tournament', 'career', 'coach', 'online', 'dom', 'dice-view', 'card-view', 'career-view', 'tournament-view', 'online-view', 'report', 'pitch', 'audio', 'cinema', 'store', 'app'];
+const ORDER = ['color', 'dice', 'cards', 'engine', 'winprob', 'ai', 'players', 'season', 'commentary', 'tournament', 'club', 'career', 'coach', 'online', 'dom', 'dice-view', 'card-view', 'career-view', 'club-view', 'tournament-view', 'online-view', 'report', 'pitch', 'audio', 'cinema', 'store', 'app'];
 
 function wrapModule(name) {
   const exported = [];

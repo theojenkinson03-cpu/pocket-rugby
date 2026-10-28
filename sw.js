@@ -13,6 +13,8 @@ const FILES = [
   'js/career.js',
   'js/cinema.js',
   'js/coach.js',
+  'js/club-view.js',
+  'js/club.js',
   'js/color.js',
   'js/commentary.js',
   'js/dice-view.js',

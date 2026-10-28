@@ -2244,3 +2244,26 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 }
 .pool-title { margin: 14px 0 6px; }
 .pick > .pool-title:first-of-type { margin-top: 0; }
+
+/* Club career: trophy cabinet, records book, history. */
+.club { display: grid; gap: 14px; }
+.shelf { list-style: none; margin: 0; padding: 12px 12px 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px 10px; border: 1px solid var(--line); border-bottom: 7px solid color-mix(in srgb, var(--ink) 22%, var(--surface)); border-radius: 12px 12px 6px 6px; background: var(--surface); }
+.shelf-empty { grid-column: 1 / -1; color: var(--muted); font-size: 14px; text-align: center; padding: 10px 0; }
+.trophy { display: grid; justify-items: center; gap: 2px; text-align: center; }
+.trophy b { font: 700 13px/1.15 var(--font-label); letter-spacing: 0.04em; text-transform: uppercase; }
+.trophy small { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.trophy-icon { width: 40px; height: 50px; filter: drop-shadow(0 3px 4px rgb(0 0 0 / 0.25)); }
+.trophy.t-leaders .trophy-icon { width: 30px; height: 38px; margin-top: 12px; }
+.records-book { display: grid; gap: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+.records-book .br-title + .rb-row { border-top: 0; }
+.rb-label { color: var(--muted); font-size: 13.5px; }
+.rb-value { text-align: right; font-size: 14.5px; }
+.rb-note { grid-column: 1 / -1; justify-self: end; color: var(--muted); font-size: 12px; }
+.seasons { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.season-row { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 14px; }
+.season-row.empty { color: var(--muted); text-align: center; }
+.sr-head { display: flex; justify-content: space-between; gap: 8px; }
+.sr-head b { font: 800 16px/1.1 var(--font-display); }
+.sr-head span { color: var(--muted); font-size: 13px; }
+.sr-note { color: var(--muted); font-size: 12.5px; }

@@ -26,9 +26,9 @@ function finished({ scores = [30, 10], winner = scores[0] > scores[1] ? 0 : 1, l
 const ctx = (over = {}) => ({ mode: '1p', level: 'pro', tournament: null, ...over });
 const unlocks = (match, tracker = newTracker(0), context = ctx(), career = newCareer()) => recordMatch(career, match, tracker, context);
 
-test('32 achievements, each with a name and a description', () => {
-  assert.equal(ACHIEVEMENTS.length, 32);
-  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 32);
+test('34 achievements, each with a name and a description', () => {
+  assert.equal(ACHIEVEMENTS.length, 34);
+  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 34);
   for (const a of ACHIEVEMENTS) assert.ok(a.name && a.text.endsWith('.') && typeof a.check === 'function', a.id);
   assert.equal(ACHIEVEMENT_BY_ID['first-win'].name, 'First Win');
 });
@@ -113,6 +113,11 @@ test('context achievements: Expert, tournaments, online, the guided match', () =
   assert.ok(league.includes('champions') && league.includes('invincibles'));
   const europe = unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'champions', champion: true, lost: 1 } }));
   assert.ok(europe.includes('european-champions') && !europe.includes('champions') && !europe.includes('cup-winners'));
+  const double = unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'champions', champion: true, lost: 1, double: true, leagueTitles: 1 } }));
+  assert.ok(double.includes('the-double') && !double.includes('dynasty'));
+  const dynasty = unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 1, leagueTitles: 3 } }));
+  assert.ok(dynasty.includes('dynasty') && !dynasty.includes('the-double'));
+  assert.ok(!unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 1, leagueTitles: 2 } })).includes('dynasty'));
   const c = newCareer();
   recordMatch(c, finished(), newTracker(0), ctx({ tournament: cup }));
   recordMatch(c, finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 2 } }));

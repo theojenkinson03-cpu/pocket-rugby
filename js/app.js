@@ -19,6 +19,7 @@ import { fixtureLabel, tournamentHub, tournamentSetup } from './tournament-view.
 import { lobbyPage } from './online-view.js';
 import { momentumChart, momentumFacts, playersTables, potmCard } from './report.js';
 import { createCinema } from './cinema.js';
+import { continueClub } from './club.js';
 import { createPitch } from './pitch.js';
 import { buzz, play, setSoundEnabled, unlockAudio } from './audio.js';
 import { customKit, kitVars, PATTERN_NAMES, PATTERNS } from './color.js';
@@ -134,7 +135,7 @@ function renderHome() {
   const t = ui.tournament;
   if (t && t.stage !== 'done') {
     $('#tournament-label').textContent = `Continue the ${t.short || t.name}`;
-    $('#tournament-detail').textContent = `${teamOf(t, t.userTeam).name} · ${stageName(t)}`;
+    $('#tournament-detail').textContent = `${teamOf(t, t.userTeam).name}${t.club ? ` · ${t.seasonName}` : ''} · ${stageName(t)}`;
   } else {
     $('#tournament-label').textContent = 'Cups & leagues';
     $('#tournament-detail').textContent = 'Nations Cup, Champions Cup, Super Rugby, Prem, URC, Top 14';
@@ -572,7 +573,8 @@ function finishMatch() {
       outcome.note = tournamentNote(t, f, m.winner === 0);
       if (t.stage === 'done' && t.champion === t.userTeam) {
         outcome.champion = { title: t.kind === 'league' ? `${t.short || t.name} champions` : `${t.name} winners` };
-        cup = { kind: t.kind, champion: true, lost: userRecord(t).lost };
+        const titles = (t.club?.trophies.filter(x => x.kind === 'league').length || 0) + (t.kind === 'league' ? 1 : 0);
+        cup = { kind: t.kind, champion: true, lost: userRecord(t).lost, leagueTitles: titles, double: t.kind === 'champions' && t.club?.current.league?.stage === 'champion' };
       }
       save('tournament', t);
     }
@@ -1568,6 +1570,13 @@ function renderTournament() {
       ui.tournament = null;
       save('tournament', null);
       renderTournament();
+    },
+    // A club career: on to the Champions Cup or next season.
+    onContinue: () => {
+      ui.tournament = continueClub(t);
+      save('tournament', ui.tournament);
+      renderTournament();
+      $('#view-tournament').scrollTop = 0;
     },
     onAbandon: () => ask('Abandon the tournament?', 'Your results so far are lost. Your career record keeps the matches you played.', [
       ['Abandon', () => {

@@ -111,6 +111,8 @@ export const ACHIEVEMENTS = [
   { id: 'cup-winners', name: 'Nations Cup Winners', text: 'Win the Nations Cup.', check: (m, me, t, c) => c.tournament?.kind === 'cup' && c.tournament.champion },
   { id: 'champions', name: 'League Champions', text: 'Win a league: Super Rugby, the Prem, the URC or the Top 14.', check: (m, me, t, c) => c.tournament?.kind === 'league' && c.tournament.champion },
   { id: 'european-champions', name: 'Champions of Europe', text: 'Win the Champions Cup.', check: (m, me, t, c) => c.tournament?.kind === 'champions' && c.tournament.champion },
+  { id: 'the-double', name: 'The Double', text: 'Win your league and the Champions Cup in the same season.', check: (m, me, t, c) => !!c.tournament?.double },
+  { id: 'dynasty', name: 'Dynasty', text: 'Win three league titles with one club.', check: (m, me, t, c) => (c.tournament?.leagueTitles || 0) >= 3 },
   { id: 'invincibles', name: 'Invincibles', text: 'Win a tournament without losing a match.', check: (m, me, t, c) => !!c.tournament?.champion && c.tournament.lost === 0 },
   { id: 'online-win', name: 'Long-Distance Win', text: 'Win an online match.', check: (m, me, t, c) => c.mode === 'online' && m.winner === me },
   { id: 'graduate', name: 'Graduate', text: 'Finish the guided first match.', check: (m, me, t, c) => c.mode === 'learn' },

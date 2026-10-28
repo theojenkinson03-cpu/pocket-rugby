@@ -285,9 +285,10 @@ export function championsPoolRounds(ids, rng = Math.random) {
   throw new Error('no fair home and away');
 }
 
-export function createChampions({ userTeam, length = 'quick', cards = true, rng = Math.random }) {
+// `pools`: the draw, by default the real 2026-27 one.
+export function createChampions({ userTeam, length = 'quick', cards = true, rng = Math.random, pools: drawn = CHAMPIONS_CUP.pools }) {
   const C = CHAMPIONS_CUP;
-  const pools = Object.fromEntries(Object.entries(C.pools).map(([group, ids]) => [group, [...ids]]));
+  const pools = Object.fromEntries(Object.entries(drawn).map(([group, ids]) => [group, [...ids]]));
   const fixtures = [];
   for (const [group, ids] of Object.entries(pools)) {
     championsPoolRounds(ids, rng).forEach((pairs, round) => pairs.forEach(([home, away]) => {
