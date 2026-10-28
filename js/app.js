@@ -9,7 +9,7 @@ import { playerOfTheMatch, possessive, randomRoster, statLine, surname } from '.
 import { winMeter } from './winprob.js';
 import { ACHIEVEMENT_BY_ID, newCareer, newTracker, recordMatch, track } from './career.js';
 import { tipFor, tipText } from './coach.js';
-import { advance, clash, createCup, createLeague, LEAGUES, matchOptions, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
+import { advance, clash, createCup, createLeague, LEAGUES, matchOptions, migrateTournament, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
 import { applyRemote, encodeAction, hashState, makeCode, normaliseCode, OnlineSession, pendingEntries, recordingRng, startingMatch, strongRandom, validCode } from './online.js';
 import { $, button, el } from './dom.js';
 import { createDie, dieChip, faceTile, rollTo, setFace, wait } from './dice-view.js';
@@ -21,7 +21,7 @@ import { momentumChart, momentumFacts, playersTables, potmCard } from './report.
 import { createCinema } from './cinema.js';
 import { createPitch } from './pitch.js';
 import { buzz, play, setSoundEnabled, unlockAudio } from './audio.js';
-import { kitVars } from './color.js';
+import { customKit, kitVars, PATTERN_NAMES, PATTERNS } from './color.js';
 import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
@@ -39,7 +39,7 @@ const KITS = [
   { name: 'Orange', color: '#e8701c' },
 ];
 
-const DEFAULT_SETUP = { mode: '1p', names: ['Ravens', 'Foxes'], colors: ['#1d3577', '#e8701c'], length: 'standard', cpu: 'pro', style: 'balanced', cards: true, rosters: null };
+const DEFAULT_SETUP = { mode: '1p', names: ['Ravens', 'Foxes'], colors: ['#1d3577', '#e8701c'], patterns: ['plain', 'plain'], length: 'standard', cpu: 'pro', style: 'balanced', cards: true, rosters: null };
 const DEFAULT_PREFS = { sound: true, odds: true, fast: false, autoDefence: false, haptics: true, cinema: 'full', meter: true, coach: true };
 
 const DIE_NOTES = {
@@ -73,7 +73,7 @@ const ui = {
   career: { ...newCareer(), ...load('career', {}) },
   coachSeen: load('coach', []),
   coach: null,
-  tournament: load('tournament', null),
+  tournament: migrateTournament(load('tournament', null)),
   tsetup: { comp: 'cup', team: null, length: 'quick', cards: true, season: 'short' },
   online: null,
   lobby: null,
@@ -156,6 +156,7 @@ function buildHeroDice() {
 
 function ensureRosters() {
   const s = ui.setup;
+  if (!Array.isArray(s.patterns) || s.patterns.length !== 2 || !s.patterns.every(p => PATTERNS.includes(p))) s.patterns = [...DEFAULT_SETUP.patterns];
   if (!Array.isArray(s.rosters) || s.rosters.length !== 2 || !s.rosters.every(r => r && POSITIONS.every(p => typeof r[p] === 'string'))) {
     s.rosters = [randomRoster(), randomRoster()];
     save('setup', s);
@@ -200,8 +201,27 @@ function renderSetup() {
       });
       host.append(sw);
     }
+    const patterns = $(`#team${team}-patterns`);
+    patterns.innerHTML = '';
+    for (const pattern of PATTERNS) {
+      const tile = el('button', 'pattern');
+      tile.type = 'button';
+      kitVars(tile, { color: s.colors[team], kit: customKit(pattern, s.colors[team]) });
+      tile.setAttribute('role', 'radio');
+      tile.setAttribute('aria-label', PATTERN_NAMES[pattern]);
+      tile.title = PATTERN_NAMES[pattern];
+      tile.setAttribute('aria-checked', String(s.patterns[team] === pattern));
+      tile.addEventListener('click', () => {
+        s.patterns[team] = pattern;
+        renderSetup();
+      });
+      patterns.append(tile);
+    }
   }
 }
+
+// A made-up side from the team sheet: name, kit and squad.
+const setupTeam = (s, i) => ({ name: cleanName(s.names[i], DEFAULT_SETUP.names[i]), color: s.colors[i], kit: customKit(s.patterns[i], s.colors[i]), roster: s.rosters[i] });
 
 const cleanName = (text, fallback) => (text || '').trim().slice(0, 14) || fallback;
 
@@ -239,7 +259,7 @@ function bindSetup() {
     unlockAudio();
     startMatch({
       mode: s.mode,
-      teams: [0, 1].map(i => ({ name: s.names[i], color: s.colors[i], roster: s.rosters[i] })),
+      teams: [0, 1].map(i => setupTeam(s, i)),
       length: s.length,
       cpuLevel: s.cpu,
       cpuPersonality: s.style,
@@ -260,7 +280,7 @@ function startLearn() {
   const s = ui.setup;
   startMatch({
     mode: '1p',
-    teams: [0, 1].map(i => ({ name: cleanName(s.names[i], DEFAULT_SETUP.names[i]), color: s.colors[i], roster: s.rosters[i] })),
+    teams: [0, 1].map(i => setupTeam(s, i)),
     length: 'quick',
     cpuLevel: 'rookie',
     cpuPersonality: 'balanced',
@@ -389,11 +409,12 @@ function persist() {
 function rematchOptions(m) {
   return {
     mode: m.mode,
-    teams: m.teams.map(t => ({ name: t.name, color: t.color, roster: t.roster })),
+    teams: m.teams.map(t => ({ name: t.name, color: t.color, kit: t.kit, roster: t.roster })),
     length: m.length,
     cpuLevel: m.cpuLevel,
     cpuPersonality: m.cpuPersonality,
     cards: m.cards,
+    venue: m.venue,
   };
 }
 
@@ -699,7 +720,7 @@ async function present(before, after, events, story) {
   const drafted = events.some(e => e.type === 'draft' && !e.first);
   if ((has('toss') && !has('deal')) || drafted || has('secondHalf')) {
     if (drafted && wantsScene('draft')) await ui.cinema.play('draft', { teams: after.teams });
-    if (wantsScene('kickoff')) await ui.cinema.play('kickoff', { teams: after.teams, half: after.half, target: after.target, label: stageLabel() });
+    if (wantsScene('kickoff')) await ui.cinema.play('kickoff', { teams: after.teams, half: after.half, target: after.target, label: stageLabel(), venue: after.venue });
   }
 
   for (const { moment, scene } of moments) {
@@ -1622,7 +1643,7 @@ function roomCapability() {
 function myOnlineTeam() {
   ensureRosters();
   const s = ui.setup;
-  return { name: cleanName(s.names[0], DEFAULT_SETUP.names[0]), color: s.colors[0], roster: s.rosters[0] };
+  return setupTeam(s, 0);
 }
 
 const NET_ERRORS = {
@@ -1739,7 +1760,7 @@ async function kickOffOnline() {
   renderLobby();
   const me = s.team;
   let guest = s.peer.team;
-  if (clash(me.color, guest.color)) guest = { ...guest, color: KITS.find(k => !clash(k.color, me.color)).color };
+  if (clash(me.color, guest.color)) guest = { ...guest, color: KITS.find(k => !clash(k.color, me.color)).color, kit: null };
   if (guest.name.toLowerCase() === me.name.toLowerCase()) guest = { ...guest, name: `${guest.name.slice(0, 11)} II` };
   const start = await s.kickOff({ length: ui.lobby.length, cards: ui.lobby.cards, guestTeam: guest });
   beginOnlineMatch(s, start);
@@ -1854,7 +1875,7 @@ function onlineRematch() {
   const o = ui.online;
   if (!o || o.role !== 'host') return;
   const m = ui.match;
-  o.session.kickOff({ length: m.length, cards: m.cards, guestTeam: { name: m.teams[1].name, color: m.teams[1].color, roster: m.teams[1].roster } }).then(start => {
+  o.session.kickOff({ length: m.length, cards: m.cards, guestTeam: { name: m.teams[1].name, color: m.teams[1].color, kit: m.teams[1].kit, roster: m.teams[1].roster } }).then(start => {
     ui.online = { ...o, mid: start.mid, start };
     startMatch(null, { kind: 'online', team: 0, mid: start.mid }, startingMatch(start, 'host'));
   });

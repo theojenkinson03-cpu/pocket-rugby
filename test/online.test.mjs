@@ -223,6 +223,19 @@ test('team details from the other phone are cleaned up', async () => {
   assert.equal(host.peer.team.roster.S.length, 20);
   assert.equal(host.peer.team.roster.F, '3');
   assert.ok(!('extra' in host.peer.team.roster));
+  assert.equal(host.peer.team.kit, null, 'no kit sent: plain');
+  // Patterned kits: a known pattern and two to four real colours, or plain.
+  const kitFrom = async kit => {
+    await sneaky.presence({ team: { name: 'Gulls', color: '#1d3577', kit } });
+    await settle(server);
+    return host.peer.team.kit;
+  };
+  assert.deepEqual(await kitFrom(['hoops', '#1d3577', '#f4f4f0']), ['hoops', '#1d3577', '#f4f4f0']);
+  assert.deepEqual(await kitFrom(['quarters', '#111111', '#222222', '#333333', '#444444', '#555555']), ['quarters', '#111111', '#222222', '#333333', '#444444'], 'four colours at most');
+  assert.equal(await kitFrom(['zigzag', '#1d3577', '#f4f4f0']), null, 'unknown pattern');
+  assert.equal(await kitFrom(['hoops', 'red;x', '#f4f4f0']), null, 'not a colour');
+  assert.equal(await kitFrom(['hoops', '#1d3577']), null, 'one colour is plain');
+  assert.equal(await kitFrom('hoops'), null);
 });
 
 // Plays a whole match between two sessions. Each phone acts only on its turn

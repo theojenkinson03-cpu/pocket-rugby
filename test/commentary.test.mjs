@@ -106,6 +106,16 @@ test('names, metres and scorelines', () => {
   assert.equal(story.moments[0].kind, 'try');
 });
 
+test('the toss welcomes everyone to the ground, and says when it is neutral', () => {
+  const toss = { type: 'toss', call: 'heads', result: 'tails', caller: 0, winner: 1 };
+  const m = match();
+  assert.ok(!narrate([toss], m).lines.some(l => /Welcome/.test(l.text)), 'no ground, no welcome');
+  m.venue = { name: 'Thomond Park', neutral: false };
+  assert.equal(narrate([toss], m).lines[0].text, 'Welcome to Thomond Park.');
+  m.venue = { name: 'Stade de France', neutral: true };
+  assert.match(narrate([toss], m).lines[0].text, /^Welcome to Stade de France, a neutral ground/);
+});
+
 test('a penalty headline says whether there was a card', () => {
   const noCard = narrate([{ type: 'noCard', team: 1 }, { type: 'range', team: 0, kick: 'penalty', range: 2, chance: 5 / 6 }], match());
   assert.match(noCard.detail, /^No card\./);

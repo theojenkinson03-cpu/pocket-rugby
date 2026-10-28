@@ -72,6 +72,7 @@ export function narrate(events, match) {
   for (const e of events) {
     switch (e.type) {
       case 'toss':
+        if (match.venue) say(`Welcome to ${match.venue.name}${match.venue.neutral ? ', a neutral ground for the big day' : ''}.`);
         say(`${name(e.caller)} call ${e.call}. It lands ${e.result}. ${name(e.winner)} receive the kick-off.`, e.winner);
         head(e.result === 'heads' ? 'Heads' : 'Tails', `${name(e.winner)} win the toss and receive.`);
         break;

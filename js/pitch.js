@@ -2,7 +2,7 @@
 // Coordinates are worked out as if the attack runs left to right, then
 // mirrored for the team that attacks the other way.
 
-import { inkFor } from './color.js';
+import { inkFor, isPatterned, kitShapes } from './color.js';
 import { PLAYERS, POSITIONS } from './dice.js';
 
 const W = 400;
@@ -51,6 +51,21 @@ export function createPitch(root) {
     svg('circle', { cx: x, cy: 68, r: 2.2, class: 'upright' }, posts);
     svg('circle', { cx: x, cy: 82, r: 2.2, class: 'upright' }, posts);
   }
+  // Patterned shirts: one fill pattern per side, drawn on a 1×1 square.
+  const defs = svg('defs', {}, root);
+  const patternId = team => `pr-kit-${team}`;
+  function drawKit(team, side) {
+    defs.querySelector(`#${patternId(team)}`)?.remove();
+    if (!isPatterned(side)) return null;
+    const pattern = svg('pattern', { id: patternId(team), width: 1, height: 1, patternContentUnits: 'objectBoundingBox' }, defs);
+    for (const shape of kitShapes(side)) {
+      const attrs = { fill: shape.fill, 'fill-opacity': shape.opacity };
+      if (shape.type === 'rect') svg('rect', { ...attrs, x: shape.x, y: shape.y, width: shape.w, height: shape.h }, pattern);
+      else svg('polygon', { ...attrs, points: shape.points.map(p => p.join(',')).join(' ') }, pattern);
+    }
+    return `url(#${patternId(team)})`;
+  }
+
   const gainLine = svg('line', { x1: 0, y1: 6, x2: 0, y2: H - 6, class: 'gain-line' }, root);
   const players = svg('g', { class: 'players' }, root);
 
@@ -77,13 +92,17 @@ export function createPitch(root) {
 
   let colors = null;
   function setKits(teams) {
-    const key = teams.map(t => t.color).join();
+    const key = JSON.stringify(teams.map(t => [t.color, t.kit || null]));
     if (key === colors) return;
     colors = key;
     teams.forEach((t, team) => {
+      const fill = drawKit(team, t);
       for (const pos of POSITIONS) {
-        tokens[team][pos].style.setProperty('--kit', t.color);
-        tokens[team][pos].style.setProperty('--kit-ink', inkFor(t.color));
+        const node = tokens[team][pos];
+        node.style.setProperty('--kit', t.color);
+        node.style.setProperty('--kit-ink', inkFor(t.color));
+        node.classList.toggle('patterned', !!fill);
+        node.querySelector('.body').style.fill = fill || '';
       }
     });
   }

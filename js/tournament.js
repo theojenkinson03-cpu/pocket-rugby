@@ -7,18 +7,18 @@ import { cpuChoice } from './ai.js';
 import { randomRoster } from './players.js';
 
 export const NATIONS = [
-  { id: 'nzl', name: 'New Zealand', short: 'NZL', color: '#121314', alt: '#f4f4f0', flavour: 'kiwi', personality: 'run', level: 'expert' },
-  { id: 'rsa', name: 'South Africa', short: 'RSA', color: '#0b6e3b', alt: '#f2c230', flavour: 'southern', personality: 'pack', level: 'expert' },
-  { id: 'irl', name: 'Ireland', short: 'IRL', color: '#12854a', alt: '#f4f4f0', flavour: 'irish', personality: 'balanced', level: 'expert' },
-  { id: 'fra', name: 'France', short: 'FRA', color: '#1d3577', alt: '#f4f4f0', flavour: 'french', personality: 'run', level: 'pro' },
-  { id: 'eng', name: 'England', short: 'ENG', color: '#f4f4f0', alt: '#1c2b4a', flavour: 'english', personality: 'boot', level: 'pro' },
-  { id: 'aus', name: 'Australia', short: 'AUS', color: '#f2c230', alt: '#1a4d2e', flavour: 'aussie', personality: 'run', level: 'pro' },
-  { id: 'sco', name: 'Scotland', short: 'SCO', color: '#20305f', alt: '#9fb7d9', flavour: 'scottish', personality: 'balanced', level: 'pro' },
-  { id: 'arg', name: 'Argentina', short: 'ARG', color: '#74acdf', alt: '#1d3577', flavour: 'latin', personality: 'pack', level: 'pro' },
-  { id: 'wal', name: 'Wales', short: 'WAL', color: '#c8102e', alt: '#f4f4f0', flavour: 'welsh', personality: 'balanced', level: 'pro' },
-  { id: 'fij', name: 'Fiji', short: 'FIJ', color: '#e9eef2', alt: '#121314', flavour: 'pacific', personality: 'run', level: 'pro' },
-  { id: 'jpn', name: 'Japan', short: 'JPN', color: '#d4001a', alt: '#f4f4f0', flavour: 'japanese', personality: 'run', level: 'pro' },
-  { id: 'ita', name: 'Italy', short: 'ITA', color: '#0a5ec0', alt: '#f4f4f0', flavour: 'italian', personality: 'boot', level: 'rookie' },
+  { id: 'nzl', name: 'New Zealand', short: 'NZL', color: '#121314', alt: '#f4f4f0', flavour: 'kiwi', personality: 'run', level: 'expert', ground: 'Eden Park' },
+  { id: 'rsa', name: 'South Africa', short: 'RSA', color: '#0b6e3b', alt: '#f2c230', flavour: 'southern', personality: 'pack', level: 'expert', ground: 'Ellis Park' },
+  { id: 'irl', name: 'Ireland', short: 'IRL', color: '#12854a', alt: '#f4f4f0', flavour: 'irish', personality: 'balanced', level: 'expert', ground: 'Aviva Stadium' },
+  { id: 'fra', name: 'France', short: 'FRA', color: '#1d3577', alt: '#f4f4f0', flavour: 'french', personality: 'run', level: 'pro', ground: 'Stade de France' },
+  { id: 'eng', name: 'England', short: 'ENG', color: '#f4f4f0', alt: '#1c2b4a', flavour: 'english', personality: 'boot', level: 'pro', ground: 'Allianz Stadium, Twickenham' },
+  { id: 'aus', name: 'Australia', short: 'AUS', color: '#f2c230', alt: '#1a4d2e', flavour: 'aussie', personality: 'run', level: 'pro', ground: 'Accor Stadium' },
+  { id: 'sco', name: 'Scotland', short: 'SCO', color: '#20305f', alt: '#9fb7d9', flavour: 'scottish', personality: 'balanced', level: 'pro', ground: 'Murrayfield' },
+  { id: 'arg', name: 'Argentina', short: 'ARG', color: '#74acdf', alt: '#1d3577', flavour: 'latin', personality: 'pack', level: 'pro', ground: 'Estadio José Amalfitani', kit: ['hoops', '#74acdf', '#f4f4f0'] },
+  { id: 'wal', name: 'Wales', short: 'WAL', color: '#c8102e', alt: '#f4f4f0', flavour: 'welsh', personality: 'balanced', level: 'pro', ground: 'Principality Stadium' },
+  { id: 'fij', name: 'Fiji', short: 'FIJ', color: '#e9eef2', alt: '#121314', flavour: 'pacific', personality: 'run', level: 'pro', ground: 'HFC Bank Stadium' },
+  { id: 'jpn', name: 'Japan', short: 'JPN', color: '#d4001a', alt: '#f4f4f0', flavour: 'japanese', personality: 'run', level: 'pro', ground: 'Japan National Stadium', kit: ['hoops', '#d4001a', '#f4f4f0'] },
+  { id: 'ita', name: 'Italy', short: 'ITA', color: '#0a5ec0', alt: '#f4f4f0', flavour: 'italian', personality: 'boot', level: 'rookie', ground: 'Stadio Olimpico' },
 ];
 
 // The real leagues and their teams. Names identify the real clubs; kit
@@ -33,7 +33,10 @@ export const NATIONS = [
 //           one semi-final, the last two in the other (URC)
 //   super6  qualifying finals 1v6, 2v5, 3v4; the three winners and the
 //           best-placed loser go through, the loser as fourth seed (Super Rugby)
-const team = (id, name, short, color, alt, flavour, personality, level) => ({ id, name, short, color, alt, flavour, personality, level });
+//
+// Each side has a home ground and may have a patterned kit: [pattern,
+// ...colours], the first colour its main one (see color.js).
+const team = (id, name, short, color, alt, flavour, personality, level, extra = {}) => ({ id, name, short, color, alt, flavour, personality, level, ...extra });
 
 export const LEAGUES = {
   super: {
@@ -43,17 +46,17 @@ export const LEAGUES = {
     playoff: 'super6',
     rounds: { qf: ['Qualifying final', 'Qualifying finals'], final: ['Grand final', 'Grand final'] },
     teams: [
-      team('blues', 'Blues', 'BLU', '#1f4e9d', '#f4f4f0', 'kiwi', 'run', 'expert'),
-      team('chiefs', 'Chiefs', 'CHI', '#1b1b1d', '#f2c230', 'kiwi', 'run', 'expert'),
-      team('crusaders', 'Crusaders', 'CRU', '#c8102e', '#18191b', 'kiwi', 'balanced', 'expert'),
-      team('highlanders', 'Highlanders', 'HIG', '#1c2f6b', '#e3b31d', 'kiwi', 'balanced', 'pro'),
-      team('hurricanes', 'Hurricanes', 'HUR', '#f2c230', '#18191b', 'kiwi', 'run', 'expert'),
-      team('brumbies', 'Brumbies', 'BRU', '#0b2a5b', '#e3b31d', 'aussie', 'pack', 'pro'),
-      team('reds', 'Queensland Reds', 'RED', '#a6192e', '#f4f4f0', 'aussie', 'balanced', 'pro'),
-      team('waratahs', 'NSW Waratahs', 'WAR', '#4aa2df', '#1d3577', 'aussie', 'run', 'pro'),
-      team('force', 'Western Force', 'FOR', '#0f4c9c', '#e3b31d', 'aussie', 'pack', 'rookie'),
-      team('drua', 'Fijian Drua', 'DRU', '#f4f4f0', '#1d4f91', 'pacific', 'run', 'pro'),
-      team('moana', 'Moana Pasifika', 'MOA', '#00a19a', '#4b2b78', 'pacific', 'run', 'rookie'),
+      team('blues', 'Blues', 'BLU', '#1f4e9d', '#f4f4f0', 'kiwi', 'run', 'expert', { ground: 'Eden Park' }),
+      team('chiefs', 'Chiefs', 'CHI', '#1b1b1d', '#f2c230', 'kiwi', 'run', 'expert', { ground: 'FMG Stadium Waikato', kit: ['band', '#1b1b1d', '#f2c230', '#c8102e'] }),
+      team('crusaders', 'Crusaders', 'CRU', '#c8102e', '#18191b', 'kiwi', 'balanced', 'expert', { ground: 'One New Zealand Stadium' }),
+      team('highlanders', 'Highlanders', 'HIG', '#1c2f6b', '#e3b31d', 'kiwi', 'balanced', 'pro', { ground: 'Forsyth Barr Stadium' }),
+      team('hurricanes', 'Hurricanes', 'HUR', '#f2c230', '#18191b', 'kiwi', 'run', 'expert', { ground: 'Sky Stadium' }),
+      team('brumbies', 'Brumbies', 'BRU', '#0b2a5b', '#e3b31d', 'aussie', 'pack', 'pro', { ground: 'GIO Stadium' }),
+      team('reds', 'Queensland Reds', 'RED', '#a6192e', '#f4f4f0', 'aussie', 'balanced', 'pro', { ground: 'Suncorp Stadium' }),
+      team('waratahs', 'NSW Waratahs', 'WAR', '#4aa2df', '#1d3577', 'aussie', 'run', 'pro', { ground: 'Allianz Stadium, Sydney' }),
+      team('force', 'Western Force', 'FOR', '#0f4c9c', '#e3b31d', 'aussie', 'pack', 'rookie', { ground: 'HBF Park' }),
+      team('drua', 'Fijian Drua', 'DRU', '#f4f4f0', '#1d4f91', 'pacific', 'run', 'pro', { ground: 'HFC Bank Stadium' }),
+      team('moana', 'Moana Pasifika', 'MOA', '#00a19a', '#4b2b78', 'pacific', 'run', 'rookie', { ground: 'North Harbour Stadium' }),
     ],
   },
   prem: {
@@ -63,16 +66,16 @@ export const LEAGUES = {
     playoff: 'top4',
     rounds: {},
     teams: [
-      team('bath', 'Bath', 'BAT', '#00508f', '#18191b', 'english', 'balanced', 'expert'),
-      team('bristol', 'Bristol Bears', 'BRI', '#13284b', '#c8102e', 'english', 'run', 'expert'),
-      team('exeter', 'Exeter Chiefs', 'EXE', '#18191b', '#f4f4f0', 'english', 'pack', 'pro'),
-      team('gloucester', 'Gloucester', 'GLO', '#c8102e', '#f4f4f0', 'english', 'pack', 'pro'),
-      team('harlequins', 'Harlequins', 'HAR', '#c4166b', '#6ec1e4', 'english', 'run', 'pro'),
-      team('leicester', 'Leicester Tigers', 'LEI', '#0f6b3a', '#c8102e', 'english', 'pack', 'expert'),
-      team('newcastle', 'Newcastle Red Bulls', 'NEW', '#d6001c', '#1d2c5e', 'english', 'balanced', 'rookie'),
-      team('northampton', 'Northampton Saints', 'NOR', '#18191b', '#0f7a44', 'english', 'run', 'expert'),
-      team('sale', 'Sale Sharks', 'SAL', '#1c4f9c', '#f4f4f0', 'english', 'boot', 'pro'),
-      team('saracens', 'Saracens', 'SAR', '#18191b', '#c8102e', 'english', 'boot', 'pro'),
+      team('bath', 'Bath', 'BAT', '#00508f', '#18191b', 'english', 'balanced', 'expert', { ground: 'The Recreation Ground', kit: ['hoops', '#00508f', '#18191b', '#f4f4f0'] }),
+      team('bristol', 'Bristol Bears', 'BRI', '#13284b', '#c8102e', 'english', 'run', 'expert', { ground: 'Ashton Gate' }),
+      team('exeter', 'Exeter Chiefs', 'EXE', '#18191b', '#f4f4f0', 'english', 'pack', 'pro', { ground: 'Sandy Park' }),
+      team('gloucester', 'Gloucester', 'GLO', '#c8102e', '#f4f4f0', 'english', 'pack', 'pro', { ground: 'Kingsholm', kit: ['hoops', '#c8102e', '#f4f4f0'] }),
+      team('harlequins', 'Harlequins', 'HAR', '#c4166b', '#6ec1e4', 'english', 'run', 'pro', { ground: 'Twickenham Stoop', kit: ['quarters', '#c4166b', '#6ec1e4', '#5a3a22', '#9aa3ad'] }),
+      team('leicester', 'Leicester Tigers', 'LEI', '#0f6b3a', '#c8102e', 'english', 'pack', 'expert', { ground: 'Mattioli Woods Welford Road', kit: ['hoops', '#0f6b3a', '#c8102e', '#f4f4f0'] }),
+      team('newcastle', 'Newcastle Red Bulls', 'NEW', '#d6001c', '#1d2c5e', 'english', 'balanced', 'rookie', { ground: 'Kingston Park' }),
+      team('northampton', 'Northampton Saints', 'NOR', '#18191b', '#0f7a44', 'english', 'run', 'expert', { ground: 'cinch Stadium at Franklin’s Gardens', kit: ['hoops', '#18191b', '#0f7a44', '#c9a227'] }),
+      team('sale', 'Sale Sharks', 'SAL', '#1c4f9c', '#f4f4f0', 'english', 'boot', 'pro', { ground: 'Salford Community Stadium' }),
+      team('saracens', 'Saracens', 'SAR', '#18191b', '#c8102e', 'english', 'boot', 'pro', { ground: 'StoneX Stadium' }),
     ],
   },
   urc: {
@@ -82,22 +85,22 @@ export const LEAGUES = {
     playoff: 'top8',
     rounds: { final: ['Grand Final', 'Grand Final'] },
     teams: [
-      team('leinster', 'Leinster', 'LNS', '#0a3d91', '#f4f4f0', 'irish', 'run', 'expert'),
-      team('munster', 'Munster', 'MUN', '#c8102e', '#18191b', 'irish', 'pack', 'pro'),
-      team('ulster', 'Ulster', 'ULS', '#f4f4f0', '#c8102e', 'irish', 'balanced', 'pro'),
-      team('connacht', 'Connacht', 'CON', '#0f7a44', '#18191b', 'irish', 'run', 'pro'),
-      team('cardiff', 'Cardiff', 'CAR', '#6ca9d8', '#18191b', 'welsh', 'balanced', 'pro'),
-      team('dragons', 'Dragons', 'DRA', '#c8102e', '#18191b', 'welsh', 'pack', 'rookie'),
-      team('ospreys', 'Ospreys', 'OSP', '#18191b', '#f4f4f0', 'welsh', 'balanced', 'pro'),
-      team('scarlets', 'Scarlets', 'SCA', '#b3102e', '#f4f4f0', 'welsh', 'run', 'pro'),
-      team('glasgow', 'Glasgow Warriors', 'GLA', '#1b2a57', '#c8102e', 'scottish', 'run', 'expert'),
-      team('edinburgh', 'Edinburgh', 'EDI', '#18191b', '#c8102e', 'scottish', 'pack', 'pro'),
-      team('benetton', 'Benetton', 'BEN', '#0f7a44', '#f4f4f0', 'italian', 'pack', 'pro'),
-      team('zebre', 'Zebre Parma', 'ZEB', '#18191b', '#f4f4f0', 'italian', 'balanced', 'rookie'),
-      team('bulls', 'Bulls', 'BUL', '#1d5fae', '#f4f4f0', 'southern', 'pack', 'expert'),
-      team('lions', 'Lions', 'LIO', '#c8102e', '#f4f4f0', 'southern', 'run', 'pro'),
-      team('sharks', 'Sharks', 'SHA', '#18191b', '#f4f4f0', 'southern', 'pack', 'pro'),
-      team('stormers', 'Stormers', 'STO', '#0e4c92', '#f4f4f0', 'southern', 'balanced', 'expert'),
+      team('leinster', 'Leinster', 'LNS', '#0a3d91', '#f4f4f0', 'irish', 'run', 'expert', { ground: 'Aviva Stadium' }),
+      team('munster', 'Munster', 'MUN', '#c8102e', '#18191b', 'irish', 'pack', 'pro', { ground: 'Thomond Park' }),
+      team('ulster', 'Ulster', 'ULS', '#f4f4f0', '#c8102e', 'irish', 'balanced', 'pro', { ground: 'Affidea Stadium' }),
+      team('connacht', 'Connacht', 'CON', '#0f7a44', '#18191b', 'irish', 'run', 'pro', { ground: 'Dexcom Stadium' }),
+      team('cardiff', 'Cardiff', 'CAR', '#6ca9d8', '#18191b', 'welsh', 'balanced', 'pro', { ground: 'Cardiff Arms Park', kit: ['hoops', '#6ca9d8', '#18191b'] }),
+      team('dragons', 'Dragons', 'DRA', '#c8102e', '#18191b', 'welsh', 'pack', 'rookie', { ground: 'Rodney Parade' }),
+      team('ospreys', 'Ospreys', 'OSP', '#18191b', '#f4f4f0', 'welsh', 'balanced', 'pro', { ground: 'St Helen’s' }),
+      team('scarlets', 'Scarlets', 'SCA', '#b3102e', '#f4f4f0', 'welsh', 'run', 'pro', { ground: 'Parc y Scarlets' }),
+      team('glasgow', 'Glasgow Warriors', 'GLA', '#1b2a57', '#c8102e', 'scottish', 'run', 'expert', { ground: 'Scotstoun Stadium', kit: ['tartan', '#1b2a57', '#18191b', '#6ca9d8'] }),
+      team('edinburgh', 'Edinburgh', 'EDI', '#18191b', '#c8102e', 'scottish', 'pack', 'pro', { ground: 'Hive Stadium' }),
+      team('benetton', 'Benetton', 'BEN', '#0f7a44', '#f4f4f0', 'italian', 'pack', 'pro', { ground: 'Stadio Monigo' }),
+      team('zebre', 'Zebre Parma', 'ZEB', '#18191b', '#f4f4f0', 'italian', 'balanced', 'rookie', { ground: 'Stadio Sergio Lanfranchi', kit: ['stripes', '#18191b', '#f4f4f0'] }),
+      team('bulls', 'Bulls', 'BUL', '#1d5fae', '#f4f4f0', 'southern', 'pack', 'expert', { ground: 'Loftus Versfeld' }),
+      team('lions', 'Lions', 'LIO', '#c8102e', '#f4f4f0', 'southern', 'run', 'pro', { ground: 'Ellis Park' }),
+      team('sharks', 'Sharks', 'SHA', '#18191b', '#f4f4f0', 'southern', 'pack', 'pro', { ground: 'Hollywoodbets Kings Park' }),
+      team('stormers', 'Stormers', 'STO', '#0e4c92', '#f4f4f0', 'southern', 'balanced', 'expert', { ground: 'DHL Stadium' }),
     ],
   },
   top14: {
@@ -107,22 +110,30 @@ export const LEAGUES = {
     playoff: 'top6',
     rounds: { qf: ['Barrage', 'Barrages'] },
     teams: [
-      team('toulouse', 'Toulouse', 'TOU', '#c8102e', '#18191b', 'french', 'run', 'expert'),
-      team('bordeaux', 'Bordeaux Bègles', 'UBB', '#7b1e3c', '#4aa2df', 'french', 'run', 'expert'),
-      team('toulon', 'Toulon', 'RCT', '#c00020', '#18191b', 'french', 'pack', 'expert'),
-      team('larochelle', 'La Rochelle', 'LAR', '#f2c230', '#18191b', 'french', 'pack', 'pro'),
-      team('clermont', 'Clermont', 'ASM', '#f2c230', '#1d3577', 'french', 'balanced', 'pro'),
-      team('racing', 'Racing 92', 'R92', '#4aa2df', '#f4f4f0', 'french', 'run', 'pro'),
-      team('stadefrancais', 'Stade Français', 'SFP', '#e83e8c', '#1d3577', 'french', 'balanced', 'pro'),
-      team('castres', 'Castres', 'CAS', '#1d3577', '#f4f4f0', 'french', 'pack', 'pro'),
-      team('montpellier', 'Montpellier', 'MHR', '#1c2b4a', '#e8701c', 'french', 'pack', 'pro'),
-      team('pau', 'Pau', 'PAU', '#0f7a44', '#f4f4f0', 'french', 'balanced', 'pro'),
-      team('bayonne', 'Bayonne', 'BAY', '#5bb3e6', '#f4f4f0', 'french', 'pack', 'pro'),
-      team('lyon', 'Lyon', 'LYO', '#c8102e', '#18191b', 'french', 'run', 'pro'),
-      team('perpignan', 'Perpignan', 'PER', '#c8102e', '#f2c230', 'french', 'pack', 'rookie'),
-      team('vannes', 'Vannes', 'VAN', '#1d3577', '#f4f4f0', 'french', 'balanced', 'rookie'),
+      team('toulouse', 'Toulouse', 'TOU', '#c8102e', '#18191b', 'french', 'run', 'expert', { ground: 'Stade Ernest-Wallon' }),
+      team('bordeaux', 'Bordeaux Bègles', 'UBB', '#7b1e3c', '#4aa2df', 'french', 'run', 'expert', { ground: 'Stade Chaban-Delmas' }),
+      team('toulon', 'Toulon', 'RCT', '#c00020', '#18191b', 'french', 'pack', 'expert', { ground: 'Stade Mayol' }),
+      team('larochelle', 'La Rochelle', 'LAR', '#f2c230', '#18191b', 'french', 'pack', 'pro', { ground: 'Stade Marcel-Deflandre' }),
+      team('clermont', 'Clermont', 'ASM', '#f2c230', '#1d3577', 'french', 'balanced', 'pro', { ground: 'Stade Marcel-Michelin' }),
+      team('racing', 'Racing 92', 'R92', '#4aa2df', '#f4f4f0', 'french', 'run', 'pro', { ground: 'Paris La Défense Arena', kit: ['hoops', '#4aa2df', '#f4f4f0'] }),
+      team('stadefrancais', 'Stade Français', 'SFP', '#e83e8c', '#1d3577', 'french', 'balanced', 'pro', { ground: 'Stade Jean-Bouin' }),
+      team('castres', 'Castres', 'CAS', '#1d3577', '#f4f4f0', 'french', 'pack', 'pro', { ground: 'Stade Pierre-Fabre' }),
+      team('montpellier', 'Montpellier', 'MHR', '#1c2b4a', '#e8701c', 'french', 'pack', 'pro', { ground: 'GGL Stadium' }),
+      team('pau', 'Pau', 'PAU', '#0f7a44', '#f4f4f0', 'french', 'balanced', 'pro', { ground: 'Stade du Hameau' }),
+      team('bayonne', 'Bayonne', 'BAY', '#5bb3e6', '#f4f4f0', 'french', 'pack', 'pro', { ground: 'Stade Jean-Dauger' }),
+      team('lyon', 'Lyon', 'LYO', '#c8102e', '#18191b', 'french', 'run', 'pro', { ground: 'Matmut Stadium de Gerland' }),
+      team('perpignan', 'Perpignan', 'PER', '#c8102e', '#f2c230', 'french', 'pack', 'rookie', { ground: 'Stade Aimé-Giral', kit: ['stripes', '#c8102e', '#f2c230'] }),
+      team('vannes', 'Vannes', 'VAN', '#1d3577', '#f4f4f0', 'french', 'balanced', 'rookie', { ground: 'Stade de la Rabine' }),
     ],
   },
+};
+
+// Neutral grounds for the big days: the Prem final at Twickenham, the Top 14
+// semi-finals in Bordeaux and the final at the Stade de France (2026-27).
+// Everywhere else the home side, or the better seed, plays at home.
+export const NEUTRAL_GROUNDS = {
+  prem: { final: 'Allianz Stadium, Twickenham' },
+  top14: { semi: 'Stade Atlantique, Bordeaux', final: 'Stade de France' },
 };
 
 // How many teams each play-off format takes.
@@ -182,7 +193,9 @@ export function createCup({ userTeam, length = 'quick', cards = true, rng = Math
       fixtures.push(fixture(`${group}${round}${home}`, 'pool', round, home, away, group));
     }));
   }
-  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, cards, userTeam, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
+  // One of the eight hosts the semi-finals and the final.
+  const host = field[Math.floor(rng() * field.length)].id;
+  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, cards, userTeam, host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
 }
 
 // season: 'full' (everyone plays everyone once) or 'short' (the first
@@ -219,6 +232,34 @@ export function createLeague({ league = 'prem', userTeam, length = 'quick', card
 
 export const teamOf = (t, id) => t.teams.find(team => team.id === id);
 
+// Every nation and club as listed above, by id.
+export const TEAM_BY_ID = Object.fromEntries([...NATIONS, ...Object.values(LEAGUES).flatMap(l => l.teams)].map(x => [x.id, x]));
+
+// Brings a tournament saved by an older version up to date: grounds and
+// kits for its sides.
+export function migrateTournament(t) {
+  if (!t) return t;
+  for (const side of t.teams) {
+    const known = TEAM_BY_ID[side.id];
+    if (!known) continue;
+    side.ground ??= known.ground;
+    if (known.kit) side.kit ??= known.kit;
+  }
+  t.byes ??= [];
+  return t;
+}
+
+// Where a fixture is played: {name, neutral}. The Nations Cup's knockouts go
+// to the host nation's ground, which is neutral unless the hosts are playing.
+export function venue(t, f) {
+  const home = teamOf(t, f.home);
+  const fixed = NEUTRAL_GROUNDS[t.league]?.[f.stage] || t.neutral?.[f.stage];
+  const hosted = t.host && f.stage !== 'pool' ? teamOf(t, t.host) : null;
+  const name = fixed || hosted?.ground || home?.ground || null;
+  if (!name) return null;
+  return { name, neutral: name !== home?.ground && name !== teamOf(t, f.away)?.ground };
+}
+
 export function isUserFixture(t, f) {
   return f.home === t.userTeam || f.away === t.userTeam;
 }
@@ -243,21 +284,22 @@ export function clash(a, b) {
   return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) < 110;
 }
 
-// A side's colours for a match against `other`: first choice, then change
-// strip, then plain white or black, whichever tells apart.
+// A side's kit for a match against a side in `other` (a colour): first
+// choice, then the change strip, then plain white, black or orange,
+// whichever tells apart. Only the first choice carries the club's pattern.
 const NEUTRALS = ['#f4f4f0', '#18191b', '#e8701c'];
 function stripAgainst(team, other) {
-  return [team.color, team.alt, ...NEUTRALS].find(c => !clash(c, other)) || team.color;
+  if (!clash(team.color, other)) return { color: team.color, kit: team.kit || null };
+  return { color: [team.alt, ...NEUTRALS].find(c => c && !clash(c, other)) || team.color, kit: null };
 }
+
+const dressed = (team, strip) => ({ name: team.name, ...strip, roster: team.roster });
 
 // Kits for a fixture, home first. The away side changes strip on a clash.
 export function kits(t, f) {
   const home = teamOf(t, f.home);
   const away = teamOf(t, f.away);
-  return [
-    { name: home.name, color: home.color, roster: home.roster },
-    { name: away.name, color: stripAgainst(away, home.color), roster: away.roster },
-  ];
+  return [dressed(home, { color: home.color, kit: home.kit || null }), dressed(away, stripAgainst(away, home.color))];
 }
 
 // The user's match, with the user always as team 0 in their first-choice
@@ -266,9 +308,9 @@ export function matchOptions(t, f) {
   const userHome = f.home === t.userTeam;
   const me = teamOf(t, t.userTeam);
   const opponent = teamOf(t, userHome ? f.away : f.home);
-  const mine = { name: me.name, color: me.color, roster: me.roster };
-  const theirs = { name: opponent.name, color: stripAgainst(opponent, me.color), roster: opponent.roster };
-  return { mode: '1p', teams: [mine, theirs], length: t.length, cards: t.cards, cpuLevel: opponent.level, cpuPersonality: opponent.personality };
+  const mine = dressed(me, { color: me.color, kit: me.kit || null });
+  const theirs = dressed(opponent, stripAgainst(opponent, me.color));
+  return { mode: '1p', teams: [mine, theirs], length: t.length, cards: t.cards, cpuLevel: opponent.level, cpuPersonality: opponent.personality, venue: venue(t, f) };
 }
 
 export function resultFromMatch(f, match, userIsHome) {

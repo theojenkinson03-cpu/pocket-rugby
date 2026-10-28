@@ -1,7 +1,7 @@
 // Cinematic moments: short full-screen scenes for the big events of a match.
 // Every scene can be skipped with a tap and scales with the player's speed.
 
-import { inkFor } from './color.js';
+import { inkFor, kitVars } from './color.js';
 import { metres } from './commentary.js';
 import { PLAYERS } from './dice.js';
 import { buzz, play } from './audio.js';
@@ -29,10 +29,8 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     return node;
   }
 
-  const kit = (node, color) => {
-    node.style.setProperty('--kit', color);
-    node.style.setProperty('--kit-ink', inkFor(color));
-  };
+  // A side's kit on a node: a team (pattern and all) or a bare colour.
+  const kit = (node, team) => kitVars(node, typeof team === 'string' ? { color: team } : team);
 
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -137,12 +135,14 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
   // ---------------------------------------------------------------- scenes
 
   const scenes = {
-    kickoff({ teams, half, target, label = null }) {
-      return run({ duration: label ? 2300 : 2000 }, (scene, later) => {
+    kickoff({ teams, half, target, label = null, venue = null }) {
+      return run({ duration: label || venue ? 2300 : 2000 }, (scene, later) => {
         scene.classList.add('kickoff');
         const sides = teams.map((t, i) => {
           const side = el('div', `ko-side ${i ? 'right' : 'left'}`);
-          kit(side, t.color);
+          kit(side, t);
+          // Long names shrink to fit rather than break mid-word.
+          side.style.setProperty('--word', Math.max(7, ...t.name.split(/\s+/).map(w => w.length)));
           side.append(el('span', 'ko-name', t.name));
           return side;
         });
@@ -153,6 +153,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
           el('div', 'ko-bottom', half === 1 ? `First to ${target.full} · half time at ${target.half}` : `First to ${target.full}`),
         );
         if (label) scene.append(el('div', 'ko-label', label));
+        if (venue && half === 1) scene.append(el('div', `ko-venue${venue.neutral ? ' neutral' : ''}`, venue.neutral ? `${venue.name} · neutral ground` : venue.name));
         later(550, () => play('whistle'));
       });
     },
@@ -171,7 +172,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     linebreak({ team, pos, player = null }) {
-      return run({ tone: 'clear', duration: 1500, color: team.color }, (scene, later) => {
+      return run({ tone: 'clear', duration: 1500, color: team }, (scene, later) => {
         scene.classList.add('linebreak');
         scene.append(el('div', 'speedlines'));
         const slab = el('div', 'slab');
@@ -183,7 +184,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     try({ team, pos, scoreline, player = null }) {
-      return run({ tone: 'team', duration: 2700, color: team.color }, (scene, later, k) => {
+      return run({ tone: 'team', duration: 2700, color: team }, (scene, later, k) => {
         scene.classList.add('try');
         scene.append(el('div', 'rays'));
         const word = el('div', 'try-word');
@@ -248,7 +249,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
       const label = { conversion: 'Conversion', penalty: 'Penalty goal', drop: 'Drop goal' }[kick];
       return run({ duration: 3000 }, (scene, later, k) => {
         scene.classList.add('kickcam');
-        kit(scene, team.color);
+        kit(scene, team);
         scene.append(el('div', 'kc-label', `${team.name} · ${label} · ${metres(range)}${note ? ` · ${note}` : ''}`));
 
         const view = svg('svg', { viewBox: '0 0 360 300', class: 'kc-view', role: 'img', 'aria-label': `${label} from ${metres(range)}` });
@@ -371,7 +372,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     bighit({ team, ruck }) {
-      return run({ tone: 'clear', letterbox: false, duration: 1050, color: team.color }, (scene, later) => {
+      return run({ tone: 'clear', letterbox: false, duration: 1050, color: team }, (scene, later) => {
         scene.classList.add('bighit');
         for (let i = 0; i < 3; i++) {
           const ring = el('div', 'ring');
@@ -413,7 +414,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     turnover({ team, title: heading, sub: text }) {
-      return run({ tone: 'clear', duration: 1350, color: team.color }, scene => {
+      return run({ tone: 'clear', duration: 1350, color: team }, scene => {
         scene.classList.add('turnover');
         const band = el('div', 'sweep');
         band.append(title(heading), sub(text));
@@ -423,7 +424,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     penalty({ team }) {
-      return run({ tone: 'clear', duration: 1100, color: team.color }, scene => {
+      return run({ tone: 'clear', duration: 1100, color: team }, scene => {
         scene.classList.add('penalty');
         const slab = el('div', 'slab');
         slab.append(title('Penalty'), sub(`to ${team.name}`));
@@ -433,7 +434,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     quicktap({ team }) {
-      return run({ tone: 'clear', duration: 1050, color: team.color }, scene => {
+      return run({ tone: 'clear', duration: 1050, color: team }, scene => {
         scene.classList.add('quicktap');
         scene.append(el('div', 'speedlines gold'));
         const slab = el('div', 'slab');
@@ -444,7 +445,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     whistle({ full, teams, winner }) {
-      const color = full ? teams[winner].color : null;
+      const color = full ? teams[winner] : null;
       return run({ tone: full ? 'team' : 'dark', duration: full ? 3000 : 2100, color }, (scene, later) => {
         scene.classList.add('whistle');
         scene.append(el('div', 'wh-kicker', full ? 'Full time' : 'Half time'));
@@ -452,7 +453,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
         teams.forEach((t, i) => {
           const side = el('div', 'wh-team');
           const chip = el('span', 'wh-kit');
-          kit(chip, t.color);
+          kit(chip, t);
           const name = el('div', 'wh-name');
           name.append(chip, document.createTextNode(t.name));
           side.append(name, el('div', 'wh-score', t.score));
@@ -477,7 +478,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
         const row = el('div', 'ds-row');
         teams.forEach((t, i) => {
           const col = el('div', `ds-col ${i ? 'right' : 'left'}`);
-          kit(col, t.color);
+          kit(col, t);
           col.append(el('div', 'ds-team', t.name), cardArt(t.card, { rarity: t.cardRarity || 'common' }));
           row.append(col);
           if (i === 0) row.append(el('div', 'ds-v', 'v'));
@@ -491,7 +492,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
 
     // A team card changes what the dice said.
     cardplay({ team, card, rarity = 'common', line }) {
-      return run({ tone: 'clear', letterbox: false, duration: 1700, color: team.color }, (scene, later) => {
+      return run({ tone: 'clear', letterbox: false, duration: 1700, color: team }, (scene, later) => {
         scene.classList.add('cardplay');
         const glow = el('div', 'cp-glow');
         const art = cardArt(card, { rarity });
@@ -536,7 +537,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
         scene.classList.add('potm-scene');
         scene.append(el('div', 'spot'));
         const card = el('div', 'pm-card');
-        kit(card, team.color);
+        kit(card, team);
         card.append(el('div', 'pm-kicker', 'Player of the Match'), el('div', 'pm-name', name), el('div', 'pm-pos', `${position} · ${team.name}`));
         scene.append(card, sub(line, 'late'));
         later(200, () => play('cheer'));
@@ -565,7 +566,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
 
     // The trophy goes up.
     trophy({ team, title }) {
-      return run({ tone: 'team', duration: 3600, color: team.color }, (scene, later) => {
+      return run({ tone: 'team', duration: 3600, color: team }, (scene, later) => {
         scene.classList.add('trophy-scene');
         scene.append(el('div', 'rays'));
         const cup = svg('svg', { viewBox: '0 0 120 150', class: 'cup', 'aria-hidden': 'true' });

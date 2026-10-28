@@ -1,7 +1,7 @@
 // Tournament screens: picking a competition and team, then the hub with the
 // next match, the tables, the knockout bracket and every result.
 
-import { currentRound, isUserFixture, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
+import { currentRound, isUserFixture, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, teamOf, userAlive, userFixture, userRecord, venue } from './tournament.js';
 import { LEVELS, PERSONALITIES } from './ai.js';
 import { MATCH_LENGTHS } from './engine.js';
 import { button, el, tallButton } from './dom.js';
@@ -183,12 +183,15 @@ function nextMatchCard(t, handlers) {
   const vs = el('div', 'nc-vs');
   const side = (team, mine) => {
     const s = el('div', `nc-side${mine ? ' mine' : ''}`);
-    const where = f.home === team.id ? 'Home' : 'Away';
+    const ground = venue(t, f);
+    const where = ground?.neutral ? 'Neutral' : f.home === team.id ? 'Home' : 'Away';
     s.append(kitChip(team, 'nc-kit'), el('b', null, team.name), el('small', null, mine ? `You · ${where}` : `${LEVELS[team.level].name} · ${PERSONALITIES[team.personality].name}`));
     return s;
   };
   vs.append(side(me, true), el('span', 'nc-v', 'v'), side(them, false));
   card.append(vs);
+  const ground = venue(t, f);
+  if (ground) card.append(el('p', `nc-venue${ground.neutral ? ' neutral' : ''}`, ground.neutral ? `${ground.name} · neutral ground` : ground.name));
   card.append(tallButton('Play', `${MATCH_LENGTHS[t.length].label} match${t.cards ? ' · team cards' : ''}`, handlers.onPlay, 'btn btn-primary btn-play'));
   card.querySelector('.btn-play').dataset.primary = '';
   return card;

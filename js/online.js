@@ -8,6 +8,7 @@
 // stored data or edit rights are needed.
 
 import { act, actingTeam, isLegal, newMatch } from './engine.js';
+import { PATTERNS } from './color.js';
 
 export const PROTOCOL = 1;
 export const LOG_KEEP = 24;
@@ -84,7 +85,7 @@ export function startingMatch(start, myRole) {
   const host = myRole === 'host';
   return newMatch({
     mode: 'online',
-    teams: start.teams,
+    teams: start.teams.map(sanitiseTeam),
     length: start.length,
     cards: start.cards,
     tossCaller: 1,
@@ -125,9 +126,19 @@ export function pendingEntries(match, log) {
 
 // ---- Session: one phone's place in a named room -----------------------------
 
-const sanitiseTeam = team => ({
+const HEX = /^#[0-9a-f]{6}$/i;
+
+// A patterned kit from the other phone: a known pattern and two to four colours.
+function sanitiseKit(kit) {
+  if (!Array.isArray(kit) || !PATTERNS.includes(kit[0]) || kit[0] === 'plain') return null;
+  const colors = kit.slice(1, 5);
+  return colors.length >= 2 && colors.every(c => HEX.test(c)) ? [kit[0], ...colors] : null;
+}
+
+export const sanitiseTeam = team => ({
   name: String(team?.name || 'Visitors').slice(0, 14),
-  color: /^#[0-9a-f]{6}$/i.test(team?.color) ? team.color : '#4aa2df',
+  color: HEX.test(team?.color) ? team.color : '#4aa2df',
+  kit: sanitiseKit(team?.kit),
   roster: team?.roster && typeof team.roster === 'object'
     ? Object.fromEntries(['S', 'F', 'C', 'W', 'B'].map(p => [p, String(team.roster[p] || '').slice(0, 20)]))
     : null,

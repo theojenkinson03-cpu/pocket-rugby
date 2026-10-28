@@ -101,6 +101,7 @@ export function newMatch({
   cards = false,
   tossCaller = 0,
   controllers = null,
+  venue = null,
 } = {}) {
   const kits = teams || [
     { name: 'Home', color: '#1d4ed8' },
@@ -117,9 +118,13 @@ export function newMatch({
     dealRarity: {},
     target: { ...MATCH_LENGTHS[length] },
     controllers: controllers || (mode === '1p' ? ['human', 'cpu'] : ['human', 'human']),
+    // Where it's played, for the kick-off title card: {name, neutral}.
+    venue: venue ? { name: venue.name, neutral: !!venue.neutral } : null,
     teams: kits.map(kit => ({
       name: kit.name,
       color: kit.color,
+      // A patterned shirt (see color.js), or null for plain.
+      kit: kit.kit || null,
       roster: kit.roster ? { ...kit.roster } : null,
       score: 0,
       injuries: { S: 0, F: 0, C: 0, W: 0, B: 0 },
@@ -160,7 +165,9 @@ export function migrate(match) {
   m.cpuPersonality ??= 'balanced';
   m.quickTapFrom ??= m.quickTap ? 'tap' : null;
   m.gained ??= 0;
+  m.venue ??= null;
   for (const t of m.teams) {
+    t.kit ??= null;
     t.roster ??= null;
     t.card ??= null;
     t.cardRarity ??= t.card ? 'common' : null;

@@ -7,10 +7,11 @@ import assert from 'node:assert/strict';
 import { act, MATCH_LENGTHS, newMatch, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import {
-  advance, clash, createCup, createLeague, currentRound, isUserFixture, kits, LEAGUES, matchOptions, NATIONS, POINTS, QUALIFY,
-  recordResult, resultFromMatch, roundName, roundRobin, SHORT_SEASON, simulateFixture, simulateRound, stageName, standings, teamOf,
-  userAlive, userFixture, userRecord,
+  advance, clash, createCup, createLeague, currentRound, isUserFixture, kits, LEAGUES, matchOptions, migrateTournament, NATIONS, NEUTRAL_GROUNDS,
+  POINTS, QUALIFY, recordResult, resultFromMatch, roundName, roundRobin, SHORT_SEASON, simulateFixture, simulateRound, stageName, standings,
+  TEAM_BY_ID, teamOf, userAlive, userFixture, userRecord, venue,
 } from '../js/tournament.js';
+import { PATTERNS } from '../js/color.js';
 
 const pairKey = (a, b) => [a, b].sort().join('-');
 
@@ -308,6 +309,111 @@ test('kits never clash, and the user always plays as team 0 against the right CP
       }
     }
   }
+});
+
+test('home grounds: every nation and club has one, and patterned kits are well formed', () => {
+  const all = [...NATIONS, ...Object.values(LEAGUES).flatMap(L => L.teams)];
+  for (const team of all) {
+    assert.ok(typeof team.ground === 'string' && team.ground.length > 3, `${team.id} has a ground`);
+    if (!team.kit) continue;
+    const [pattern, ...colors] = team.kit;
+    assert.ok(PATTERNS.includes(pattern) && pattern !== 'plain', `${team.id}: ${pattern}`);
+    assert.equal(colors[0], team.color, `${team.id}: the kit's main colour is the team colour`);
+    assert.ok(colors.length >= 2 && colors.every(c => /^#[0-9a-f]{6}$/i.test(c)), `${team.id}: colours`);
+  }
+  // Clubs that share a league never share a ground.
+  for (const L of Object.values(LEAGUES)) assert.equal(new Set(L.teams.map(x => x.ground)).size, L.teams.length, L.name);
+  // A few the kits are known for.
+  assert.equal(TEAM_BY_ID.gloucester.kit[0], 'hoops');
+  assert.equal(TEAM_BY_ID.harlequins.kit[0], 'quarters');
+  assert.equal(TEAM_BY_ID.glasgow.kit[0], 'tartan');
+  assert.equal(TEAM_BY_ID.leicester.kit[0], 'hoops');
+  assert.equal(TEAM_BY_ID.munster.ground, 'Thomond Park');
+});
+
+test('venues: home grounds in the season, neutral Prem and Top 14 finals, the better seed at home elsewhere', () => {
+  const league = createLeague({ league: 'urc', userTeam: 'munster', rng: seededRng(3) });
+  for (const f of league.fixtures) {
+    assert.deepEqual(venue(league, f), { name: teamOf(league, f.home).ground, neutral: false }, `${f.home} v ${f.away}`);
+  }
+  // Prem: semi-finals at the better seed's ground, the final at Twickenham.
+  const prem = seasonDone('prem');
+  for (const f of prem.t.fixtures.filter(x => x.stage === 'semi')) assert.equal(venue(prem.t, f).name, teamOf(prem.t, f.home).ground);
+  play(prem.t, 'SF1', prem.seed(1));
+  play(prem.t, 'SF2', prem.seed(2));
+  advance(prem.t);
+  const premFinal = prem.t.fixtures.find(f => f.stage === 'final');
+  assert.deepEqual(venue(prem.t, premFinal), { name: 'Allianz Stadium, Twickenham', neutral: true });
+  // Top 14: barrages at home, semi-finals in Bordeaux, the final at the Stade de France.
+  const top14 = seasonDone('top14');
+  for (const f of top14.t.fixtures.filter(x => x.stage === 'qf')) assert.equal(venue(top14.t, f).neutral, false);
+  play(top14.t, 'QF1', top14.seed(3));
+  play(top14.t, 'QF2', top14.seed(4));
+  advance(top14.t);
+  for (const f of top14.t.fixtures.filter(x => x.stage === 'semi')) assert.deepEqual(venue(top14.t, f), { name: NEUTRAL_GROUNDS.top14.semi, neutral: true });
+  play(top14.t, 'SF1', top14.seed(1));
+  play(top14.t, 'SF2', top14.seed(2));
+  advance(top14.t);
+  assert.deepEqual(venue(top14.t, top14.t.fixtures.find(f => f.stage === 'final')), { name: 'Stade de France', neutral: true });
+  // URC and Super Rugby: the better seed hosts the final.
+  for (const id of ['urc', 'super']) {
+    const done = seasonDone(id);
+    for (let guard = 0; done.t.stage !== 'done' && done.t.stage !== 'final' && guard < 10; guard++) {
+      for (const f of done.t.fixtures.filter(x => x.stage === done.t.stage && !x.result)) play(done.t, f.id, f.home);
+      advance(done.t);
+    }
+    const final = done.t.fixtures.find(f => f.stage === 'final');
+    assert.deepEqual(venue(done.t, final), { name: teamOf(done.t, final.home).ground, neutral: false }, id);
+  }
+});
+
+test('the Nations Cup: one of the eight hosts the semi-finals and the final', () => {
+  const hosts = new Set();
+  for (let seed = 0; seed < 30; seed++) {
+    const t = createCup({ userTeam: 'wal', rng: seededRng(seed) });
+    assert.ok(t.teams.some(x => x.id === t.host), 'the hosts are in it');
+    hosts.add(t.host);
+    for (const f of t.fixtures) assert.equal(venue(t, f).name, teamOf(t, f.home).ground, 'pool matches at home');
+    for (const f of t.fixtures) recordResult(t, f.id, { score: [30, 10], tries: [4, 1], winner: 'home' });
+    advance(t);
+    for (const f of t.fixtures.filter(x => x.stage === 'semi')) {
+      const v = venue(t, f);
+      assert.equal(v.name, teamOf(t, t.host).ground);
+      assert.equal(v.neutral, f.home !== t.host && f.away !== t.host, 'neutral unless the hosts are playing');
+    }
+  }
+  assert.ok(hosts.size > 4, 'the hosts change from cup to cup');
+});
+
+test('kits for a match: the first choice keeps its pattern, a change strip is plain, and the venue goes along', () => {
+  const comp = { teams: [TEAM_BY_ID.gloucester, TEAM_BY_ID.munster, TEAM_BY_ID.harlequins], userTeam: 'harlequins', length: 'quick', cards: true };
+  // Gloucester (cherry and white) at home to Munster (red): Munster change.
+  const [home, away] = kits(comp, { home: 'gloucester', away: 'munster', stage: 'league' });
+  assert.deepEqual(home.kit, TEAM_BY_ID.gloucester.kit);
+  assert.equal(away.kit, null);
+  assert.notEqual(away.color, TEAM_BY_ID.munster.color);
+  const opts = matchOptions(comp, { home: 'gloucester', away: 'harlequins', stage: 'league' });
+  assert.deepEqual(opts.teams[0].kit, TEAM_BY_ID.harlequins.kit, 'the user wears their own pattern');
+  assert.deepEqual(opts.venue, { name: 'Kingsholm', neutral: false });
+  const m = newMatch(opts);
+  assert.deepEqual(m.venue, { name: 'Kingsholm', neutral: false });
+  assert.deepEqual(m.teams[0].kit, TEAM_BY_ID.harlequins.kit);
+});
+
+test('tournaments saved before grounds and kits get them on load', () => {
+  const t = createLeague({ league: 'prem', userTeam: 'bath', rng: seededRng(1) });
+  const old = structuredClone(t);
+  for (const team of old.teams) {
+    delete team.ground;
+    delete team.kit;
+  }
+  delete old.byes;
+  const m = migrateTournament(old);
+  assert.equal(teamOf(m, 'bath').ground, 'The Recreation Ground');
+  assert.deepEqual(teamOf(m, 'gloucester').kit, ['hoops', '#c8102e', '#f4f4f0']);
+  assert.equal(teamOf(m, 'exeter').kit, undefined, 'plain clubs stay plain');
+  assert.deepEqual(m.byes, []);
+  assert.equal(migrateTournament(null), null);
 });
 
 test('a match result is recorded from the right side', () => {
