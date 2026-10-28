@@ -2,14 +2,25 @@
 // and a list of events describing what happened, for the UI to narrate.
 
 import { DICE, POSITIONS } from './dice.js';
-import { CARD_IDS, cardEffects, catchUp, DEAL_SIZE, rollRarity } from './cards.js';
+import { CARD_IDS, cardEffects, cardsWith, cardWith, DEAL_SIZE, DRAFT_ORDER, rollRarity } from './cards.js';
 
-export const VERSION = 5;
+export const VERSION = 6;
 
+// Two ways to play a match. 'points': first to `full` wins, with half time
+// when either side reaches `half`. 'rolls': a match clock of `rolls` dice
+// rolls, half each way; when a half's rolls run out, play goes on until the
+// ball is dead, and the match can end at any score, a draw included.
+export const FORMATS = ['points', 'rolls'];
+//
+// Roll counts from simulated matches at each length: about half as long as
+// first to 20, 30 and 50 (133, 210 and 350 rolls on average, with a long
+// tail), and never much longer than the clock: last plays add about 11 rolls
+// a match. Each side scores 9, 14 and 21 points on average; 8%, 6% and 3%
+// of matches are drawn.
 export const MATCH_LENGTHS = {
-  quick: { half: 10, full: 20, label: 'Quick' },
-  standard: { half: 15, full: 30, label: 'Standard' },
-  long: { half: 25, full: 50, label: 'Marathon' },
+  quick: { half: 10, full: 20, rolls: 60, label: 'Quick' },
+  standard: { half: 15, full: 30, rolls: 100, label: 'Standard' },
+  long: { half: 25, full: 50, rolls: 160, label: 'Marathon' },
 };
 
 export const QUICK_TAP_RUNS = 3;
@@ -124,7 +135,7 @@ function refreshUses(m, team) {
 
 // Rush Defence and the like: +1 on one or both tackle dice, by kind of run.
 // The card gives how many dice: 1 is the first, 2 is both.
-function tackleBonusFor(m, def, special) {
+export function tackleBonusFor(m, def, special) {
   const n = (special ? cardEffects(m, def).tackleBonus?.special : cardEffects(m, def).tackleBonus?.hitUp) || 0;
   return [n >= 1 ? 1 : 0, n >= 2 ? 1 : 0];
 }
@@ -141,6 +152,8 @@ export function newMatch({
   venue = null,
   weather = null,
   bench = false,
+  format = 'points',
+  decider = false,
 } = {}) {
   const kits = teams || [
     { name: 'Home', color: '#1d4ed8' },
@@ -155,7 +168,16 @@ export function newMatch({
     cards,
     deal: [],
     dealRarity: {},
+    format: format === 'rolls' ? 'rolls' : 'points',
     target: { ...MATCH_LENGTHS[length] },
+    // A knockout match: in the rolls format a draw goes to sudden death.
+    decider: !!decider,
+    // Dice rolled in the match, and in this half (the match clock).
+    rolls: 0,
+    clock: 0,
+    // The rolls have run out: play on until the ball is dead.
+    lastPlay: false,
+    suddenDeath: false,
     controllers: controllers || (mode === '1p' ? ['human', 'cpu'] : ['human', 'human']),
     // Where it's played, for the kick-off title card: {name, neutral}.
     venue: venue ? { name: venue.name, neutral: !!venue.neutral } : null,
@@ -174,8 +196,8 @@ export function newMatch({
       sinBin: false,
       // Replacements left this half.
       bench: bench ? 1 : 0,
-      card: null,
-      cardRarity: null,
+      // Team cards drafted for this match: [{id, rarity}].
+      cards: [],
       cardUses: freshUses(),
       stats: emptyStats(),
       players: emptyPlayers(),
@@ -212,12 +234,26 @@ export function migrate(match) {
   m.venue ??= null;
   m.weather ??= null;
   m.bench ??= false;
+  m.format ??= 'points';
+  m.decider ??= false;
+  m.rolls ??= 0;
+  m.clock ??= 0;
+  m.lastPlay ??= false;
+  m.suddenDeath ??= false;
+  m.target = { ...MATCH_LENGTHS[m.length], ...m.target };
+  // A draft saved part way through: the picks so far say whose turn it is.
+  if (m.step.purpose === 'draft' && m.step.pick === undefined) {
+    m.step.pick = m.teams.reduce((n, t) => n + (t.cards?.length || (t.card ? 1 : 0)), 0);
+    delete m.step.first;
+  }
   for (const t of m.teams) {
     t.kit ??= null;
     t.bench ??= 0;
     t.roster ??= null;
-    t.card ??= null;
-    t.cardRarity ??= t.card ? 'common' : null;
+    // One card each before version 6.
+    t.cards ??= t.card ? [{ id: t.card, rarity: t.cardRarity || 'common' }] : [];
+    delete t.card;
+    delete t.cardRarity;
     t.cardUses = { ...freshUses(), ...t.cardUses };
     t.players = Object.fromEntries(POSITIONS.map(p => [p, { ...emptyPlayer(), ...t.players?.[p] }]));
     t.stats = { ...emptyStats(), ...t.stats };
@@ -308,10 +344,13 @@ export function kickChance(range, bonus = 0) {
   return DICE.K.faces.filter(f => f.kick + bonus >= range).length / 6;
 }
 
-// A kick's extra distance: the team card's, and the wind's.
+// A kick's extra distance: the team cards', and the wind's.
 export function kickParts(match, team, kick) {
   return { card: cardEffects(match, team).kickBonus?.[kick] || 0, wind: windBonus(match, team) };
 }
+
+// Ids of a side's cards that lengthen this kind of kick.
+export const kickCards = (match, team, kick) => cardsWith(match, team, fx => fx.kickBonus?.[kick]).map(c => c.id);
 
 export function kickBonus(match, team, kick) {
   const { card, wind } = kickParts(match, team, kick);
@@ -367,7 +406,48 @@ function attackStep(team, pos) {
   return { type: 'roll', purpose: 'attack', dice: [pos], team };
 }
 
+// ---- The match clock (the rolls format) ----
+
+// Rolls in each half.
+export const halfRolls = match => Math.round(match.target.rolls / 2);
+
+// The rolls have run out for this half: the next dead ball ends it.
+export function timeUp(match) {
+  return match.format === 'rolls' && !match.suddenDeath && match.clock >= halfRolls(match);
+}
+
+// Rolls left in this half, or null in the points format.
+export const rollsLeft = match => (match.format === 'rolls' ? Math.max(0, halfRolls(match) - match.clock) : null);
+
+// The ball is dead with the clock run out: half time, or full time. A draw
+// at full time stands, unless the match needs a winner: then the next score
+// wins it, the side that received the first kick-off starting with the ball.
+function endHalf(m, ev) {
+  if (m.half === 1) {
+    m.step = { type: 'halftime' };
+    ev.push({ type: 'halftime' });
+    return;
+  }
+  const [a, b] = m.teams.map(t => t.score);
+  if (a === b && m.decider) {
+    m.suddenDeath = true;
+    m.lastPlay = false;
+    ev.push({ type: 'suddenDeath' });
+    startPossession(m, ev, m.firstReceiver, 'kickoff');
+    return;
+  }
+  m.winner = a === b ? null : a > b ? 0 : 1;
+  m.step = { type: 'fulltime' };
+  ev.push({ type: 'fulltime', winner: m.winner, ...(m.winner === null ? { draw: true } : {}) });
+}
+
 function startPossession(m, ev, team, reason) {
+  // A tapped penalty plays on; anything else restarts play, and with the
+  // clock run out the ball is dead.
+  if (reason !== 'quickTap' && timeUp(m)) {
+    endHalf(m, ev);
+    return;
+  }
   const changed = m.attacker !== team;
   m.attacker = team;
   m.carrier = 'S';
@@ -380,6 +460,10 @@ function startPossession(m, ev, team, reason) {
 }
 
 function setPiece(m, ev, piece, feeder) {
+  if (timeUp(m)) {
+    endHalf(m, ev);
+    return;
+  }
   m.quickTap = 0;
   m.step = { type: 'roll', purpose: 'setpiece', dice: ['R'], team: feeder, piece };
 }
@@ -397,23 +481,28 @@ function addPoints(m, ev, team, points, kind) {
   ev.push({ type: 'score', team, points, kind, score: m.teams.map(t => t.score) });
 }
 
+// Points format: the first to the target wins. Sudden death: any score wins.
 function reachedFullTime(m, ev, team) {
-  if (m.teams[team].score < m.target.full) return false;
+  if (!m.suddenDeath && (m.format === 'rolls' || m.teams[team].score < m.target.full)) return false;
   m.winner = team;
   m.step = { type: 'fulltime' };
   ev.push({ type: 'fulltime', winner: team });
   return true;
 }
 
-// After any score the conceding side kicks off to the scoring side.
+// After any score the side that conceded gets the ball from the restart.
+// (The printed rules give it to the scorers; over 2,000 simulated matches a
+// side that keeps the ball after scoring runs away with too many games:
+// handing it back made the median margin 11 instead of 15 and lead changes
+// 40% more common, and makes kicking at goal a real choice.)
 function afterScore(m, ev, team) {
   if (reachedFullTime(m, ev, team)) return;
-  if (m.half === 1 && m.teams.some(t => t.score >= m.target.half)) {
+  if (m.format === 'points' && m.half === 1 && m.teams.some(t => t.score >= m.target.half)) {
     m.step = { type: 'halftime' };
     ev.push({ type: 'halftime' });
     return;
   }
-  startPossession(m, ev, team, 'kickoff');
+  startPossession(m, ev, other(team), 'restart');
 }
 
 // A completed tackle uses up one run of any quick-tap advantage.
@@ -430,7 +519,11 @@ function nextPhase(m) {
   m.step = attackStep(m.attacker, 'S');
 }
 
-const cardPlayed = (ev, m, team, what, extra = {}) => ev.push({ type: 'cardPlayed', team, card: m.teams[team].card, rarity: m.teams[team].cardRarity, what, ...extra });
+// A team card just did something: `test` picks out which of the side's cards.
+function cardPlayed(ev, m, team, what, test, extra = {}) {
+  const card = cardWith(m, team, test) || m.teams[team].cards[0];
+  ev.push({ type: 'cardPlayed', team, card: card.id, rarity: card.rarity, what, ...extra });
+}
 
 // ---- Step handlers ----------------------------------------------------------
 
@@ -446,8 +539,8 @@ function onAttack(m, ev, rng) {
   // Drop-Goal Artist (other players' free passes become drop-goal chances).
   const { face, wet, swapped, dropped } = attackFace(m, team, pos, faceIndex);
   if (wet) ev.push({ type: 'wetBall', team, pos });
-  if (swapped) cardPlayed(ev, m, team, swapped, wet ? { wet: true } : {});
-  if (dropped) cardPlayed(ev, m, team, 'dropChance');
+  if (swapped) cardPlayed(ev, m, team, swapped, fx => fx.faceSwap?.[pos]?.[swapped] === 'pass', wet ? { wet: true } : {});
+  if (dropped) cardPlayed(ev, m, team, 'dropChance', fx => (fx.passToDrop || []).includes(pos));
 
   switch (face.kind) {
     case 'run': {
@@ -471,7 +564,12 @@ function onAttack(m, ev, rng) {
       }
       break;
     case 'drop':
-      ev.push({ type: 'dropChance', team, pos });
+      // The Fly Half takes every drop goal: anyone else gives it back to them.
+      if (pos !== 'B') {
+        player(m, team, pos).passes++;
+        m.carrier = 'B';
+      }
+      ev.push({ type: 'dropChance', team, pos: 'B', ...(pos !== 'B' ? { from: pos } : {}) });
       m.step = { type: 'roll', purpose: 'range', dice: ['D'], team, kick: 'drop' };
       break;
     case 'error': {
@@ -583,7 +681,7 @@ function onRuck(m, ev, rng) {
   m.roll = { dice: ['K'], faces: [faceIndex], purpose: 'ruck', team: def };
   const byCard = (cardEffects(m, def).ruckAlsoWins || []).includes(result);
   if (result === 'ruck' || byCard) {
-    if (byCard) cardPlayed(ev, m, def, 'ruck', { result });
+    if (byCard) cardPlayed(ev, m, def, 'ruck', fx => (fx.ruckAlsoWins || []).includes(result), { result });
     m.teams[def].stats.turnoversWon++;
     player(m, def, 'F').turnovers++;
     ev.push({ type: 'ruck', team: def, won: true });
@@ -620,7 +718,7 @@ function onTry(m, ev, rng) {
   }
   // Clinical Finisher: a failed try roll is rolled again, while uses last.
   if (useCharge(m, team, 'tryRerolls')) {
-    cardPlayed(ev, m, team, face.result === 'ruck' ? 'heldUp' : 'noTry');
+    cardPlayed(ev, m, team, face.result === 'ruck' ? 'heldUp' : 'noTry', fx => fx.uses?.tryRerolls);
     m.step = { ...m.step, rerolled: (m.step.rerolled || 0) + 1 };
     return;
   }
@@ -681,7 +779,8 @@ function onKick(m, ev, rng) {
   const distance = rolled + bonus;
   const good = distance >= range;
   const S = m.teams[team].stats;
-  const kicker = m.step.kicker || (kick === 'drop' ? m.carrier : 'B');
+  // The Fly Half kicks everything.
+  const kicker = m.step.kicker || 'B';
   m.roll = { dice: ['K'], faces: [faceIndex], purpose: 'kick', team };
 
   const tally = { conversion: ['conversions', 'conversionAttempts', 2], penalty: ['penaltyGoals', 'penaltyAttempts', 3], drop: ['dropGoals', 'dropAttempts', 3] }[kick];
@@ -712,11 +811,11 @@ function onSetPiece(m, ev, rng) {
     // Squeaky Clean: the referee never pings them on their own feed (and,
     // Mythic, not on the other side's either).
     if (outcome === 'penaltyAgainst' && useCharge(m, team, 'ownFeedPenalty')) {
-      cardPlayed(ev, m, team, 'penalty');
+      cardPlayed(ev, m, team, 'penalty', fx => fx.uses?.ownFeedPenalty);
       awarded = team;
       outcome = 'penaltyWon';
     } else if (outcome === 'penaltyWon' && useCharge(m, other(team), 'theirFeedPenalty')) {
-      cardPlayed(ev, m, other(team), 'penalty');
+      cardPlayed(ev, m, other(team), 'penalty', fx => fx.uses?.theirFeedPenalty);
       awarded = other(team);
       outcome = 'penaltyAgainst';
     }
@@ -727,10 +826,10 @@ function onSetPiece(m, ev, rng) {
   let outcome = face[piece];
   // Set-Piece Kings: higher rarities never lose their own feed, and steal the other side's.
   if (outcome === 'lose' && cardEffects(m, team).ownFeedWins) {
-    cardPlayed(ev, m, team, 'ownFeed');
+    cardPlayed(ev, m, team, 'ownFeed', fx => fx.ownFeedWins);
     outcome = 'win';
   } else if (outcome === 'win' && (cardEffects(m, other(team)).stealFeed || []).includes(piece)) {
-    cardPlayed(ev, m, other(team), 'steal');
+    cardPlayed(ev, m, other(team), 'steal', fx => (fx.stealFeed || []).includes(piece));
     outcome = 'lose';
   }
   ev.push({ type: 'setPiece', team, piece, outcome });
@@ -740,7 +839,7 @@ function onSetPiece(m, ev, rng) {
     // Set-Piece Kings carry the shove on: +1 on their next run.
     const boost = cardEffects(m, winner).setPieceAdvantage || 0;
     if (boost) {
-      cardPlayed(ev, m, winner, 'advantage', { runs: boost });
+      cardPlayed(ev, m, winner, 'advantage', fx => fx.setPieceAdvantage, { runs: boost });
       m.quickTap = boost;
       m.quickTapFrom = 'card';
     }
@@ -749,7 +848,7 @@ function onSetPiece(m, ev, rng) {
   // Set-Piece Kings take every reset scrum and crooked throw.
   const kings = [0, 1].find(t => cardEffects(m, t).setPieceTies);
   if (kings !== undefined) {
-    cardPlayed(ev, m, kings, outcome);
+    cardPlayed(ev, m, kings, outcome, fx => fx.setPieceTies);
     startPossession(m, ev, kings, piece);
     m.quickTap = cardEffects(m, kings).setPieceAdvantage || 0;
     m.quickTapFrom = 'card';
@@ -803,36 +902,33 @@ function onChoose(m, ev, value) {
       break;
     }
     case 'draft': {
-      const dealt = m.dealRarity?.[value] || 'common';
-      const rarity = draftRarity(m, value);
-      m.teams[step.team].card = value;
-      m.teams[step.team].cardRarity = rarity;
-      ev.push({ type: 'draft', team: step.team, card: value, rarity, dealt, first: step.first });
-      if (rarity !== dealt) ev.push({ type: 'catchUp', team: step.team, card: value, from: dealt, to: rarity });
+      const rarity = m.dealRarity?.[value] || 'common';
+      m.teams[step.team].cards.push({ id: value, rarity });
       const rest = step.options.filter(id => id !== value);
-      if (step.first) {
-        m.step = { type: 'choose', purpose: 'draft', team: other(step.team), options: rest, first: false };
-      } else {
-        startPossession(m, ev, m.firstReceiver, 'kickoff');
+      // The draft ends with one card left over (or none to pick from).
+      const last = step.pick + 1 >= DRAFT_ORDER.length || rest.length <= 1;
+      ev.push({ type: 'draft', team: step.team, card: value, rarity, pick: step.pick, last });
+      if (!last) {
+        m.step = draftStep(m, step.pick + 1, rest);
+        break;
       }
+      for (const id of rest) ev.push({ type: 'discard', card: id, rarity: m.dealRarity?.[id] || 'common' });
+      startPossession(m, ev, m.firstReceiver, 'kickoff');
       break;
     }
   }
 }
 
-// The rarity a dealt card has for the side picking it now: as dealt, or one
-// up for the second pick when the first pick was rarer. (On the first pick
-// the other side has no card yet, so there is nothing to catch up to.)
-export function draftRarity(match, id) {
-  const dealt = match.dealRarity?.[id] || 'common';
-  if (match.step.purpose !== 'draft') return dealt;
-  return catchUp(match.teams[other(match.step.team)].cardRarity, dealt);
+// Who picks with the draft's `pick` (0-3): the toss loser first and fourth,
+// the winner (who also receives the kick-off) second and third.
+export const drafterOf = (match, pick) => (DRAFT_ORDER[pick] === 'winner' ? match.firstReceiver : other(match.firstReceiver));
+
+function draftStep(m, pick, options) {
+  return { type: 'choose', purpose: 'draft', team: drafterOf(m, pick), options, pick };
 }
 
-// Deal DEAL_SIZE different cards, each at a rarity of its own. The toss
-// loser drafts first, from all of them; the winner, who also receives the
-// kick-off, takes one of the rest, catching up a rarity if the first pick
-// was rarer.
+// Deal DEAL_SIZE different cards, each at a rarity of its own, for the
+// draft: two each, and the last card left is discarded.
 function dealCards(m, ev, rng) {
   const pool = [...CARD_IDS];
   const deal = [];
@@ -844,16 +940,21 @@ function dealCards(m, ev, rng) {
   }
   m.deal = deal;
   m.dealRarity = rarity;
-  const first = other(m.firstReceiver);
-  ev.push({ type: 'deal', cards: deal, rarity, first });
-  m.step = { type: 'choose', purpose: 'draft', team: first, options: [...deal], first: true };
+  ev.push({ type: 'deal', cards: deal, rarity, first: drafterOf(m, 0) });
+  m.step = draftStep(m, 0, [...deal]);
 }
 
 // ---- Public API ---------------------------------------------------------------
 
+// Online, a decision has a time limit. Running out of time in play gives the
+// other side a penalty; the toss and the draft are picked for you instead.
+export const DECISION_SECONDS = 10;
+export const TIMED_DECISIONS = ['pass', 'drop', 'penalty', 'bench'];
+
 export function isLegal(match, action) {
   const step = match.step;
   if (!action) return false;
+  if (action.type === 'timeout') return step.type === 'choose' && TIMED_DECISIONS.includes(step.purpose);
   if (step.type === 'roll') return action.type === 'roll';
   if (step.type === 'choose') return action.type === 'choose' && step.options.includes(action.value);
   if (step.type === 'halftime') return action.type === 'continue';
@@ -875,8 +976,17 @@ export function actInPlace(m, action, rng = Math.random) {
   const ev = [];
   const step = m.step;
 
-  if (step.type === 'halftime') {
+  if (step.type === 'roll') {
+    m.rolls++;
+    m.clock++;
+  }
+  if (action.type === 'timeout') {
+    ev.push({ type: 'timeout', team: step.team, purpose: step.purpose });
+    awardPenalty(m, ev, other(step.team));
+  } else if (step.type === 'halftime') {
     m.half = 2;
+    m.clock = 0;
+    m.lastPlay = false;
     m.teams.forEach((t, i) => {
       t.sinBin = false;
       t.bench = m.bench ? 1 : 0;
@@ -906,6 +1016,11 @@ export function actInPlace(m, action, rng = Math.random) {
       setpiece: onSetPiece,
     };
     handlers[step.purpose](m, ev, rng);
+  }
+  // The clock has just run out with the ball still alive: last play.
+  if (timeUp(m) && !m.lastPlay && m.step.type !== 'halftime' && m.step.type !== 'fulltime') {
+    m.lastPlay = true;
+    ev.push({ type: 'lastPlay', half: m.half });
   }
 
   m.seq++;

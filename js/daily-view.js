@@ -57,8 +57,8 @@ export function scenarioCard(s) {
   fact(`First to 30. ${them.name} need ${30 - s.score[1]}; you need ${30 - s.score[0]}.`);
   if (s.twist !== 'none') fact(TWIST_TEXT[s.twist](s, you, them));
   if (s.cards) {
-    const cardText = i => `${RARITY_BY_ID[s.cards[i].rarity].name} ${CARD_BY_ID[s.cards[i].id].name}`;
-    fact(`Team cards: yours ${cardText(0)}, theirs ${cardText(1)}.`);
+    const cardText = i => s.cards[i].map(c => `${RARITY_BY_ID[c.rarity].name} ${CARD_BY_ID[c.id].name}`).join(' and ');
+    fact(`Team cards: yours ${cardText(0)}; theirs ${cardText(1)}.`);
   }
   fact(conditionsLine(s, [you, them]));
   fact('The bench is on. Everyone gets this same situation today; the dice are yours.');

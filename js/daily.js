@@ -102,10 +102,11 @@ export function dailyScenario(key) {
     const theirs = full - need;
     let yours = theirs - pick([3, 5, 6, 7, 8, 10, 12], rng);
     while (!reachable(yours)) yours--;
-    const cards = rng() < 0.5 ? [0, 1].map(() => ({ id: null, rarity: rollRarity(rng) })) : null;
-    if (cards) {
+    // Team cards on half the days: two each, all different.
+    let cards = null;
+    if (rng() < 0.5) {
       const pool = [...CARD_IDS];
-      cards.forEach(c => (c.id = pool.splice(Math.floor(rng() * pool.length), 1)[0]));
+      cards = [0, 1].map(() => [0, 1].map(() => ({ id: pool.splice(Math.floor(rng() * pool.length), 1)[0], rarity: rollRarity(rng) })));
     }
     const candidate = {
       ...base,
@@ -150,9 +151,8 @@ function backfill(team, points, rng) {
     team.players[pos].tries++;
     team.players[pos].metres += TRY_RUN_IN;
   }
-  // The Fly Half took the place kicks; the Centres dropped the goals.
-  team.players.B.points = parts.conversions * 2 + parts.penaltyGoals * 3;
-  team.players.C.points = parts.dropGoals * 3;
+  // The Fly Half kicked every goal.
+  team.players.B.points = parts.conversions * 2 + (parts.penaltyGoals + parts.dropGoals) * 3;
   team.score = points;
 }
 
@@ -191,12 +191,9 @@ export function dailyMatch(s) {
   m.toss = { call: 'heads', result: 'tails', caller: 1, winner: 1 };
   m.teams.forEach((t, i) => backfill(t, s.score[i], rng));
   if (s.cards) {
-    m.deal = [s.cards[0].id, s.cards[1].id];
-    m.dealRarity = { [s.cards[0].id]: s.cards[0].rarity, [s.cards[1].id]: s.cards[1].rarity };
-    m.teams.forEach((t, i) => {
-      t.card = s.cards[i].id;
-      t.cardRarity = s.cards[i].rarity;
-    });
+    m.deal = s.cards.flat().map(c => c.id);
+    m.dealRarity = Object.fromEntries(s.cards.flat().map(c => [c.id, c.rarity]));
+    m.teams.forEach((t, i) => (t.cards = s.cards[i].map(c => ({ ...c }))));
   }
   const [me, cpu] = m.teams;
   if (s.twist === 'injured') me.injuries[s.twistPos] = 1;

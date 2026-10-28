@@ -66,7 +66,8 @@ function startPage(state, handlers) {
   create.append(el('p', 'br-title', 'Your club'), clubGrid(league.teams, team, {}, id => handlers.onForm({ team: id })));
   create.append(
     seg('Season', 'f-season', [['short', 'Short', `${SHORT_SEASON} rounds`], ['full', 'Full', `${fullRounds(league.teams.length)} rounds`]], f.season, v => handlers.onForm({ season: v })),
-    seg('Match length', 'f-length', Object.entries(MATCH_LENGTHS).map(([k, v]) => [k, v.label, `FT ${v.full}`]), f.length, v => handlers.onForm({ length: v })),
+    seg('Match type', 'f-format', [['rolls', 'On the clock', 'A set number of rolls'], ['points', 'Race', 'First to a score']], f.format || 'rolls', v => handlers.onForm({ format: v })),
+    seg('Match length', 'f-length', Object.entries(MATCH_LENGTHS).map(([k, v]) => [k, v.label, (f.format || 'rolls') === 'rolls' ? `${v.rolls} rolls` : `FT ${v.full}`]), f.length, v => handlers.onForm({ length: v })),
     toggleRow('Team cards', 'A draft before every match', f.cards, on => handlers.onForm({ cards: on })),
     toggleRow('Bench', 'One replacement a half clears an injury', f.bench, on => handlers.onForm({ bench: on })),
     toggleRow('Weather', 'Rain and wind, different every match', f.weather, on => handlers.onForm({ weather: on })),
@@ -131,7 +132,8 @@ function codeCard(state, handlers) {
 const settingsLine = s => {
   const L = LEAGUES[s.league];
   const rounds = s.season === 'full' ? fullRounds(L.teams.length) : SHORT_SEASON;
-  return [`${L.short}`, `${rounds} rounds`, `${MATCH_LENGTHS[s.length].label} matches`, s.cards && 'team cards', s.bench && 'bench', s.weather && 'weather'].filter(Boolean).join(' · ');
+  const format = (s.format || 'points') === 'rolls' ? `${MATCH_LENGTHS[s.length].rolls} rolls` : `first to ${MATCH_LENGTHS[s.length].full}`;
+  return [`${L.short}`, `${rounds} rounds`, `${MATCH_LENGTHS[s.length].label} matches (${format})`, s.cards && 'team cards', s.bench && 'bench', s.weather && 'weather'].filter(Boolean).join(' · ');
 };
 
 function lobbyPage(state, handlers) {

@@ -1,6 +1,6 @@
 // Screen controller: menus, the match loop, animation and persistence.
 
-import { act, controllerOf, draftRarity, kickBonus, kickChance, kickParts, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollWeather, windWith } from './engine.js';
+import { act, controllerOf, DECISION_SECONDS, drafterOf, kickBonus, kickCards, kickChance, kickParts, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollsLeft, rollWeather, TIMED_DECISIONS, windWith } from './engine.js';
 import { cpuChoiceAsync, LEVELS, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
 import { CARD_BY_ID, CARDS, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
@@ -12,7 +12,8 @@ import { tipFor, tipText } from './coach.js';
 import { advance, clash, createChampions, createCup, createLeague, LEAGUES, matchOptions, migrateTournament, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
 import { applyRemote, encodeAction, hashState, makeCode, normaliseCode, OnlineSession, pendingEntries, recordingRng, startingMatch, strongRandom, validCode } from './online.js';
 import { $, button, el } from './dom.js';
-import { createDie, dieChip, faceTile, rollTo, setFace, wait } from './dice-view.js';
+import { badgeNode, createDie, dieChip, faceLabel, faceTile, rollTo, setFace, wait } from './dice-view.js';
+import { dieBadges, playerBadge, rollGuide } from './guide.js';
 import { cardArt, cardChip, cardUses } from './card-view.js';
 import { careerPage } from './career-view.js';
 import { fixtureLabel, tournamentHub, tournamentSetup } from './tournament-view.js';
@@ -31,7 +32,7 @@ import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
 // anything that changes a match's outcome changes.
-const BUILD = 'pr-3.1';
+const BUILD = 'pr-4.0';
 
 const KITS = [
   { name: 'Navy', color: '#1d3577' },
@@ -44,15 +45,18 @@ const KITS = [
   { name: 'Orange', color: '#e8701c' },
 ];
 
-const DEFAULT_SETUP = { mode: '1p', names: ['Ravens', 'Foxes'], colors: ['#1d3577', '#e8701c'], patterns: ['plain', 'plain'], length: 'standard', cpu: 'pro', style: 'balanced', cards: true, bench: true, weather: false, rosters: null };
-const DEFAULT_PREFS = { sound: true, odds: true, fast: false, autoDefence: false, haptics: true, cinema: 'full', meter: true, coach: true };
+const DEFAULT_SETUP = { mode: '1p', names: ['Ravens', 'Foxes'], colors: ['#1d3577', '#e8701c'], patterns: ['plain', 'plain'], length: 'standard', format: 'rolls', cpu: 'pro', style: 'balanced', cards: true, bench: true, weather: false, rosters: null };
+const DEFAULT_PREFS = { sound: true, odds: true, fast: false, autoDefence: false, haptics: true, cinema: 'full', meter: true, coach: true, guide: true, autoRoll: false };
+
+// "60 rolls" or "First to 20": a match's length in its format.
+const formatText = (format, length) => (format === 'rolls' ? `${MATCH_LENGTHS[length].rolls} rolls` : `First to ${MATCH_LENGTHS[length].full}`);
 
 const DIE_NOTES = {
   S: 'Plays first after every tackle',
   F: 'Big move: Line Break 6',
-  C: 'Big move: Thru the Gap 7. Can drop goal',
+  C: 'Big move: Thru the Gap 7. Drop Goal sets up the Fly Half',
   W: 'Big move: Into the Corner 8. Risky',
-  B: 'Big move: High Ball 6. Can drop goal',
+  B: 'Big move: High Ball 6. Kicks every goal',
   D: 'Brown: tackles (two rolls) and kick range',
   K: 'Black: tries, kick distance, rucks, the card dot',
   R: 'White: scrums, lineouts and penalties',
@@ -79,7 +83,10 @@ const ui = {
   coachSeen: load('coach', []),
   coach: null,
   tournament: migrateTournament(load('tournament', null)),
-  tsetup: { comp: 'cup', team: null, length: 'quick', cards: true, bench: true, weather: false, season: 'short' },
+  tsetup: { comp: 'cup', team: null, length: 'quick', format: 'rolls', cards: true, bench: true, weather: false, season: 'short' },
+  // Auto-roll in this match, and the online decision clock.
+  auto: false,
+  decision: null,
   online: null,
   lobby: null,
   roomPromise: null,
@@ -182,6 +189,12 @@ function renderSetup() {
   ensureRosters();
   $(`#mode-${s.mode}`).checked = true;
   $(`#len-${s.length}`).checked = true;
+  if (!['points', 'rolls'].includes(s.format)) s.format = DEFAULT_SETUP.format;
+  $(`#format-${s.format}`).checked = true;
+  for (const length of Object.keys(MATCH_LENGTHS)) {
+    const { half, full } = MATCH_LENGTHS[length];
+    $(`#len-${length}-note`).textContent = s.format === 'rolls' ? formatText('rolls', length) : `HT ${half} · FT ${full}`;
+  }
   $(`#cpu-${s.cpu}`).checked = true;
   $(`#style-${s.style}`).checked = true;
   $('#setup-cards').checked = s.cards;
@@ -245,6 +258,7 @@ function bindSetup() {
     const s = ui.setup;
     if (e.target.name === 'mode') s.mode = e.target.value;
     if (e.target.name === 'length') s.length = e.target.value;
+    if (e.target.name === 'format') s.format = e.target.value;
     if (e.target.name === 'cpu') s.cpu = e.target.value;
     if (e.target.name === 'style') s.style = e.target.value;
     if (e.target.id === 'setup-cards') s.cards = e.target.checked;
@@ -277,6 +291,7 @@ function bindSetup() {
       mode: s.mode,
       teams: [0, 1].map(i => setupTeam(s, i)),
       length: s.length,
+      format: s.format,
       cpuLevel: s.cpu,
       cpuPersonality: s.style,
       cards: s.cards,
@@ -300,6 +315,7 @@ function startLearn() {
     mode: '1p',
     teams: [0, 1].map(i => setupTeam(s, i)),
     length: 'quick',
+    format: 'rolls',
     cpuLevel: 'rookie',
     cpuPersonality: 'balanced',
     cards: true,
@@ -364,12 +380,20 @@ function capability(name) {
 
 function tossText(m) {
   const caller = m.teams[m.step.team].name;
-  return `${caller} to call. The winner receives the kick-off${m.cards ? ' and the loser picks a team card first' : ''}.`;
+  return `${caller} to call. The winner receives the kick-off${m.cards ? '; the loser picks first of five team cards' : ''}.`;
 }
 
 function stopAutomation() {
   clearTimeout(ui.cpuTimer);
+  stopDecisionClock();
   ui.thinking = false;
+}
+
+// The side this phone plays for, if one: team 0 against the CPU, this
+// phone's side online. On one phone for two, nobody.
+function viewerOf(m) {
+  if (ui.context?.kind === 'online') return ui.context.team;
+  return m.mode === '1p' ? 0 : null;
 }
 
 // `prebuilt`: a match made elsewhere (online), instead of one from options.
@@ -384,6 +408,8 @@ function startMatch(options, context = { kind: 'quick' }, prebuilt = null) {
   ui.netErrorShown = false;
   ui.tracker = newTracker(meOf(context));
   ui.shownScores = [0, 0];
+  // Auto-roll: on by default online, as last set otherwise.
+  ui.auto = context.kind === 'online' ? true : ui.prefs.autoRoll;
   hideCoach(false);
   closeDialogs();
   persist();
@@ -395,7 +421,7 @@ function startMatch(options, context = { kind: 'quick' }, prebuilt = null) {
   render();
   if (context.kind === 'daily' && wantsScene('kickoff')) {
     ui.busy = true;
-    ui.cinema.play('kickoff', { teams: ui.match.teams, half: 2, target: ui.match.target, label: contextLabel(context), venue: ui.match.venue, conditions: conditionsText(ui.match) }).then(() => {
+    ui.cinema.play('kickoff', { teams: ui.match.teams, half: 2, target: ui.match.target, label: contextLabel(context), venue: ui.match.venue, conditions: conditionsText(ui.match), format: ui.match.format }).then(() => {
       ui.busy = false;
       render();
       afterTurn([]);
@@ -416,6 +442,7 @@ function resumeMatch(saved) {
   ui.outcome = null;
   ui.netError = null;
   ui.shownScores = ui.match.teams.map(t => t.score);
+  ui.auto = ui.context.kind === 'online' ? true : ui.prefs.autoRoll;
   hideCoach(false);
   showView('match');
   const roll = ui.match.roll;
@@ -451,6 +478,8 @@ function rematchOptions(m) {
     mode: m.mode,
     teams: m.teams.map(t => ({ name: t.name, color: t.color, kit: t.kit, roster: t.roster })),
     length: m.length,
+    format: m.format,
+    decider: m.decider,
     cpuLevel: m.cpuLevel,
     cpuPersonality: m.cpuPersonality,
     cards: m.cards,
@@ -528,8 +557,10 @@ function isAutomatic(m) {
   if (!m || m.step.type === 'halftime' || m.step.type === 'fulltime') return false;
   const who = controllerOf(m);
   if (who === 'cpu') return true;
-  if (who !== 'human') return false;
-  return ui.prefs.autoDefence && m.mode === '1p' && m.step.type === 'roll' && (m.step.purpose === 'tackle' || m.step.purpose === 'ruck');
+  if (who !== 'human' || m.step.type !== 'roll') return false;
+  // Auto-roll plays every roll until there is a decision to make.
+  if (ui.auto && m.attacker !== null) return true;
+  return ui.prefs.autoDefence && m.mode === '1p' && (m.step.purpose === 'tackle' || m.step.purpose === 'ruck');
 }
 
 // After every move: a coach tip if one is due, then whoever plays next.
@@ -548,9 +579,74 @@ function schedule() {
     applyPendingRemote();
     return;
   }
-  if (ui.coach || document.querySelector('dialog[open]') || !isAutomatic(m)) return;
-  const thinking = m.step.type === 'choose' ? 1000 : 750;
+  if (ui.coach || document.querySelector('dialog[open]')) return;
+  startDecisionClock(m);
+  if (!isAutomatic(m)) return;
+  // Long enough to glance at the dice guide before each roll.
+  const thinking = m.step.type === 'choose' ? 1000 : controllerOf(m) === 'human' ? 900 : 750;
   ui.cpuTimer = setTimeout(runAutomatic, thinking * speed());
+}
+
+// ---------- The online decision clock ----------
+//
+// Online, a decision has DECISION_SECONDS. Run out of time in play and the
+// other side gets a penalty; the toss, the draft and half time are done for
+// you, and so is a roll left too long with auto-roll off.
+
+function stopDecisionClock() {
+  clearTimeout(ui.decision?.timer);
+  clearInterval(ui.decision?.tick);
+  ui.decision = null;
+  document.querySelectorAll('.decision-clock').forEach(n => n.remove());
+}
+
+function startDecisionClock(m) {
+  if (ui.context?.kind !== 'online' || m.step.type === 'fulltime') return stopDecisionClock();
+  const mine = controllerOf(m) === 'human';
+  const timed = m.step.type === 'choose' || m.step.type === 'halftime' || (m.step.type === 'roll' && !ui.auto);
+  if (!timed) return stopDecisionClock();
+  if (ui.decision?.seq === m.seq) return;
+  stopDecisionClock();
+  const ends = Date.now() + DECISION_SECONDS * 1000;
+  ui.decision = { seq: m.seq, ends, mine };
+  const tick = () => {
+    const left = Math.max(0, Math.ceil((ui.decision.ends - Date.now()) / 1000));
+    document.querySelectorAll('.decision-clock b').forEach(b => (b.textContent = left));
+  };
+  ui.decision.tick = setInterval(tick, 250);
+  renderDecisionClock();
+  // Only this phone's own decisions run out here; the other phone runs theirs.
+  if (mine) ui.decision.timer = setTimeout(() => timeUpDecision(m.seq), DECISION_SECONDS * 1000);
+}
+
+function renderDecisionClock() {
+  const d = ui.decision;
+  document.querySelectorAll('.decision-clock').forEach(n => n.remove());
+  if (!d) return;
+  const left = Math.max(0, Math.ceil((d.ends - Date.now()) / 1000));
+  const clock = el('div', `decision-clock${d.mine ? ' mine' : ''}`);
+  const bar = el('i');
+  bar.style.animationDuration = `${Math.max(0, d.ends - Date.now())}ms`;
+  clock.append(bar, el('b', null, String(left)), el('span', null, d.mine ? 's to decide' : 's for them'));
+  clock.setAttribute('role', 'timer');
+  clock.setAttribute('aria-label', d.mine ? `${left} seconds to decide` : `They have ${left} seconds`);
+  $('#dock').prepend(clock);
+}
+
+function timeUpDecision(seq) {
+  const m = ui.match;
+  if (!m || m.seq !== seq || controllerOf(m) !== 'human') return;
+  if (ui.busy) {
+    ui.decision.timer = setTimeout(() => timeUpDecision(seq), 300);
+    return;
+  }
+  const step = m.step;
+  stopDecisionClock();
+  if (step.type === 'roll') dispatch({ type: 'roll' });
+  else if (step.type === 'halftime') dispatch({ type: 'continue' });
+  else if (TIMED_DECISIONS.includes(step.purpose)) dispatch({ type: 'timeout' });
+  else if (step.purpose === 'toss') dispatch({ type: 'choose', value: Math.random() < 0.5 ? 'heads' : 'tails' });
+  else dispatch({ type: 'choose', value: suggestedChoice(m) });
 }
 
 async function runAutomatic() {
@@ -613,7 +709,7 @@ function finishMatch() {
       recordResult(t, f.id, resultFromMatch(f, m, f.home === t.userTeam));
       simulateRound(t);
       advance(t);
-      outcome.note = tournamentNote(t, f, m.winner === 0);
+      outcome.note = tournamentNote(t, f, m.winner === 0, m.winner === null);
       if (t.stage === 'done' && t.champion === t.userTeam) {
         outcome.champion = { title: t.kind === 'league' ? `${t.short || t.name} champions` : `${t.name} winners` };
         const titles = (t.club?.trophies.filter(x => x.kind === 'league').length || 0) + (t.kind === 'league' ? 1 : 0);
@@ -625,7 +721,7 @@ function finishMatch() {
   if (context.kind === 'daily') finishDaily(m, context, outcome);
   if (context.kind === 'friends') {
     sendFriendsResult(context.code, context.fixture, resultFromMatch(null, m, context.userIsHome));
-    outcome.note = `${m.winner === 0 ? 'A win' : 'A defeat'} for your club. The result is in the league.`;
+    outcome.note = `${m.winner === 0 ? 'A win' : m.winner === null ? 'A draw' : 'A defeat'} for your club. The result is in the league.`;
   }
   // Online, team 0 is the home side, whichever phone this is.
   if (context.kind === 'online' && context.friends) {
@@ -642,7 +738,7 @@ function finishMatch() {
   ui.outcome = outcome;
 }
 
-function tournamentNote(t, f, won) {
+function tournamentNote(t, f, won, drawn = false) {
   const me = teamOf(t, t.userTeam).name;
   const name = t.short || t.name;
   if (f.stage === 'final') return won ? `${me} win the ${name}!` : `${me} are runners-up. ${teamOf(t, t.champion).name} win the ${name}.`;
@@ -663,7 +759,7 @@ function tournamentNote(t, f, won) {
     if (t.kind === 'champions' && rows.findIndex(r => r.id === t.userTeam) >= 3) return `${me} finish ${place} ${where} and go through to the round of 16 as one of the best of the rest!`;
     return `${me} finish ${place} ${where} and go through to the ${stageName(t).toLowerCase()}!`;
   }
-  return `${me} are ${place} ${where}.`;
+  return `${drawn ? 'A draw. ' : ''}${me} are ${place} ${where}.`;
 }
 
 // ---------- Presentation ----------
@@ -706,7 +802,7 @@ function sceneFor(moment, after, events) {
 
 // A card changes the dice before anything else happens; big hits read
 // better before the injury they cause.
-const MOMENT_ORDER = ['mythic', 'cardplay', 'bighit', 'injury', 'replacement', 'break', 'try', 'notry', 'tmo', 'turnover', 'penalty', 'yellow', 'red', 'quicktap', 'goal', 'conversion', 'draft', 'halftime', 'fulltime'];
+const MOMENT_ORDER = ['mythic', 'cardplay', 'bighit', 'injury', 'replacement', 'break', 'try', 'notry', 'tmo', 'turnover', 'penalty', 'yellow', 'red', 'quicktap', 'goal', 'conversion', 'draft', 'lastplay', 'halftime', 'suddendeath', 'fulltime'];
 
 function stageLabel() {
   const c = ui.context;
@@ -738,7 +834,8 @@ async function present(before, after, events, story) {
     const dramatic = ['try', 'ruck', 'penalty', 'kick'].includes(step.purpose) && cinemaLevel() !== 'off';
     play('dice', roll.dice.length);
     if (dramatic) play('heartbeat', ui.prefs.fast ? 1 : 2);
-    await showDice(roll.dice, roll.faces, roll, true, dramatic);
+    await showDice(roll.dice, roll.faces, roll, true, dramatic, dieBadges(before));
+    markGuide(roll);
     play('land');
     if (ui.prefs.haptics) buzz(12);
   }
@@ -749,7 +846,8 @@ async function present(before, after, events, story) {
     if (wantsScene('kickcam')) {
       covered.add('kick');
       const card = kick.card ?? kick.bonus;
-      const notes = [card ? `+${metres(card)} ${CARD_BY_ID[after.teams[kick.team].card]?.name || ''}`.trim() : '', kick.wind > 0 ? `+${metres(kick.wind)} wind` : kick.wind < 0 ? `−${metres(-kick.wind)} into the wind` : ''].filter(Boolean);
+      const names = kickCards(after, kick.team, kick.kick).map(id => CARD_BY_ID[id].name).join(' + ');
+      const notes = [card ? `+${metres(card)} ${names}`.trim() : '', kick.wind > 0 ? `+${metres(kick.wind)} wind` : kick.wind < 0 ? `−${metres(-kick.wind)} into the wind` : ''].filter(Boolean);
       const note = notes.length ? notes.join(' · ') : null;
       await ui.cinema.play('kickcam', { team: after.teams[kick.team], kick: kick.kick, range: kick.range, distance: kick.distance, good: kick.good, note });
     } else {
@@ -779,10 +877,10 @@ async function present(before, after, events, story) {
   if (has('deal')) await skippable(900 * speed());
 
   // The match opens with a title card (after the draft, with team cards), and so does the second half.
-  const drafted = events.some(e => e.type === 'draft' && !e.first);
+  const drafted = events.some(e => e.type === 'draft' && e.last);
   if ((has('toss') && !has('deal')) || drafted || has('secondHalf')) {
     if (drafted && wantsScene('draft')) await ui.cinema.play('draft', { teams: after.teams });
-    if (wantsScene('kickoff')) await ui.cinema.play('kickoff', { teams: after.teams, half: after.half, target: after.target, label: stageLabel(), venue: after.venue, conditions: conditionsText(after) });
+    if (wantsScene('kickoff')) await ui.cinema.play('kickoff', { teams: after.teams, half: after.half, target: after.target, label: stageLabel(), venue: after.venue, conditions: conditionsText(after), format: after.format });
   }
 
   for (const { moment, scene } of moments) {
@@ -841,13 +939,13 @@ function setHeadline(headline, detail) {
   $('#detail').textContent = detail || '';
 }
 
-async function showDice(ids, faces, roll, animate = false, dramatic = false) {
+async function showDice(ids, faces, roll, animate = false, dramatic = false, badges = []) {
   const host = $('#tray-dice');
   const tray = $('#tray');
   tray.classList.toggle('dramatic', dramatic);
   tray.dataset.focus = roll.purpose === 'setpiece' ? roll.piece : FOCUS[roll.purpose] || '';
   host.innerHTML = '';
-  const dice = ids.map((id, i) => createDie(id, faces[i]));
+  const dice = ids.map((id, i) => createDie(id, faces[i], badges[i] ? [badges[i]] : []));
   dice.forEach(d => host.append(d));
   if (!animate) {
     dice.forEach((d, i) => {
@@ -904,7 +1002,7 @@ async function showMoment(moment) {
   host.append(band);
   host.hidden = false;
   if (moment.kind === 'try' || moment.kind === 'goal') confetti(ui.match.teams[moment.team].color);
-  const ms = { try: 1800, goal: 1400, conversion: 1000, break: 850, bighit: 800, turnover: 1100, injury: 1400, replacement: 1100, yellow: 1500, red: 1700, penalty: 900, cardplay: 1300 }[moment.kind] || 1000;
+  const ms = { try: 1800, goal: 1400, conversion: 1000, break: 850, bighit: 800, turnover: 1100, injury: 1400, replacement: 1100, yellow: 1500, red: 1700, penalty: 900, cardplay: 1300, lastplay: 1300, suddendeath: 1600 }[moment.kind] || 1000;
   await skippable(ms * speed());
   band.classList.add('out');
   await wait(240);
@@ -960,7 +1058,7 @@ function confetti(color) {
 // ---------- Rendering ----------
 
 function periodText(m) {
-  const length = MATCH_LENGTHS[m.length].label;
+  const length = `${MATCH_LENGTHS[m.length].label} · ${formatText(m.format, m.length)}`;
   const where = contextLabel(ui.context);
   if (where) return `${where} · ${length}`;
   if (m.mode === '1p') return `v ${LEVELS[m.cpuLevel]?.name || 'Pro'} CPU · ${length}`;
@@ -975,14 +1073,28 @@ function render() {
   renderSituation(m);
   ui.pitch.update(m);
   renderDraft(m);
+  renderGuide(m);
   renderDock(m, false);
   renderNet();
 }
 
 function renderBoard(m) {
   const over = m.step.type === 'fulltime';
-  $('#board-half').textContent = over ? 'Full time' : m.step.type === 'halftime' ? 'Half time' : m.half === 1 ? '1st half' : '2nd half';
-  $('#board-target').textContent = m.half === 1 ? `HT ${m.target.half}\nFT ${m.target.full}` : `First to\n${m.target.full}`;
+  $('#board-half').textContent = over ? 'Full time' : m.step.type === 'halftime' ? 'Half time' : m.suddenDeath ? 'Sudden death' : m.half === 1 ? '1st half' : '2nd half';
+  // The clock: rolls left in the half, then the last play.
+  const rolls = m.format === 'rolls';
+  const clock = $('#board-clock');
+  clock.hidden = !rolls || over;
+  $('#board').classList.toggle('on-clock', rolls);
+  if (rolls) {
+    const left = rollsLeft(m);
+    const [big, small] = m.suddenDeath ? ['Next', 'score wins'] : m.step.type === 'halftime' ? [String(Math.round(m.target.rolls / 2)), 'rolls a half'] : m.lastPlay ? ['Last', 'play'] : [String(left), left === 1 ? 'roll left' : 'rolls left'];
+    clock.replaceChildren(el('b', null, big), el('small', null, small));
+    clock.classList.toggle('red', m.lastPlay || m.suddenDeath || (left <= 5 && m.step.type !== 'halftime'));
+    $('#board-target').textContent = over ? (m.winner === null ? 'Draw' : '') : '';
+  } else {
+    $('#board-target').textContent = m.half === 1 ? `HT ${m.target.half}\nFT ${m.target.full}` : `First to\n${m.target.full}`;
+  }
   for (const team of [0, 1]) {
     const t = m.teams[team];
     const side = document.querySelector(`.side[data-team="${team}"]`);
@@ -1000,18 +1112,23 @@ function renderBoard(m) {
     } else {
       score.textContent = t.score;
     }
+    side.querySelector('.side-bar').hidden = rolls;
     side.querySelector('.side-bar i').style.width = `${Math.min(100, (t.score / m.target.full) * 100)}%`;
     const hasBall = m.attacker === team && !over && m.step.type !== 'halftime';
     side.classList.toggle('has-ball', hasBall);
     side.querySelector('.poss').hidden = !hasBall;
 
     const cardBtn = side.querySelector('.side-card');
-    if (t.card) {
+    if (t.cards.length) {
       cardBtn.hidden = false;
-      cardBtn.replaceChildren(cardChip(t.card, 'tc-chip on-board', t.cardRarity));
-      const uses = cardUses(m, team);
-      cardBtn.classList.toggle('spent', !!uses && !uses.left);
-      cardBtn.setAttribute('aria-label', `${possessive(t.name)} team card: ${RARITY_BY_ID[t.cardRarity || 'common'].name} ${CARD_BY_ID[t.card].name}. Show what it does.`);
+      cardBtn.replaceChildren(...t.cards.map(c => {
+        const chip = cardChip(c.id, 'tc-chip on-board', c.rarity);
+        const uses = cardUses(m, team, c);
+        chip.classList.toggle('spent', !!uses && !uses.left);
+        return chip;
+      }));
+      const names = t.cards.map(c => `${RARITY_BY_ID[c.rarity].name} ${CARD_BY_ID[c.id].name}`).join(' and ');
+      cardBtn.setAttribute('aria-label', `${possessive(t.name)} team cards: ${names}. Show what they do.`);
       cardBtn.onclick = () => openCardDialog(team);
     } else {
       cardBtn.hidden = true;
@@ -1137,8 +1254,8 @@ function renderLog() {
 
 // ---------- Draft ----------
 
-// The three dealt cards, while the sides pick. `picked`: a card picked just
-// now, stamped with a flourish.
+// The five dealt cards, while the sides pick two each. `picked`: a card
+// picked just now, stamped with a flourish.
 function renderDraft(m, picked = null) {
   const panel = $('#draft');
   const on = m.step.purpose === 'draft' || !!picked;
@@ -1152,22 +1269,29 @@ function renderDraft(m, picked = null) {
   const picker = drafting ? m.teams[step.team] : null;
   const who = drafting ? controllerOf(m) : null;
   $('#draft-title').textContent = drafting ? `${picker.name} to pick` : 'Cards picked';
-  const catching = drafting && !step.first && step.options.some(id => draftRarity(m, id) !== m.dealRarity[id]);
-  $('#draft-sub').textContent = drafting && !step.first
-    ? `${loser.name} picked first. ${picker.name} take one of the other two.${catching ? ' Their pick was rarer, so yours goes up a rarity.' : ''}`
-    : `${winner.name} won the toss and receive the kick-off, so ${loser.name} pick first.`;
+  $('#draft-sub').textContent = `${winner.name} won the toss and receive the kick-off. ${loser.name} pick 1st and 4th, ${winner.name} 2nd and 3rd; the last card is discarded.`;
+
+  // The four picks in order, each filled in once made.
+  const order = $('#draft-order');
+  order.innerHTML = '';
+  const seen = [0, 0];
+  for (let pick = 0; pick < 4; pick++) {
+    const team = drafterOf(m, pick);
+    const card = m.teams[team].cards[seen[team]++];
+    const slot = el('li', `dp${drafting && step.pick === pick ? ' now' : ''}${card ? ' done' : ''}`);
+    kitVars(slot, m.teams[team]);
+    slot.append(el('b', null, String(pick + 1)), el('span', 'dp-team', m.teams[team].name), el('span', 'dp-card', card ? CARD_BY_ID[card.id].name : drafting && step.pick === pick ? 'Picking…' : '—'));
+    order.append(slot);
+  }
 
   const host = $('#draft-cards');
   host.innerHTML = '';
   for (const id of m.deal) {
-    const takenBy = m.teams.findIndex(t => t.card === id);
-    const dealt = m.dealRarity?.[id] || 'common';
-    const rarity = takenBy >= 0 ? m.teams[takenBy].cardRarity || dealt : draftRarity(m, id);
+    const takenBy = m.teams.findIndex(t => t.cards.some(c => c.id === id));
+    const rarity = m.dealRarity?.[id] || 'common';
     const node = cardArt(id, { rarity, taken: takenBy >= 0 ? m.teams[takenBy] : null, tag: 'button' });
-    if (rarity !== dealt) {
-      node.classList.add('caught-up');
-      node.querySelector('.tc-rarity').append(el('small', 'tc-up', `↑ from ${RARITY_BY_ID[dealt].name}`));
-    }
+    const discarded = !drafting && takenBy < 0;
+    if (discarded) node.classList.add('discarded');
     node.type = 'button';
     const pickable = drafting && takenBy < 0 && who === 'human' && !ui.busy;
     node.disabled = !pickable;
@@ -1176,7 +1300,7 @@ function renderDraft(m, picked = null) {
       node.addEventListener('click', () => humanAct({ type: 'choose', value: id }));
     }
     const card = cardTier(id, rarity);
-    node.setAttribute('aria-label', `${card.name}, ${RARITY_BY_ID[rarity].name} ${card.tag}. ${card.text}${takenBy >= 0 ? ` Picked by ${m.teams[takenBy].name}.` : ''}`);
+    node.setAttribute('aria-label', `${card.name}, ${RARITY_BY_ID[rarity].name} ${card.tag}. ${card.text}${takenBy >= 0 ? ` Picked by ${m.teams[takenBy].name}.` : discarded ? ' Discarded.' : ''}`);
     if (picked === id) node.classList.add('just-picked');
     host.append(node);
   }
@@ -1186,8 +1310,9 @@ function renderDraft(m, picked = null) {
   if (!drafting) return;
   const kit = el('span', 'kit');
   kitVars(kit, picker);
+  const nth = ['first', 'second', 'third', 'fourth'][step.pick];
   if (who === 'human') {
-    status.append(kit, el('b', null, picker.name), document.createTextNode(m.mode === '2p' ? ', your pick: tap a card' : ': tap a card to pick it'));
+    status.append(kit, el('b', null, picker.name), document.createTextNode(m.mode === '2p' ? `, your ${nth} pick: tap a card` : `: your ${nth} pick, tap a card`));
   } else {
     status.classList.add('waiting');
     status.append(el('i', 'spin'), kit, el('b', null, picker.name), document.createTextNode(who === 'remote' ? ' are picking on their phone…' : ' are picking…'));
@@ -1199,7 +1324,67 @@ async function showDraftPick(after, e) {
   renderDraft(after, e.card);
   play('stamp');
   if (ui.prefs.haptics) buzz(25);
-  await skippable(e.first ? 900 * speed() : 1100 * speed());
+  await skippable(e.last ? 1300 * speed() : 800 * speed());
+}
+
+// ---------- The dice guide ----------
+
+const GUIDE_TITLES = {
+  attack: g => `${PLAYERS[g.die].name} die`,
+  tackle: () => 'Tackle · two brown dice',
+  ruck: () => 'Ruck · black die',
+  try: () => 'Try · black die',
+  range: () => 'Kick range · brown die',
+  penalty: () => 'Penalty · card check',
+  kick: () => 'Kick · black die',
+  setpiece: (g, m) => `${m.step.piece === 'scrum' ? 'Scrum' : 'Lineout'} · white die`,
+};
+
+// What each face of the coming roll would do, under the dice: green good,
+// red bad, for this phone's side (or the side rolling, two on one phone).
+function renderGuide(m) {
+  const host = $('#guide');
+  const on = ui.prefs.guide && m.step.type === 'roll' && m.attacker !== null;
+  host.hidden = !on;
+  host.classList.remove('rolled');
+  $('#tray').classList.toggle('guided', on);
+  if (!on) return;
+  const viewer = viewerOf(m);
+  const g = rollGuide(m, viewer ?? m.step.team);
+  const roller = m.teams[g.team];
+  const head = $('#guide-head');
+  const badge = dieBadges(m)[0];
+  const swatch = el('span', 'kit');
+  kitVars(swatch, roller);
+  head.replaceChildren(swatch, el('b', null, `${roller.name} · ${GUIDE_TITLES[g.purpose](g, m)}`));
+  if (badge) head.append(badgeNode(badge));
+  const faces = $('#guide-faces');
+  faces.innerHTML = '';
+  const text = $('#guide-text');
+  const mine = viewer === null || viewer === g.team;
+  const tally = `${g.good} good, ${g.bad} bad${mine ? '' : ' for you'}`;
+  text.textContent = g.summary ? `${g.summary} ` : `${tally}. Tap a face for more.`;
+  for (const f of g.faces) {
+    const b = el('button', `gf tone-${f.tone}`);
+    b.type = 'button';
+    b.dataset.face = f.index;
+    b.append(faceTile(g.die, f.index, 'mini'), el('b', 'gf-cap', f.caption), el('small', 'gf-note', f.note || ' '));
+    b.setAttribute('aria-label', `${faceLabel(g.die, f.index)}: ${f.text} ${{ good: 'Good', bad: 'Bad', ok: 'Neither' }[f.tone]}${mine ? '' : ' for you'}.`);
+    b.addEventListener('click', () => {
+      faces.querySelectorAll('.gf').forEach(x => x.classList.toggle('picked', x === b));
+      text.textContent = f.text;
+    });
+    faces.append(b);
+  }
+}
+
+// The dice have landed: light up the faces they show.
+function markGuide(roll) {
+  const host = $('#guide');
+  if (host.hidden) return;
+  host.classList.add('rolled');
+  const hits = roll.purpose === 'penalty' ? [roll.faces[0]] : roll.faces;
+  host.querySelectorAll('.gf').forEach(b => b.classList.toggle('hit', hits.includes(Number(b.dataset.face))));
 }
 
 // ---------- Dock ----------
@@ -1285,6 +1470,7 @@ function renderDock(m, locked) {
   kitVars(swatch, team);
   const cpuTurn = isAutomatic(m);
   prompt.append(swatch, el('b', null, team.name), el('span', null, `· ${promptText(m)}`));
+  if (m.attacker !== null && who !== 'cpu') prompt.append(autoButton());
 
   if (who === 'remote') {
     actions.append(waitingButton(team, `Waiting for ${team.name}…`));
@@ -1298,14 +1484,15 @@ function renderDock(m, locked) {
     btn.type = 'button';
     btn.dataset.primary = '';
     kitVars(btn, team);
+    const badges = step.type === 'roll' ? dieBadges(m) : [];
     if (cpuTurn) {
       btn.classList.add('waiting');
-      const name = who === 'cpu' ? team.name : 'Auto-tackle';
+      const name = who === 'cpu' ? team.name : ui.auto ? 'Auto-roll' : 'Auto-tackle';
       btn.append(el('span', null, step.type === 'roll' ? `${name}: ${label}` : ui.thinking && m.cpuLevel === 'expert' ? `${name} thinking ahead…` : `${name} deciding`));
       btn.setAttribute('aria-label', `${name} is playing. Tap to hurry.`);
     } else {
       const chipRow = el('span', 'chips');
-      chips.forEach(id => chipRow.append(dieChip(id)));
+      chips.forEach((id, i) => chipRow.append(dieChip(id, undefined, badges[i] ? [badges[i]] : [])));
       btn.append(chipRow, el('span', null, label));
     }
     btn.disabled = locked && !cpuTurn;
@@ -1346,8 +1533,10 @@ function renderDock(m, locked) {
     for (const pos of step.options) {
       const odds = receiverOdds(m, step.team, pos);
       const name = surname(m, step.team, pos);
+      const hurt = playerBadge(m, step.team, pos);
       actions.append(choiceButton({
         die: pos,
+        badge: hurt,
         title: PLAYERS[pos].name,
         sub: `${name ? `${name} · ` : ''}${odds.special.label} ${odds.special.value}`,
         odds: showOdds() ? [[`Break ${pct(odds.lineBreak)}`, 'up'], [`Error ${pct(odds.error)}`, 'down']] : null,
@@ -1363,7 +1552,8 @@ function renderDock(m, locked) {
     const kick = step.purpose === 'drop' ? 'drop' : 'penalty';
     const bonus = kickBonus(m, step.team, kick);
     const parts = kickParts(m, step.team, kick);
-    const extras = [parts.card ? `+${metres(parts.card)} ${CARD_BY_ID[m.teams[step.team].card].name}` : '', parts.wind > 0 ? `+${metres(parts.wind)} wind` : parts.wind < 0 ? `−${metres(-parts.wind)} into the wind` : ''].filter(Boolean);
+    const cardNames = kickCards(m, step.team, kick).map(id => CARD_BY_ID[id].name).join(' + ');
+    const extras = [parts.card ? `+${metres(parts.card)} ${cardNames}` : '', parts.wind > 0 ? `+${metres(parts.wind)} wind` : parts.wind < 0 ? `−${metres(-parts.wind)} into the wind` : ''].filter(Boolean);
     const p = kickChance(step.range, bonus);
     actions.append(choiceButton({
       icon: '3',
@@ -1387,11 +1577,31 @@ function simpleButton(text, onClick, className) {
   return b;
 }
 
-function choiceButton({ die, icon, title, sub, odds, suggested, onClick, locked }) {
+// Auto-roll on or off, for this match (and, off line, the next ones).
+function autoButton() {
+  const b = el('button', `auto-btn${ui.auto ? ' on' : ''}`);
+  b.type = 'button';
+  b.setAttribute('aria-pressed', String(ui.auto));
+  b.title = 'Auto-roll: rolls your dice for you and stops at every decision';
+  b.append(el('i', null, ui.auto ? '❚❚' : '▶'), el('span', null, 'Auto'));
+  b.addEventListener('click', e => {
+    e.stopPropagation();
+    ui.auto = !ui.auto;
+    if (ui.context?.kind !== 'online') setPref('autoRoll', ui.auto);
+    clearTimeout(ui.cpuTimer);
+    if (!ui.busy) {
+      renderDock(ui.match, false);
+      schedule();
+    }
+  });
+  return b;
+}
+
+function choiceButton({ die, badge, icon, title, sub, odds, suggested, onClick, locked }) {
   const b = el('button', `choice${suggested ? ' suggested' : ''}${sub || odds ? '' : ' simple'}`);
   b.type = 'button';
   b.dataset.choice = '';
-  if (die) b.append(dieChip(die));
+  if (die) b.append(dieChip(die, undefined, badge ? [badge] : []));
   else b.append(el('span', 'ico', icon));
   b.append(el('b', null, title));
   if (sub) b.append(el('small', null, sub));
@@ -1508,6 +1718,7 @@ function bindTabs() {
 
 function breakTitle(m, full) {
   if (!full) return 'Half time';
+  if (m.winner === null) return 'A draw';
   const winner = m.teams[m.winner].name;
   const kind = ui.context?.kind;
   const me = kind === 'online' ? ui.context.team : kind === '2p' ? null : 0;
@@ -1534,7 +1745,7 @@ function openBreak() {
     kitVars(kit, t);
     name.append(kit, el('span', null, t.name));
     cell.append(name, el('span', 'bs-num', t.score));
-    if (t.card) cell.append(cardChip(t.card, 'tc-chip on-board', t.cardRarity || 'common'));
+    for (const c of t.cards) cell.append(cardChip(c.id, 'tc-chip on-board', c.rarity));
     cell.dataset.team = team;
     return cell;
   };
@@ -1633,10 +1844,10 @@ function openBreak() {
 function openCardDialog(team) {
   const m = ui.match;
   const t = m.teams[team];
-  if (!t.card) return;
-  $('#card-team').textContent = 'Team card';
-  $('#card-title').textContent = `${possessive(t.name)} card`;
-  $('#card-detail').replaceChildren(cardArt(t.card, { rarity: t.cardRarity || 'common', uses: cardUses(m, team) }));
+  if (!t.cards.length) return;
+  $('#card-team').textContent = 'Team cards';
+  $('#card-title').textContent = `${possessive(t.name)} cards`;
+  $('#card-detail').replaceChildren(...t.cards.map(c => cardArt(c.id, { rarity: c.rarity, uses: cardUses(m, team, c) })));
   openDialog('dlg-card');
 }
 
@@ -1721,7 +1932,7 @@ function renderTournament() {
 
 function startTournament(state) {
   unlockAudio();
-  const options = { userTeam: state.team, length: state.length, cards: state.cards, bench: state.bench, weather: state.weather };
+  const options = { userTeam: state.team, length: state.length, format: state.format || 'rolls', cards: state.cards, bench: state.bench, weather: state.weather };
   ui.tournament = LEAGUES[state.comp]
     ? createLeague({ ...options, league: state.comp, season: state.season })
     : state.comp === 'champions' ? createChampions(options) : createCup(options);
@@ -1921,7 +2132,7 @@ function copyDailyResult() {
 // friends/<code>/results/<fixtureId>. Every phone subscribes to all three
 // and rebuilds the league from them (see friends.js).
 
-const FRIENDS_FORM = { league: 'prem', team: null, season: 'short', length: 'quick', cards: true, bench: true, weather: false, code: '' };
+const FRIENDS_FORM = { league: 'prem', team: null, season: 'short', length: 'quick', format: 'rolls', cards: true, bench: true, weather: false, code: '' };
 
 async function friendsCaps() {
   const [db, user] = await Promise.all([capability('db'), capability('user')]);
@@ -2071,7 +2282,7 @@ const friendsHandlers = {
         if (!(await db.doc(`friends/${code}`).get()).exists) break;
       }
       const seed = Math.floor(strongRandom() * 2 ** 32);
-      await db.doc(`friends/${code}`).set(newFriendsLeague({ code, league: form.league, season: form.season, length: form.length, cards: form.cards, bench: form.bench, weather: form.weather, host: me, seed }));
+      await db.doc(`friends/${code}`).set(newFriendsLeague({ code, league: form.league, season: form.season, length: form.length, format: form.format, cards: form.cards, bench: form.bench, weather: form.weather, host: me, seed }));
       await claimClub(code, form.team);
       f.error = null;
       subscribeFriends(code);
@@ -2173,6 +2384,9 @@ function playFriendsFixture() {
     phase: 'checking',
     role,
     length: t.length,
+    format: t.format || 'points',
+    // Friends' play-off matches can't end level.
+    decider: fx.stage !== 'league',
     cards: t.cards,
     bench: !!t.bench,
     weather: !!t.weather,
@@ -2256,7 +2470,7 @@ const netMessage = code => NET_ERRORS[code] || 'Couldn’t connect. Check your c
 
 async function openOnline() {
   unlockAudio();
-  ui.lobby = { phase: 'checking', length: 'quick', cards: true, bench: true, weather: false, team: myOnlineTeam(), code: '', error: null };
+  ui.lobby = { phase: 'checking', length: 'quick', format: 'rolls', cards: true, bench: true, weather: false, team: myOnlineTeam(), code: '', error: null };
   showView('online');
   renderLobby();
   const room = await roomCapability();
@@ -2364,7 +2578,7 @@ async function kickOffOnline() {
   let guest = s.peer.team;
   if (clash(me.color, guest.color)) guest = { ...guest, color: KITS.find(k => !clash(k.color, me.color)).color, kit: null };
   if (guest.name.toLowerCase() === me.name.toLowerCase()) guest = { ...guest, name: `${guest.name.slice(0, 11)} II` };
-  const start = await s.kickOff({ length: ui.lobby.length, cards: ui.lobby.cards, bench: ui.lobby.bench, weather: ui.lobby.weather ? rollWeather() : null, guestTeam: guest });
+  const start = await s.kickOff({ length: ui.lobby.length, format: ui.lobby.format || 'rolls', decider: !!ui.lobby.decider, cards: ui.lobby.cards, bench: ui.lobby.bench, weather: ui.lobby.weather ? rollWeather() : null, guestTeam: guest });
   beginOnlineMatch(s, start);
 }
 
@@ -2483,7 +2697,7 @@ function onlineRematch() {
   const o = ui.online;
   if (!o || o.role !== 'host') return;
   const m = ui.match;
-  o.session.kickOff({ length: m.length, cards: m.cards, bench: m.bench, weather: m.weather ? rollWeather() : null, guestTeam: { name: m.teams[1].name, color: m.teams[1].color, kit: m.teams[1].kit, roster: m.teams[1].roster } }).then(start => {
+  o.session.kickOff({ length: m.length, format: m.format, decider: m.decider, cards: m.cards, bench: m.bench, weather: m.weather ? rollWeather() : null, guestTeam: { name: m.teams[1].name, color: m.teams[1].color, kit: m.teams[1].kit, roster: m.teams[1].roster } }).then(start => {
     ui.online = { ...o, mid: start.mid, start };
     startMatch(null, { kind: 'online', team: 0, mid: start.mid }, startingMatch(start, 'host'));
   });
@@ -2609,11 +2823,13 @@ function renderSettings() {
   $('#set-haptics').checked = ui.prefs.haptics;
   $('#set-meter').checked = ui.prefs.meter;
   $('#set-coach').checked = ui.prefs.coach;
+  $('#set-guide').checked = ui.prefs.guide;
+  $('#set-autoroll').checked = ui.prefs.autoRoll;
   $('#set-cinema').value = ui.prefs.cinema;
 }
 
 function bindSettings() {
-  const map = { 'set-sound': 'sound', 'set-odds': 'odds', 'set-fast': 'fast', 'set-autodef': 'autoDefence', 'set-haptics': 'haptics', 'set-meter': 'meter', 'set-coach': 'coach' };
+  const map = { 'set-sound': 'sound', 'set-odds': 'odds', 'set-fast': 'fast', 'set-autodef': 'autoDefence', 'set-haptics': 'haptics', 'set-meter': 'meter', 'set-coach': 'coach', 'set-guide': 'guide', 'set-autoroll': 'autoRoll' };
   for (const [id, key] of Object.entries(map)) {
     $(`#${id}`).addEventListener('change', e => {
       // Turning tips back on starts them from the beginning.
@@ -2621,6 +2837,8 @@ function bindSettings() {
         ui.coachSeen = [];
         save('coach', ui.coachSeen);
       }
+      // Auto-roll set here takes effect in the match being played too (off line).
+      if (key === 'autoRoll' && ui.context?.kind !== 'online') ui.auto = e.target.checked;
       setPref(key, e.target.checked);
     });
   }

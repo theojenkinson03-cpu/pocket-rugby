@@ -38,8 +38,13 @@ export function stateAt({
   yellows = [0, 0],
   length = 'standard',
   firstReceiver = 0,
+  format = 'points',
+  decider = false,
+  clock = 0,
 } = {}) {
-  const m = newMatch({ mode: '2p', length });
+  const m = newMatch({ mode: '2p', length, format, decider });
+  m.clock = clock;
+  m.rolls = clock + (half === 2 ? Math.round(m.target.rolls / 2) : 0);
   m.attacker = attacker;
   m.firstReceiver = firstReceiver;
   m.carrier = carrier;
@@ -69,8 +74,10 @@ export const RULES = {
   // Forward - Line Break 6; Centre - Thru the gap 7; Wing - Into the corner 8; Back - High ball 6."
   specials: { F: ['Line Break', 6], C: ['Thru the Gap', 7], W: ['Into the Corner', 8], B: ['High Ball', 6] },
 
-  // "DROP GOAL: a specialized kicking option for the Centre and Back."
+  // "DROP GOAL: a specialized kicking option for the Centre and Back." This
+  // game's change: the Centre gives the chance to the Fly Half, who kicks.
   dropGoalKickers: ['C', 'B'],
+  dropGoalKicker: 'B',
 
   // Run value after modifiers. Quick tap: "+1 to all 'intensity' levels ... for
   // the next 3 attacking efforts". Injury: "-1 to that player's position run values".
@@ -143,12 +150,14 @@ export const RULES = {
   },
 };
 
-// Where play goes after points: full time, half time, or the scoring side
-// receives the restart ("Play then restarts with the scoring team receiving the kick off").
+// Where play goes after points: full time, half time, or the restart. The
+// printed rules give the restart to the scorers ("Play then restarts with
+// the scoring team receiving the kick off"); this game's change gives it to
+// the side that conceded (see RULES.md).
 export function expectedAfterScore(scores, scorer, half, target) {
   if (scores[scorer] >= target.full) return { type: 'fulltime' };
   if (half === 1 && scores.some(s => s >= target.half)) return { type: 'halftime' };
-  return { type: 'roll', purpose: 'attack', team: scorer, die: 'S' };
+  return { type: 'roll', purpose: 'attack', team: 1 - scorer, die: 'S' };
 }
 
 export const OUTSIDE_BACKS = POSITIONS.filter(p => p !== 'S');

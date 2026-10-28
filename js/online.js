@@ -56,12 +56,14 @@ function replayRng(values) {
 export function encodeAction(action) {
   if (action.type === 'roll') return { t: 'r' };
   if (action.type === 'continue') return { t: 'n' };
+  if (action.type === 'timeout') return { t: 't' };
   return { t: 'c', v: action.value };
 }
 
 export function decodeAction(a) {
   if (a?.t === 'r') return { type: 'roll' };
   if (a?.t === 'n') return { type: 'continue' };
+  if (a?.t === 't') return { type: 'timeout' };
   if (a?.t === 'c' && typeof a.v === 'string') return { type: 'choose', value: a.v };
   return null;
 }
@@ -96,6 +98,8 @@ export function startingMatch(start, myRole) {
     cards: start.cards,
     bench: start.bench === true,
     weather: sanitiseWeather(start.weather),
+    format: start.format === 'rolls' ? 'rolls' : 'points',
+    decider: start.decider === true,
     tossCaller: 1,
     controllers: host ? ['human', 'remote'] : ['remote', 'human'],
   });
@@ -109,7 +113,8 @@ export function applyRemote(match, entry, remoteTeam) {
   const action = decodeAction(entry.a);
   if (!action || !isLegal(match, action)) return { ok: false, reason: 'illegal move' };
   const values = entry.r;
-  if (!Array.isArray(values) || values.length > 8 || !values.every(v => typeof v === 'number' && v >= 0 && v < 1)) {
+  // The most a move uses: the toss and a five-card deal, a card and a rarity each.
+  if (!Array.isArray(values) || values.length > 16 || !values.every(v => typeof v === 'number' && v >= 0 && v < 1)) {
     return { ok: false, reason: 'bad dice' };
   }
   try {
@@ -242,11 +247,11 @@ export class OnlineSession {
   // Host: set the match up and kick it off. Every match has its own id,
   // `mid`, sent with each phone's moves so a rematch never picks up moves
   // from the match before.
-  kickOff({ length, cards, bench = false, weather = null, guestTeam, rng = strongRandom }) {
+  kickOff({ length, cards, bench = false, weather = null, format = 'points', decider = false, guestTeam, rng = strongRandom }) {
     const mid = makeCode(rng);
     this.mid = mid;
     this.log = [];
-    const start = { mid, length, cards, bench, weather, teams: [this.team, sanitiseTeam(guestTeam)] };
+    const start = { mid, length, cards, bench, weather, format, decider, teams: [this.team, sanitiseTeam(guestTeam)] };
     return this.publish({ start, mid, log: [], seq: 0, hash: null }).then(() => start);
   }
 

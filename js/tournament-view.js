@@ -11,6 +11,9 @@ import { canContinue, nextStep } from './club.js';
 import { clubSection } from './club-view.js';
 import { MATCH_LENGTHS } from './engine.js';
 import { button, el, tallButton, toggleRow } from './dom.js';
+
+// How the table works, in a sentence.
+export const POINTS_TEXT = `A win is worth ${POINTS.win} points and a draw ${POINTS.draw}, with a bonus point for winning by ${POINTS.bigWinBy} or more or losing by ${POINTS.losingBonusWithin} or fewer.`;
 import { kitVars } from './color.js';
 
 const STRENGTH = { expert: ['Favourites', 3], pro: ['Contenders', 2], rookie: ['Outsiders', 1] };
@@ -123,7 +126,8 @@ export function tournamentSetup(state, { onChange, onStart }) {
   if (league) {
     page.append(seg('Season', 't-season', [['short', 'Short', `${SHORT_SEASON} rounds`], ['full', 'Full', `${full} rounds · everyone once`]], state.season, v => onChange({ season: v })));
   }
-  page.append(seg('Match length', 't-length', Object.entries(MATCH_LENGTHS).map(([k, v]) => [k, v.label, `HT ${v.half} · FT ${v.full}`]), state.length, v => onChange({ length: v })));
+  page.append(seg('Match type', 't-format', [['rolls', 'On the clock', 'A set number of rolls'], ['points', 'Race', 'First to a score']], state.format || 'rolls', v => onChange({ format: v })));
+  page.append(seg('Match length', 't-length', Object.entries(MATCH_LENGTHS).map(([k, v]) => [k, v.label, (state.format || 'rolls') === 'rolls' ? `${v.rolls} rolls` : `HT ${v.half} · FT ${v.full}`]), state.length, v => onChange({ length: v })));
 
   page.append(
     toggleRow('Team cards', 'A draft before every match', state.cards, on => onChange({ cards: on })),
@@ -137,7 +141,7 @@ export function tournamentSetup(state, { onChange, onStart }) {
     : europe
       ? `Up to 8 matches: 4 in your pool, against the clubs from the other two leagues, then a round of 16, quarter-finals, semi-finals and the final in Lyon. ${CHAMPIONS_TEXT}`
       : 'Up to 5 matches: 3 in your pool, then a semi-final and the final.';
-  page.append(el('p', 'page-note', `${what} A win is worth 4 points, with a bonus point for 4 tries and one for losing by ${POINTS.losingBonusWithin} or fewer.`));
+  page.append(el('p', 'page-note', `${what} ${POINTS_TEXT}${(state.format || 'rolls') === 'rolls' ? ' A knockout match level at full time goes to sudden death: the next score wins.' : ''}`));
   const name = league ? league.short : europe ? CHAMPIONS_CUP.short : 'Nations Cup';
   page.append(button(`Start the ${name}`, () => onStart({ ...state, team }), 'btn btn-primary btn-wide', { primary: true }));
   if (league) page.append(el('p', 'page-note', 'When the season ends, carry on with your club into the next one, squad and all. Clubs in the Champions Cup play it after the league; the top eight qualify for the next.'));
@@ -166,7 +170,7 @@ function nextMatchCard(t, handlers) {
     const mine = t.champion === t.userTeam;
     card.append(el('p', 'nc-kicker', `${tName(t)} · Final whistle`), el('h3', 'nc-title', mine ? 'Champions!' : `${champ.name} win the ${tName(t)}`));
     const rec = userRecord(t);
-    card.append(el('p', 'nc-meta', `Your record: won ${rec.won}, lost ${rec.lost}.`));
+    card.append(el('p', 'nc-meta', `Your record: won ${rec.won}${rec.drawn ? `, drawn ${rec.drawn}` : ''}, lost ${rec.lost}.`));
     const best = playerOfTheSeason(seasonPlayers(t));
     if (best) card.append(el('p', 'nc-meta', `Player of the ${t.kind === 'league' ? 'season' : 'tournament'}: ${best.name}, ${teamOf(t, best.team).name} (${PLAYERS[best.pos].one}).`));
     // A league season (or a club career's Champions Cup) rolls on.
@@ -220,7 +224,8 @@ function nextMatchCard(t, handlers) {
   const ground = venue(t, f);
   if (ground) card.append(el('p', `nc-venue${ground.neutral ? ' neutral' : ''}`, ground.neutral ? `${ground.name} · neutral ground` : ground.name));
   const extras = [t.cards && 'team cards', t.bench && 'bench', t.weather && 'weather'].filter(Boolean);
-  card.append(tallButton('Play', [`${MATCH_LENGTHS[t.length].label} match`, ...extras].join(' · '), handlers.onPlay, 'btn btn-primary btn-play'));
+  const format = (t.format || 'points') === 'rolls' ? `${MATCH_LENGTHS[t.length].rolls} rolls` : `first to ${MATCH_LENGTHS[t.length].full}`;
+  card.append(tallButton('Play', [`${MATCH_LENGTHS[t.length].label} match, ${format}`, ...extras].join(' · '), handlers.onPlay, 'btn btn-primary btn-play'));
   card.querySelector('.btn-play').dataset.primary = '';
   return card;
 }
@@ -233,7 +238,8 @@ export function table(t, group) {
   wrap.append(el('h3', 'page-h', group === 'L' ? `${tName(t)} table` : `Pool ${group}`));
   const tbl = el('table', 'table');
   const head = el('tr');
-  for (const [h, title] of [['', ''], ['Team', ''], ['P', 'Played'], ['W', 'Won'], ['L', 'Lost'], ['PD', 'Points difference'], ['BP', 'Bonus points'], ['Pts', 'Table points']]) {
+  const draws = rows.some(r => r.drawn);
+  for (const [h, title] of [['', ''], ['Team', ''], ['P', 'Played'], ['W', 'Won'], ...(draws ? [['D', 'Drawn']] : []), ['L', 'Lost'], ['PD', 'Points difference'], ['BP', 'Bonus points'], ['Pts', 'Table points']]) {
     const th = el('th', null, h);
     if (title) th.title = title;
     head.append(th);
@@ -247,12 +253,12 @@ export function table(t, group) {
     const name = el('td', 'tn');
     name.append(kitChip(team), el('span', 'tn-long', team.name), el('span', 'tn-short', team.short));
     const pd = row.for - row.against;
-    tr.append(el('td', 'pos', i + 1), name, el('td', null, row.played), el('td', null, row.won), el('td', null, row.lost), el('td', null, pd > 0 ? `+${pd}` : pd), el('td', null, row.bonus), el('td', 'pts', row.points));
+    tr.append(el('td', 'pos', i + 1), name, el('td', null, row.played), el('td', null, row.won), ...(draws ? [el('td', null, row.drawn)] : []), el('td', null, row.lost), el('td', null, pd > 0 ? `+${pd}` : pd), el('td', null, row.bonus), el('td', 'pts', row.points));
     body.append(tr);
   });
   tbl.append(thead, body);
   wrap.append(tbl);
-  wrap.append(el('p', 'table-note', group === 'L' ? PLAYOFF_TEXT[t.playoff || 'top4'] : europe ? CHAMPIONS_TEXT : 'The top two go through to the semi-finals.'));
+  wrap.append(el('p', 'table-note', `${group === 'L' ? PLAYOFF_TEXT[t.playoff || 'top4'] : europe ? CHAMPIONS_TEXT : 'The top two go through to the semi-finals.'} ${POINTS_TEXT}`));
   return wrap;
 }
 
@@ -262,7 +268,7 @@ function fixtureRow(t, f) {
   const side = (id, i) => {
     const team = teamOf(t, id);
     const s = el('span', `fx-team${i ? ' away' : ''}`);
-    const won = f.result && (f.result.winner === 'home') === (i === 0);
+    const won = f.result && f.result.winner !== 'draw' && (f.result.winner === 'home') === (i === 0);
     if (won) s.classList.add('won');
     s.append(kitChip(team), el('span', 'tn-long', team.name), el('span', 'tn-short', team.short));
     return s;

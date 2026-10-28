@@ -219,7 +219,7 @@ test('every conversion: all 36 range and kick pairs', () => {
       assert.equal(after.teams[0].score, good ? 7 : 5, `range ${r} kick ${k}`);
       assert.equal(after.teams[0].stats.conversionAttempts, 1);
       assert.equal(after.teams[0].stats.conversions, good ? 1 : 0);
-      assert.equal(after.attacker, 0, 'the scoring team receives, made or missed');
+      assert.equal(after.attacker, 1, 'the side that conceded has the restart, made or missed');
       assert.deepEqual(after.step.dice, ['S']);
       const kick = events.find(e => e.type === 'kick');
       assert.equal(kick.distance, DICE.K.faces[k].kick);
@@ -235,20 +235,25 @@ test('every drop goal: all 36 range and kick pairs, kicked or passed', () => {
       m = roll(m, dice(faceOf(pos, f => f.kind === 'drop'))).state;
       m = roll(m, dice(r)).state;
       const range = DICE.D.faces[r].value;
-      assert.deepEqual(m.step, { type: 'choose', purpose: 'drop', team: 0, range, from: pos, options: ['kick', 'pass'] });
+      // The Fly Half has the chance, whoever rolled it.
+      const kicker = RULES.dropGoalKicker;
+      assert.equal(m.carrier, kicker);
+      assert.deepEqual(m.step, { type: 'choose', purpose: 'drop', team: 0, range, from: kicker, options: ['kick', 'pass'] });
 
       const passed = choose(m, 'pass').state;
       assert.equal(passed.step.purpose, 'pass', '"If you feel your kicker is out of range, then you will opt to PASS"');
-      assert.deepEqual(passed.step.options, OUTSIDE_BACKS.filter(p => p !== pos));
+      assert.deepEqual(passed.step.options, OUTSIDE_BACKS.filter(p => p !== kicker));
       assert.equal(passed.teams[0].stats.dropAttempts, 0);
 
       for (const k of range6) {
         const kicked = choose(m, 'kick').state;
-        const { state: after } = roll(kicked, dice(k));
+        const { state: after, events } = roll(kicked, dice(k));
         const good = RULES.kickGood(r, k);
         assert.equal(after.teams[0].score, good ? 3 : 0, `${pos} range ${r} kick ${k}`);
         assert.equal(after.teams[0].stats.dropAttempts, 1);
-        assert.equal(after.attacker, good ? 0 : 1, good ? 'scorers receive' : 'a miss hands the ball over');
+        assert.equal(events.find(e => e.type === 'kick').kicker, kicker);
+        assert.equal(after.teams[0].players[kicker].points, good ? 3 : 0);
+        assert.equal(after.attacker, 1, 'made or missed, the other side has the ball');
       }
     }
   }
@@ -299,7 +304,7 @@ test('every penalty kick and every quick tap', () => {
       const good = DICE.K.faces[k].kick >= range;
       assert.equal(after.teams[1].score, good ? 3 : 0, `range ${range} kick ${k}`);
       assert.equal(after.teams[1].stats.penaltyAttempts, 1);
-      assert.equal(after.attacker, good ? 1 : 0);
+      assert.equal(after.attacker, 0, 'made or missed, the other side has the ball');
     }
     const tapped = choose(m, 'tap').state;
     assert.equal(tapped.quickTap, QUICK_TAP_RUNS);
@@ -388,7 +393,7 @@ test('score thresholds: every scoring kind from every score, in both halves and 
             assert.equal(m.teams[0].score, mine + points);
             assert.equal(m.step.type, want.type, `${length} half ${half} ${mine}-${theirs} ${kind}`);
             if (want.type === 'roll') {
-              assert.equal(m.attacker, 0, 'scorers receive');
+              assert.equal(m.attacker, want.team, 'the side that conceded has the restart');
               assert.deepEqual(m.step.dice, ['S']);
             }
             if (want.type === 'fulltime') assert.equal(m.winner, 0);

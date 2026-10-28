@@ -50,6 +50,22 @@ function teamEditor(state, handlers) {
 
 function settings(state, handlers) {
   const box = el('div', 'ol-settings');
+  const type = el('fieldset', 'seg');
+  type.append(el('legend', null, 'Match type'));
+  for (const [k, label, note] of [['rolls', 'On the clock', 'A set number of rolls'], ['points', 'Race', 'First to a score']]) {
+    const lab = el('label');
+    const input = el('input');
+    input.type = 'radio';
+    input.name = 'ol-format';
+    input.value = k;
+    input.checked = (state.format || 'rolls') === k;
+    input.addEventListener('change', () => handlers.onSettings({ format: k }));
+    const span = el('span', null, label);
+    span.append(el('small', null, note));
+    lab.append(input, span);
+    type.append(lab);
+  }
+  box.append(type);
   const seg = el('fieldset', 'seg seg-3');
   seg.append(el('legend', null, 'Match length'));
   for (const [k, v] of Object.entries(MATCH_LENGTHS)) {
@@ -61,7 +77,7 @@ function settings(state, handlers) {
     input.checked = state.length === k;
     input.addEventListener('change', () => handlers.onSettings({ length: k }));
     const span = el('span', null, v.label);
-    span.append(el('small', null, `FT ${v.full}`));
+    span.append(el('small', null, (state.format || 'rolls') === 'rolls' ? `${v.rolls} rolls` : `FT ${v.full}`));
     lab.append(input, span);
     seg.append(lab);
   }
@@ -102,7 +118,7 @@ export function lobbyPage(state, handlers) {
   if (state.phase === 'start') {
     page.append(teamEditor(state, handlers));
     const host = el('section', 'ol-card');
-    host.append(el('h3', 'page-h', 'Host a match'), el('p', null, 'Get a code to share. You choose the match length, team cards, the bench and the weather.'), button('Host a match', handlers.onHost, 'btn btn-primary btn-wide'));
+    host.append(el('h3', 'page-h', 'Host a match'), el('p', null, 'Get a code to share. You choose the match type and length, team cards, the bench and the weather. Online, your dice roll themselves (turn Auto off to roll by hand) and each decision has 10 seconds: run out of time and the other side gets a penalty.'), button('Host a match', handlers.onHost, 'btn btn-primary btn-wide'));
     const join = el('section', 'ol-card');
     const form = el('form', 'ol-join');
     const code = el('input', 'ol-code-input');

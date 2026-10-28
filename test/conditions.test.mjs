@@ -76,8 +76,7 @@ test('a kick into the wind falls 10 m short; with it, carries 10 m further', () 
 test('wind and a team card add up on a kick', () => {
   const m = stateAt({ step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'conversion', range: 5, kicker: 'B' } });
   m.cards = true;
-  m.teams[0].card = 'golden-boot';
-  m.teams[0].cardRarity = 'mythic';
+  m.teams[0].cards = [{ id: 'golden-boot', rarity: 'mythic' }];
   m.weather = { rain: false, wind: 1 };
   const ten = faceOf('K', f => f.kick === 1);
   const { events } = roll(m, dice(ten));
@@ -129,8 +128,7 @@ test('rain shows in the odds: one more error face in six for the Forwards and Ce
 test('an Epic Big Pack keeps hold of a wet ball', () => {
   const m = stateAt({ step: { type: 'roll', purpose: 'attack', dice: ['F'], team: 0 }, carrier: 'F' });
   m.cards = true;
-  m.teams[0].card = 'big-pack';
-  m.teams[0].cardRarity = 'epic';
+  m.teams[0].cards = [{ id: 'big-pack', rarity: 'epic' }];
   m.weather = { rain: true, wind: null };
   const { face, wet, swapped } = attackFace(m, 0, 'F', freePass('F'));
   assert.ok(wet && swapped === 'knockon' && face.kind === 'pass', 'the card turns the wet knock-on back into a pass');

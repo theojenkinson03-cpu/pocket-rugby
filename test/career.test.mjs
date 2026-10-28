@@ -16,9 +16,10 @@ function finished({ scores = [30, 10], winner = scores[0] > scores[1] ? 0 : 1, l
   m.teams.forEach((t, i) => {
     Object.assign(t.stats, stats[i]);
     for (const [pos, p] of Object.entries(players[i])) Object.assign(t.players[pos], p);
-    const [card, rarity] = (cards[i] || '').split(':');
-    t.card = card || null;
-    t.cardRarity = card ? rarity || 'common' : null;
+    t.cards = (cards[i] || '').split('+').filter(Boolean).map(card => {
+      const [id, rarity] = card.split(':');
+      return { id, rarity: rarity || 'common' };
+    });
   });
   return m;
 }
@@ -166,6 +167,13 @@ test('Mythic: a win with a Mythic card, and the rarest version of each card you 
   assert.ok(c.achievements.mythic);
   // The other side's Mythic is not yours.
   assert.ok(!unlocks(finished({ cards: ['jackal', 'fortress:mythic'] })).includes('mythic'));
+  // Both of the side's cards count.
+  recordMatch(c, finished({ cards: ['golden-boot+sure-hands:rare', null] }), newTracker(0), ctx());
+  assert.deepEqual(c.cardRarity, { jackal: 'epic', fortress: 'mythic', 'golden-boot': 'common', 'sure-hands': 'rare' });
+  // A draw on the clock is neither a win nor a defeat.
+  const drawn = newCareer();
+  recordMatch(drawn, finished({ scores: [14, 14], winner: null }), newTracker(0), ctx());
+  assert.deepEqual([drawn.played, drawn.won, drawn.lost, drawn.drawn, drawn.streak], [1, 0, 0, 1, 0]);
   // A career saved before rarities had no record of them.
   const old = newCareer();
   delete old.cardRarity;
@@ -260,7 +268,7 @@ test('real matches: the tracker and record never break, and every unlock is genu
     if (got.includes('hat-trick')) assert.ok(Object.values(m.teams[0].players).some(p => p.tries >= 3));
   }
   assert.equal(c.played, 150);
-  assert.equal(c.won + c.lost, 150);
+  assert.equal(c.won + c.lost + (c.drawn || 0), 150);
   assert.ok(c.won > 30 && c.lost > 30);
   assert.ok(Object.keys(c.achievements).length >= 8, `${Object.keys(c.achievements).length} achievements in 150 matches`);
 });

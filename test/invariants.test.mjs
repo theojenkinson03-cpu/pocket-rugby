@@ -5,9 +5,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, carryMetres, controllerOf, defenceModifier, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, rollWeather, seededRng, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
+import { act, carryMetres, controllerOf, defenceModifier, halfRolls, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, rollWeather, seededRng, TIMED_DECISIONS, timeUp, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
-import { CARD_BY_ID, CARD_IDS, catchUp, RARITY_IDS } from '../js/cards.js';
+import { cardEffects, CARD_IDS, RARITY_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
 import { DICE, POSITIONS } from '../js/dice.js';
 import { BROKEN_TEXT, RULES } from './helpers.mjs';
@@ -35,33 +35,33 @@ const replay = values => {
 function pickAction(m, rng, style) {
   if (m.step.type === 'roll') return { type: 'roll' };
   if (m.step.type === 'halftime') return { type: 'continue' };
+  // Now and then an online player runs out of time.
+  if (style === 'random' && TIMED_DECISIONS.includes(m.step.purpose) && rng() < 0.05) return { type: 'timeout' };
   if (style === 'random') return { type: 'choose', value: m.step.options[Math.floor(rng() * m.step.options.length)] };
   return { type: 'choose', value: cpuChoice({ ...m, cpuLevel: style }, rng) };
 }
 
-// A side's card effects at its rarity, read straight from the card list.
-const fx = (m, team) => CARD_BY_ID[m.teams[team].card]?.tiers[m.teams[team].cardRarity || 'common'].effects || {};
+// A side's card effects, both cards together (the merge has its own tests in cards).
+const fx = (m, team) => cardEffects(m, team);
+const cardKey = c => `${c.id}:${c.rarity}`;
 const PLAYER_SUMS = [['tries', 'tries'], ['carries', 'runs'], ['metres', 'metres'], ['lineBreaks', 'lineBreaks'], ['tackles', 'tackles'], ['missed', 'missedTackles'], ['bigHits', 'bigHits'], ['turnovers', 'turnoversWon'], ['errors', 'errors']];
 
 function checkCards(m, label) {
-  const drafted = m.teams.map(t => t.card);
+  const drafted = m.teams.flatMap(t => t.cards.map(c => c.id));
   if (!m.cards) {
-    assert.deepEqual(drafted, [null, null], `${label}: no cards when they are off`);
+    assert.deepEqual(m.teams.map(t => t.cards), [[], []], `${label}: no cards when they are off`);
     return;
   }
   if (m.attacker !== null) {
-    assert.ok(drafted.every(id => CARD_IDS.includes(id)), `${label}: both sides have a card once play starts`);
-    assert.notEqual(drafted[0], drafted[1], `${label}: different cards`);
+    assert.deepEqual(m.teams.map(t => t.cards.length), [2, 2], `${label}: two cards each once play starts`);
+    assert.ok(drafted.every(id => CARD_IDS.includes(id)), `${label}: known cards`);
+    assert.equal(new Set(drafted).size, 4, `${label}: four different cards`);
     assert.ok(drafted.every(id => m.deal.includes(id)), `${label}: cards come from the deal`);
-    // The first pick keeps its dealt rarity; the second goes up one if the first was rarer.
-    const first = 1 - m.firstReceiver;
-    const rank = r => RARITY_IDS.indexOf(r);
-    const [dealt1, dealt2] = [m.dealRarity[m.teams[first].card], m.dealRarity[m.teams[1 - first].card]];
-    assert.equal(m.teams[first].cardRarity, dealt1, `${label}: the first pick at its dealt rarity`);
-    assert.equal(rank(m.teams[1 - first].cardRarity), rank(dealt2) + (rank(dealt1) > rank(dealt2) ? 1 : 0), `${label}: the second pick catches up`);
+    assert.equal(m.deal.length, 5, `${label}: five dealt`);
   }
+  // Every card at the rarity it was dealt at: no catching up.
+  m.teams.forEach((t, i) => t.cards.forEach(c => assert.equal(c.rarity, m.dealRarity[c.id], `${label}: team ${i} ${c.id} at its dealt rarity`)));
   assert.ok(Object.values(m.dealRarity).every(r => RARITY_IDS.includes(r)), `${label}: rarities`);
-  m.teams.forEach((t, i) => assert.equal(t.cardRarity === null, t.card === null, `${label}: team ${i} rarity with its card`));
   m.teams.forEach((t, i) => {
     for (const [key, used] of Object.entries(t.cardUses)) {
       const limit = fx(m, i).uses?.[key];
@@ -129,15 +129,27 @@ function checkState(m, label) {
   }
 
   const scores = m.teams.map(t => t.score);
+  const rolls = m.format === 'rolls';
+  assert.ok(m.suddenDeath ? rolls && m.decider && m.half === 2 : true, `${label}: sudden death only settles a drawn knockout on the clock`);
   if (step.type === 'fulltime') {
-    assert.ok(m.winner === 0 || m.winner === 1, `${label}: winner`);
-    assert.ok(scores[m.winner] >= full, `${label}: winner reached full time`);
-    assert.ok(scores[1 - m.winner] < full, `${label}: loser did not`);
     assert.equal(m.half, 2, `${label}: matches finish in the second half`);
+    if (m.suddenDeath) {
+      assert.ok(m.winner === 0 || m.winner === 1, `${label}: sudden death has a winner`);
+      assert.ok(scores[m.winner] > scores[1 - m.winner], `${label}: the next score won it`);
+    } else if (rolls) {
+      assert.ok(timeUp(m), `${label}: the clock ran out`);
+      const want = scores[0] === scores[1] ? null : scores[0] > scores[1] ? 0 : 1;
+      assert.equal(m.winner, want, `${label}: the higher score wins; level is a draw`);
+      if (m.decider) assert.notEqual(m.winner, null, `${label}: a knockout always has a winner`);
+    } else {
+      assert.ok(m.winner === 0 || m.winner === 1, `${label}: winner`);
+      assert.ok(scores[m.winner] >= full, `${label}: winner reached full time`);
+      assert.ok(scores[1 - m.winner] < full, `${label}: loser did not`);
+    }
   } else {
-    assert.ok(scores.every(s => s < full), `${label}: nobody has reached full time yet`);
+    if (!rolls) assert.ok(scores.every(s => s < full), `${label}: nobody has reached full time yet`);
     const converting = step.purpose === 'range' && step.kick === 'conversion' || step.purpose === 'kick' && step.kick === 'conversion';
-    if (m.half === 1 && step.type !== 'halftime' && !converting) {
+    if (!rolls && m.half === 1 && step.type !== 'halftime' && !converting) {
       assert.ok(scores.every(s => s < halfAt), `${label}: half time is called at ${halfAt}`);
     }
     // Every try gets its conversion unless it ended the match.
@@ -146,7 +158,15 @@ function checkState(m, label) {
       assert.equal(t.stats.conversionAttempts + owed, t.stats.tries, `${label}: team ${i} conversion for every try`);
     });
   }
-  if (step.type === 'halftime') assert.ok(scores.some(s => s >= halfAt) && m.half === 1, `${label}: half time`);
+  if (step.type === 'halftime') {
+    assert.equal(m.half, 1, `${label}: half time`);
+    if (rolls) assert.ok(m.clock >= halfRolls(m), `${label}: half time on the clock`);
+    else assert.ok(scores.some(s => s >= halfAt), `${label}: half time at ${halfAt}`);
+  }
+  // The clock: last play once the half's rolls are gone, and only then.
+  if (!rolls) assert.ok(!m.lastPlay, `${label}: no clock in a points match`);
+  else if (step.type !== 'halftime' && step.type !== 'fulltime') assert.equal(m.lastPlay, timeUp(m), `${label}: last play when the clock runs out`);
+  assert.ok(m.rolls >= m.clock, `${label}: rolls`);
 }
 
 function checkEvents(before, after, events, label) {
@@ -170,7 +190,7 @@ function checkEvents(before, after, events, label) {
 
   // Possession only changes hands for a reason the rules give.
   if (before.attacker !== null && after.attacker !== before.attacker && after.step.type !== 'fulltime') {
-    const reasons = new Set(['intercept', 'ruck', 'noTry', 'setPiece', 'kick', 'secondHalf', 'penalty', 'replacement', 'playOn']);
+    const reasons = new Set(['intercept', 'ruck', 'noTry', 'setPiece', 'kick', 'secondHalf', 'penalty', 'replacement', 'playOn', 'suddenDeath']);
     assert.ok(events.some(e => reasons.has(e.type)), `${label}: possession changed without a reason (${events.map(e => e.type)})`);
   }
 
@@ -264,17 +284,26 @@ function checkEvents(before, after, events, label) {
   }
 
   // Cards: never change once picked; only play for the side holding them.
-  for (const i of [0, 1]) if (before.teams[i].card) assert.equal(after.teams[i].card, before.teams[i].card, `${label}: cards stay`);
+  for (const i of [0, 1]) {
+    const kept = before.teams[i].cards.map(cardKey);
+    assert.deepEqual(after.teams[i].cards.map(cardKey).slice(0, kept.length), kept, `${label}: cards stay`);
+  }
   for (const e of events.filter(x => x.type === 'cardPlayed')) {
     assert.ok(before.cards, `${label}: a card played with cards off`);
-    assert.equal(e.card, after.teams[e.team].card, `${label}: ${e.card} played by the side that holds it`);
-    assert.equal(e.rarity, after.teams[e.team].cardRarity, `${label}: ${e.card} played at its rarity`);
+    assert.ok(after.teams[e.team].cards.map(cardKey).includes(cardKey({ id: e.card, rarity: e.rarity })), `${label}: ${e.card} played by the side that holds it, at its rarity`);
+  }
+  // A decision that runs out of time: a penalty to the other side.
+  const timedOut = events.find(e => e.type === 'timeout');
+  if (timedOut) {
+    assert.ok(TIMED_DECISIONS.includes(before.step.purpose), `${label}: only decisions in play time out`);
+    assert.equal(timedOut.team, before.step.team);
+    assert.deepEqual(events.find(e => e.type === 'penalty'), { type: 'penalty', team: 1 - timedOut.team, offender: timedOut.team }, `${label}: penalty to the other side`);
   }
 }
 
 test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => {
   const styles = ['random', 'pro', 'rookie'];
-  const totals = { actions: 0, events: new Set(), steps: new Set(), winners: [0, 0], replayed: 0 };
+  const totals = { actions: 0, events: new Set(), steps: new Set(), winners: [0, 0], draws: 0, replayed: 0 };
   for (let g = 0; g < MATCHES; g++) {
     const rng = seededRng(1000 + g);
     const length = LENGTHS[g % LENGTHS.length];
@@ -287,6 +316,8 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
       cpuPersonality: ['balanced', 'boot', 'run', 'pack'][g % 4],
       bench: g % 5 !== 4,
       weather: g % 2 ? rollWeather(rng) : null,
+      format: g % 7 < 3 ? 'rolls' : 'points',
+      decider: g % 7 === 1,
     });
     checkState(m, `match ${g} start`);
     let actions = 0;
@@ -327,21 +358,23 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
       assert.ok(actions < 3000, `match ${g} did not finish`);
     }
     totals.actions += actions;
-    totals.winners[m.winner]++;
+    if (m.winner === null) totals.draws++;
+    else totals.winners[m.winner]++;
   }
 
   // The fuzzing really did reach every corner of the game.
   const everyEvent = ['toss', 'possession', 'run', 'pass', 'passChoice', 'dropChance', 'error', 'intercept', 'tackle', 'lineBreak',
     'injury', 'ruck', 'videoRef', 'try', 'noTry', 'range', 'dropAttempt', 'dropDeclined', 'penaltyAttempt', 'kick', 'setPiece',
-    'penalty', 'card', 'noCard', 'quickTap', 'advantageOver', 'score', 'halftime', 'secondHalf', 'fulltime', 'deal', 'draft', 'catchUp',
-    'wetBall', 'replacement', 'playOn',
+    'penalty', 'card', 'noCard', 'quickTap', 'advantageOver', 'score', 'halftime', 'secondHalf', 'fulltime', 'deal', 'draft', 'discard',
+    'wetBall', 'replacement', 'playOn', 'lastPlay', 'suddenDeath', 'timeout',
     ...['knockon', 'touch', 'intercept', 'dropChance', 'ruck', 'heldUp', 'noTry', 'penalty', 'reset', 'notstraight', 'advantage'].map(w => `cardPlayed:${w}`)];
   for (const e of everyEvent) assert.ok(totals.events.has(e), `event ${e} was reached`);
   for (const s of ['roll:attack', 'roll:tackle', 'roll:ruck', 'roll:try', 'roll:range', 'roll:penalty', 'roll:kick', 'roll:setpiece',
     'choose:pass', 'choose:drop', 'choose:penalty', 'choose:draft', 'choose:bench', 'halftime:', 'fulltime:']) {
     assert.ok(totals.steps.has(s), `step ${s} was reached`);
   }
-  assert.ok(totals.winners[0] > MATCHES * 0.35 && totals.winners[1] > MATCHES * 0.35, `both sides win (${totals.winners})`);
+  assert.ok(totals.winners[0] > MATCHES * 0.33 && totals.winners[1] > MATCHES * 0.33, `both sides win (${totals.winners})`);
+  assert.ok(totals.draws > 0, 'some matches on the clock are drawn');
   assert.ok(totals.replayed > MATCHES * 10, 'replays were checked');
 });
 
@@ -359,18 +392,15 @@ test('every card at every rarity plays whole matches within the rules', () => {
         let m = newMatch({ mode: '2p', length: 'standard', cards: true });
         const label0 = `${id} ${rarity} match ${g}`;
         // Play the toss and the draft, then swap in the cards under test: the
-        // card under test as the first pick, the other side's caught up as the draft would.
+        // card under test and one other for one side, two others for the other.
         while (m.attacker === null) m = act(m, pickAction(m, rng, 'pro'), rng).state;
         const holder = 1 - m.firstReceiver;
-        const other = CARD_IDS[(c + 1 + Math.floor(rng() * 11)) % 12];
-        const otherDealt = RARITY_IDS[Math.floor(rng() * 4)];
-        const otherRarity = catchUp(rarity, otherDealt);
-        m.deal = [id, other];
-        m.dealRarity = { [id]: rarity, [other]: otherDealt };
-        m.teams[holder].card = id;
-        m.teams[holder].cardRarity = rarity;
-        m.teams[1 - holder].card = other;
-        m.teams[1 - holder].cardRarity = otherRarity;
+        const others = CARD_IDS.filter(x => x !== id).sort(() => rng() - 0.5).slice(0, 4);
+        const deal = [{ id, rarity }, ...others.map(x => ({ id: x, rarity: RARITY_IDS[Math.floor(rng() * 4)] }))];
+        m.deal = deal.map(x => x.id);
+        m.dealRarity = Object.fromEntries(deal.map(x => [x.id, x.rarity]));
+        m.teams[holder].cards = [deal[0], deal[1]];
+        m.teams[1 - holder].cards = [deal[2], deal[3]];
         checkState(m, `${label0} start`);
         for (let n = 0; m.step.type !== 'fulltime'; n++) {
           const label = `${label0} action ${n}`;

@@ -107,7 +107,7 @@ export const ACHIEVEMENTS = [
   { id: 'marathon', name: 'Marathon', text: 'Win a Marathon match.', check: (m, me) => m.winner === me && m.length === 'long' },
   { id: 'on-a-roll', name: 'On a Roll', text: 'Win five matches in a row against the CPU.', check: (m, me, t, c, career) => career.streak >= 5 },
   { id: 'card-sharp', name: 'Card Sharp', text: 'Win with six different team cards.', check: (m, me, t, c, career) => career.cardsWon.length >= 6 },
-  { id: 'mythic', name: 'Mythic', text: 'Win a match with a Mythic team card.', check: (m, me) => m.winner === me && m.teams[me].cardRarity === 'mythic' },
+  { id: 'mythic', name: 'Mythic', text: 'Win a match with a Mythic team card.', check: (m, me) => m.winner === me && (m.teams[me].cards || []).some(card => card.rarity === 'mythic') },
   { id: 'cup-winners', name: 'Nations Cup Winners', text: 'Win the Nations Cup.', check: (m, me, t, c) => c.tournament?.kind === 'cup' && c.tournament.champion },
   { id: 'champions', name: 'League Champions', text: 'Win a league: Super Rugby, the Prem, the URC or the Top 14.', check: (m, me, t, c) => c.tournament?.kind === 'league' && c.tournament.champion },
   { id: 'european-champions', name: 'Champions of Europe', text: 'Win the Champions Cup.', check: (m, me, t, c) => c.tournament?.kind === 'champions' && c.tournament.champion },
@@ -136,6 +136,7 @@ export function recordMatch(career, match, tracker, context) {
   const theirs = match.teams[1 - me];
   c.played++;
   if (won) c.won++;
+  else if (match.winner === null) c.drawn = (c.drawn || 0) + 1;
   else c.lost++;
   c.pointsFor += mine.score;
   c.pointsAgainst += theirs.score;
@@ -154,11 +155,10 @@ export function recordMatch(career, match, tracker, context) {
   if (won) {
     const margin = mine.score - theirs.score;
     if (!c.biggestWin || margin > c.biggestWin.margin) c.biggestWin = { margin, score: `${mine.score}–${theirs.score}`, against: theirs.name };
-    if (mine.card && !c.cardsWon.includes(mine.card)) c.cardsWon.push(mine.card);
-    if (mine.card) {
-      const rarity = mine.cardRarity || 'common';
+    for (const card of mine.cards || []) {
+      if (!c.cardsWon.includes(card.id)) c.cardsWon.push(card.id);
       c.cardRarity ??= {};
-      if (RARITY_IDS.indexOf(rarity) > RARITY_IDS.indexOf(c.cardRarity[mine.card] ?? '')) c.cardRarity[mine.card] = rarity;
+      if (RARITY_IDS.indexOf(card.rarity) > RARITY_IDS.indexOf(c.cardRarity[card.id] ?? '')) c.cardRarity[card.id] = card.rarity;
     }
   }
   if (context.tournament?.champion) {

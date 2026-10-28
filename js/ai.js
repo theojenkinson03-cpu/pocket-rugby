@@ -2,9 +2,9 @@
 // Expert plays out many matches from the current position for each option
 // and picks the one that wins most often. Personalities flavour the choices.
 
-import { act, actInPlace, draftRarity, kickBonus, kickChance, receiverOdds, seededRng, tryChance } from './engine.js';
+import { act, actInPlace, halfRolls, kickBonus, kickChance, receiverOdds, seededRng, tryChance } from './engine.js';
 import { cardTier, RARITY_IDS } from './cards.js';
-import { winFromPossession, winProbability } from './winprob.js';
+import { possessionsLeft, winFromPossession, winProbability } from './winprob.js';
 
 export const LEVELS = {
   rookie: { name: 'Rookie', blurb: 'Plays on instinct' },
@@ -60,7 +60,15 @@ function bestReceiver(match, team, options, personality) {
 
 function goesForGoal(match, team, kick, range, threshold) {
   const chance = kickChance(range, kickBonus(match, team, kick));
-  if (3 >= pointsToWin(match, team)) return chance >= 1 / 3;
+  // Sudden death: any score wins it.
+  if (match.suddenDeath) return chance >= 1 / 3;
+  if (match.format === 'rolls') {
+    // Near the end, three points are only worth it if they draw or win the match.
+    if (match.half === 2 && possessionsLeft(match) <= 2) {
+      const behind = match.teams[1 - team].score - match.teams[team].score;
+      return behind <= 3 && chance >= 1 / 3;
+    }
+  } else if (3 >= pointsToWin(match, team)) return chance >= 1 / 3;
   return chance >= threshold - 1e-9;
 }
 
@@ -69,8 +77,10 @@ export function cardValue(id, personality = PERSONALITIES.balanced, rarity = 'co
   return (cardTier(id, rarity).value || 0) + (personality.cards[id] || 0);
 }
 
+const dealtRarity = (match, id) => match.dealRarity?.[id] || 'common';
+
 function bestCard(match, personality) {
-  const worth = id => cardValue(id, personality, draftRarity(match, id));
+  const worth = id => cardValue(id, personality, dealtRarity(match, id));
   return [...match.step.options].sort((a, b) => worth(b) - worth(a))[0];
 }
 
@@ -81,6 +91,7 @@ export const CARRY_SHARE = { S: 0.1, F: 0.34, C: 0.2, W: 0.2, B: 0.16 };
 // How far through the half (or, in the second half, the match) play is:
 // 0 at the kick-off, 1 at the whistle, from the leading score.
 function halfProgress(match) {
+  if (match.format === 'rolls') return Math.min(1, match.clock / halfRolls(match));
   const lead = Math.max(...match.teams.map(t => t.score));
   return match.half === 1 ? Math.min(1, lead / match.target.half) : Math.min(1, (lead - match.target.half) / (match.target.full - match.target.half));
 }
@@ -127,7 +138,7 @@ function rookieChoice(match, rng, personality) {
     case 'bench': return step.pos && step.options.includes(step.pos) ? step.pos : step.options[0];
     case 'draft': {
       // Instinct: grab the rarest card on the table, any of them if they tie.
-      const rank = id => RARITY_IDS.indexOf(draftRarity(match, id));
+      const rank = id => RARITY_IDS.indexOf(dealtRarity(match, id));
       const best = Math.max(...step.options.map(rank));
       const rarest = step.options.filter(id => rank(id) === best);
       return rarest[Math.floor(rng() * rarest.length)];
@@ -150,7 +161,7 @@ const proAction = m => {
 // Stopping there keeps the luck of later possessions out of the comparison.
 function lookAhead(m, rng, team) {
   for (let guard = 0; guard < 500; guard++) {
-    if (m.step.type === 'fulltime') return m.winner === team ? 1 : 0;
+    if (m.step.type === 'fulltime') return m.winner === null ? 0.5 : m.winner === team ? 1 : 0;
     if (m.step.type === 'halftime') return winProbability(m, team);
     const events = actInPlace(m, proAction(m), rng);
     // A quick-tap advantage is still being played out: keep going.

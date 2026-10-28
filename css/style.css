@@ -187,14 +187,40 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
   position: relative;
   width: var(--size);
   height: var(--size);
-  perspective: 520px;
   font-size: calc(var(--size) * 0.165);
   flex: none;
+}
+/* The drop and bounce happen to the lift; the cube turns inside it. A long
+   perspective keeps the near faces from ballooning as the cube turns. */
+.lift {
+  position: absolute;
+  inset: 0;
+  perspective: calc(var(--size) * 8);
 }
 .cube {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+  will-change: transform;
+  pointer-events: none;
+}
+/* Three planes through the middle, so the rounded edges never show daylight. */
+.cube .core {
+  position: absolute;
+  inset: 3%;
+  border-radius: 10%;
+  background: color-mix(in srgb, var(--die) 82%, #000);
+  backface-visibility: visible;
+}
+.die-shadow {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -9%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.32), rgb(0 0 0 / 0.12) 60%, transparent);
   pointer-events: none;
 }
 .face {
@@ -222,7 +248,51 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
     inset 0 0.25em 0.45em rgb(255 255 255 / 0.22);
   overflow: hidden;
 }
-.die.landed { filter: drop-shadow(0 6px 8px rgb(0 0 0 / 0.28)); }
+.cube .face { border-radius: 12%; }
+
+/* Badges: what changes a die's numbers, in its top-right corner. */
+.die-badges {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  transform: translate(32%, -34%);
+  pointer-events: none;
+}
+.die-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 6px 0 4px;
+  border-radius: 10px;
+  background: #fff;
+  color: #1c1c1e;
+  font: 800 12px/1 var(--font-label);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.3), 0 0 0 1.5px rgb(0 0 0 / 0.12);
+}
+.die-badge i { flex: none; display: inline-block; position: relative; }
+.die-badge.b-injury, .die-badge.b-red { color: #b3241a; }
+.die-badge.b-advantage { background: #1fa055; color: #fff; }
+.die-badge.b-wind { background: #e8f1fb; color: #154a85; }
+.die-badge.b-card { background: var(--card-paper, #fbf7ec); color: #6a4b00; }
+.die-badge .bi-injury { width: 12px; height: 12px; border-radius: 50%; background: #d63a2f; }
+.die-badge .bi-injury::before, .die-badge .bi-injury::after { content: ""; position: absolute; background: #fff; border-radius: 1px; }
+.die-badge .bi-injury::before { inset: 5px 2.5px; }
+.die-badge .bi-injury::after { inset: 2.5px 5px; }
+.die-badge .bi-sinbin, .die-badge .bi-red { width: 8px; height: 11px; border-radius: 1.5px; background: #f5cf1d; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25); transform: rotate(-8deg); }
+.die-badge .bi-red { background: #e2382c; }
+.die-badge .bi-advantage { width: 0; height: 0; border: 5px solid transparent; border-bottom: 7px solid currentColor; border-top: 0; }
+.die-badge:not(.b-advantage) .bi-advantage { color: #1fa055; }
+.die-badge .bi-wind::before { content: "≋"; font-size: 13px; color: #154a85; }
+.die-badge .bi-card { width: 9px; height: 12px; border-radius: 2px; background: linear-gradient(135deg, #f2b01e, #e0461c); }
+.die-chip .die-badges { transform: translate(45%, -45%) scale(0.72); transform-origin: top right; }
 .face .fl { font-size: 0.9em; letter-spacing: 0.03em; }
 .face .fl.sp { font-size: 0.78em; line-height: 1.05; }
 .face .fv { font-family: var(--font-display); font-weight: 900; font-size: 2.5em; line-height: 0.9; }
@@ -297,6 +367,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 }
 
 .die-chip {
+  position: relative;
   display: inline-grid;
   place-items: center;
   width: 28px;
@@ -1331,7 +1402,7 @@ dialog.sheet::backdrop { background: rgb(5 12 8 / 0.55); backdrop-filter: blur(2
   pointer-events: none;
   animation: cine-in 300ms ease both;
 }
-.tray.dramatic .die:not(.landed) { filter: drop-shadow(0 0 18px var(--accent)); }
+.tray.dramatic .die:not(.landed) .die-shadow { background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 70%, transparent), transparent); }
 
 /* ---------- Home: more ways to play ---------- */
 .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -2324,3 +2395,170 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 .waiting-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--board-ink); font-size: 14px; }
 .team-tile.taken { opacity: 0.55; }
 .friends-create { display: grid; gap: 12px; }
+
+/* ---------- The dice guide ----------
+   Under the dice: what each face of the coming roll would do. Green is good
+   for you, red bad, grey neither. Tapping a face explains it. */
+.guide { width: 100%; max-width: 30rem; display: grid; gap: 5px; }
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font: 700 13px/1.2 var(--font-label);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.guide-head b { color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guide-head .die-badge { margin-left: auto; text-transform: none; }
+.guide-faces { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+.gf {
+  --tone: var(--line);
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 2px 5px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--tone) 12%, var(--surface));
+  box-shadow: inset 0 0 0 2px var(--tone);
+  color: var(--ink);
+  touch-action: manipulation;
+  transition: transform 160ms ease, opacity 200ms ease, box-shadow 160ms ease;
+}
+.gf.tone-good { --tone: #1fa055; }
+.gf.tone-bad { --tone: #d63a2f; }
+.gf.tone-ok { --tone: color-mix(in srgb, var(--ink) 22%, transparent); }
+.gf .face.flat.mini { --size: 100%; width: 100%; max-width: 46px; height: auto; aspect-ratio: 1; font-size: 7.4px; padding: 6%; border-radius: 18%; }
+.gf .face.flat.mini .fk { font-size: 1.2em; }
+.gf-cap { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 12px/1.1 var(--font-label); letter-spacing: 0.02em; text-transform: uppercase; }
+.gf.tone-good .gf-cap { color: #14804a; }
+.gf.tone-bad .gf-cap { color: #c02a20; }
+/* A tick or a cross in the corner, so the tone never rests on colour alone. */
+.gf.tone-good::before, .gf.tone-bad::before {
+  position: absolute;
+  top: -5px;
+  left: -4px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--tone);
+  color: #fff;
+  font: 900 10px/1 var(--font-label);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.gf.tone-good::before { content: "✓"; }
+.gf.tone-bad::before { content: "✕"; }
+.gf-note { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 10.5px/1.1 var(--font-label); letter-spacing: 0.02em; color: var(--muted); }
+.gf.picked { box-shadow: inset 0 0 0 2px var(--tone), 0 0 0 2px var(--ink); }
+.guide-text { margin: 0; min-height: 2.6em; font-size: 13px; line-height: 1.3; color: var(--muted); }
+.guide.rolled .gf:not(.hit) { opacity: 0.38; transform: scale(0.94); }
+.guide.rolled .gf.hit { transform: translateY(-3px) scale(1.06); box-shadow: inset 0 0 0 3px var(--tone), 0 6px 14px rgb(0 0 0 / 0.18); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gf.tone-good .gf-cap { color: #4cc777; }
+  :root:not([data-theme="light"]) .gf.tone-bad .gf-cap { color: #ff7a6b; }
+}
+:root[data-theme="dark"] .gf.tone-good .gf-cap { color: #4cc777; }
+:root[data-theme="dark"] .gf.tone-bad .gf-cap { color: #ff7a6b; }
+/* Room for the guide: smaller dice and headline, one line of the feed. */
+.tray.guided { gap: 6px; justify-content: flex-start; padding-top: 8px; }
+.tray.guided .tray-dice { min-height: 60px; }
+.tray.guided .tray-dice .die { --size: 62px; }
+.tray.guided .tray-dice .coin { width: 62px; height: 62px; }
+.tray.guided .headline { font-size: 24px; }
+.tray.guided .detail { font-size: 14px; }
+.tray.guided .tray-text { min-height: 0; }
+.view-match:has(.tray.guided) .feed-list li:nth-child(n + 2) { display: none; }
+@media (min-height: 860px) {
+  .tray.guided .tray-dice .die { --size: 76px; }
+  .view-match:has(.tray.guided) .feed-list li:nth-child(2) { display: grid; }
+}
+@media (max-height: 700px) {
+  .view-match:has(.tray.guided) .feed { display: none; }
+  .tray.guided .tray-dice .die { --size: 52px; }
+}
+
+/* ---------- The match clock ---------- */
+.board-clock { display: grid; justify-items: center; line-height: 1; color: var(--board-ink); }
+.board-clock b { font: 900 30px/0.95 var(--font-display); font-variant-numeric: tabular-nums; }
+.board-clock small { font: 600 10.5px/1.1 var(--font-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--board-muted); }
+.board-clock.red b { color: #ff6b5e; }
+.board-clock.red { animation: clock-pulse 1.2s ease-in-out infinite; }
+@keyframes clock-pulse { 50% { opacity: 0.7; } }
+.board.on-clock .board-target:empty { display: none; }
+
+/* ---------- Two cards a side, and the draft's pick order ---------- */
+.side-card { flex-direction: column; align-items: flex-start; gap: 3px; }
+.side[data-team="1"] .side-card { align-items: flex-end; }
+.side-card .tc-chip { height: 20px; font-size: 11px; max-width: 100%; }
+.side-card .tc-chip.spent { opacity: 0.55; }
+.draft-order { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 2px 0 4px; padding: 0; list-style: none; }
+.dp {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--line), inset 4px 0 0 var(--kit);
+  font: 600 11px/1.15 var(--font-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.dp b { font: 900 16px/1 var(--font-display); color: var(--ink); }
+.dp span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp .dp-card { color: var(--ink); font-weight: 700; }
+.dp.now { box-shadow: inset 0 0 0 2px var(--kit), inset 4px 0 0 var(--kit); background: color-mix(in srgb, var(--kit) 10%, var(--surface)); }
+.tcard.discarded { opacity: 0.45; filter: grayscale(0.8); }
+.draft-cards .tcard { min-height: 92px; }
+.draft-cards .tc-text { font-size: 13.5px; }
+@media (min-width: 560px) {
+  .draft-cards { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+}
+
+/* ---------- Auto-roll and the online decision clock ---------- */
+.auto-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--surface-2);
+  color: var(--ink);
+  font: 700 12px/1 var(--font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: inset 0 0 0 1.5px var(--line);
+  touch-action: manipulation;
+}
+.auto-btn i { font-style: normal; font-size: 10px; }
+.auto-btn.on { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.decision-clock {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  overflow: hidden;
+  font: 600 12px/22px var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.decision-clock i { position: absolute; inset: 0 auto 0 0; width: 100%; background: color-mix(in srgb, var(--accent) 45%, transparent); transform-origin: left; animation: decide linear forwards; }
+.decision-clock.mine i { background: color-mix(in srgb, #d63a2f 35%, transparent); }
+.decision-clock b, .decision-clock span { position: relative; }
+.decision-clock b { font: 900 16px/22px var(--font-display); color: var(--ink); }
+@keyframes decide { to { transform: scaleX(0); } }

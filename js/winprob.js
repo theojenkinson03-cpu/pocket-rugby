@@ -1,19 +1,22 @@
 // Win probability. A possession ends in one of a few ways (measured over
 // 20,000 simulated matches, scripts/possessions in the README); from those
 // odds, exact dynamic programming over the score gives each side's chance of
-// winning from any score, ball and half. Used for the live win meter and as
-// the Expert CPU's judge at the end of each look-ahead.
+// winning from any score, ball and half. In the rolls format the clock, not
+// the score, ends the match: the same odds over the possessions left. Used
+// for the live win meter and as the Expert CPU's judge at the end of each
+// look-ahead.
 
-import { kickBonus, kickChance, tryChance } from './engine.js';
-import { teamCard } from './cards.js';
+import { halfRolls, kickBonus, kickChance, rollsLeft, timeUp, tryChance } from './engine.js';
+import { teamCards } from './cards.js';
 
-// How a possession ends: points the attackers scored, and who has the next one.
+// How a possession ends: points the attackers scored, and who has the next
+// one. Measured over 4,000 simulated matches, both formats, cards on and off.
 export const POSSESSION = {
-  turnover: 0.5448, // 0 points, the other side's ball
-  retained: 0.1074, // 0 points, same side again (won back at a set piece)
-  three: 0.1401, // penalty or drop goal, then the scorers receive
-  five: 0.0716, // try, conversion missed
-  seven: 0.1361, // try and conversion
+  turnover: 0.4942, // 0 points, the other side's ball
+  retained: 0.1473, // 0 points, same side again (won back at a set piece, or a tapped penalty)
+  three: 0.1492, // penalty or drop goal, then the other side has the ball
+  five: 0.0662, // try, conversion missed
+  seven: 0.1431, // try and conversion
 };
 
 const tables = new Map();
@@ -43,7 +46,8 @@ function table(halfAt, full) {
   for (let a = max - 1; a >= 0; a--) {
     for (let b = max - 1; b >= 0; b--) {
       if (a >= full || b >= full) continue;
-      const [x, y] = solve(ourScore(a, b, (p, q) => v2(p, q, 0)), theirScore(a, b, (p, q) => v2(p, q, 1)));
+      // After a score the other side has the ball.
+      const [x, y] = solve(ourScore(a, b, (p, q) => v2(p, q, 1)), theirScore(a, b, (p, q) => v2(p, q, 0)));
       h2[idx(a, b) * 2] = x;
       h2[idx(a, b) * 2 + 1] = y;
     }
@@ -55,7 +59,7 @@ function table(halfAt, full) {
     };
     for (let a = halfAt - 1; a >= 0; a--) {
       for (let b = halfAt - 1; b >= 0; b--) {
-        const [x, y] = solve(ourScore(a, b, (p, q) => v1(p, q, 0)), theirScore(a, b, (p, q) => v1(p, q, 1)));
+        const [x, y] = solve(ourScore(a, b, (p, q) => v1(p, q, 1)), theirScore(a, b, (p, q) => v1(p, q, 0)));
         h1[(idx(a, b) * 2 + shr) * 2] = x;
         h1[(idx(a, b) * 2 + shr) * 2 + 1] = y;
       }
@@ -71,8 +75,82 @@ function table(halfAt, full) {
   return value;
 }
 
+// ---- The rolls format ----
+
+// Dice rolls on the clock for each possession, from the same matches.
+export const ROLLS_PER_POSSESSION = 8.8;
+
+const MAX_POSSESSIONS = 80;
+const SPAN = 90;
+let clockTable = null;
+
+// clockTable[n][d + SPAN][ball]: chance of winning with n possessions left,
+// d points ahead, and the next possession ours (0) or theirs (1). A draw
+// counts as half.
+function clockValues() {
+  if (clockTable) return clockTable;
+  const { turnover: po, retained: ps, three, five, seven } = POSSESSION;
+  const width = 2 * SPAN + 1;
+  const at = (row, d, ball) => row[Math.max(0, Math.min(width - 1, d + SPAN)) * 2 + ball];
+  clockTable = [];
+  let prev = new Float64Array(width * 2);
+  for (let d = -SPAN; d <= SPAN; d++) prev[(d + SPAN) * 2] = prev[(d + SPAN) * 2 + 1] = d > 0 ? 1 : d < 0 ? 0 : 0.5;
+  clockTable.push(prev);
+  for (let n = 1; n <= MAX_POSSESSIONS; n++) {
+    const row = new Float64Array(width * 2);
+    for (let d = -SPAN; d <= SPAN; d++) {
+      const i = (d + SPAN) * 2;
+      // After a score the other side has the ball.
+      row[i] = po * at(prev, d, 1) + ps * at(prev, d, 0) + three * at(prev, d + 3, 1) + five * at(prev, d + 5, 1) + seven * at(prev, d + 7, 1);
+      row[i + 1] = po * at(prev, d, 0) + ps * at(prev, d, 1) + three * at(prev, d - 3, 0) + five * at(prev, d - 5, 0) + seven * at(prev, d - 7, 0);
+    }
+    clockTable.push(row);
+    prev = row;
+  }
+  return clockTable;
+}
+
+// Sudden death: the chance the side with the ball (ball 0) or without it
+// (ball 1) scores next.
+function nextScore(ball) {
+  const { turnover: po, retained: ps, three, five, seven } = POSSESSION;
+  const s = three + five + seven;
+  const x = s / (1 - ps - (po * po) / (1 - ps));
+  return ball === 0 ? x : 1 - x;
+}
+
+// Rolls still to play in the match, both halves.
+const rollsToGo = match => rollsLeft(match) + (match.half === 1 ? halfRolls(match) : 0);
+
+// Possessions to come after the current one ends: none once the clock has
+// run out in the second half; otherwise the rolls left, plus half a
+// possession for the last play that runs past the clock.
+export function possessionsAfter(match) {
+  if (match.suddenDeath) return Infinity;
+  if (match.half === 2 && timeUp(match)) return 0;
+  return rollsToGo(match) / ROLLS_PER_POSSESSION + 0.5;
+}
+
+// Possessions left counting the one starting (or going on) now.
+export const possessionsLeft = match => (match.suddenDeath ? Infinity : Math.max(1, possessionsAfter(match)));
+
+// Chance of winning `d` points ahead with `n` possessions to play.
+function clockWin(d, ball, n) {
+  if (n === Infinity) return d > 0 ? 1 : d < 0 ? 0 : nextScore(ball);
+  const table = clockValues();
+  const k = Math.min(MAX_POSSESSIONS, n);
+  const lo = Math.floor(k);
+  const hi = Math.min(MAX_POSSESSIONS, lo + 1);
+  const value = row => row[Math.max(0, Math.min(2 * SPAN, d + SPAN)) * 2 + ball];
+  return value(table[lo]) * (1 - (k - lo)) + value(table[hi]) * (k - lo);
+}
+
+const clocked = match => match.format === 'rolls' || match.suddenDeath;
+const lead = (match, team) => match.teams[team].score - match.teams[1 - team].score;
+
 // Chance `team` wins from the start of a possession by `attacker`.
 export function winFromPossession(match, team, attacker = match.attacker) {
+  if (clocked(match)) return clockWin(lead(match, team), attacker === team ? 0 : 1, possessionsLeft(match));
   const v = table(match.target.half, match.target.full);
   const a = match.teams[team].score;
   const b = match.teams[1 - team].score;
@@ -84,43 +162,59 @@ export function winFromPossession(match, team, attacker = match.attacker) {
 // (try, kicks) a step ahead so the meter moves when they happen.
 export function winProbability(match, team) {
   const step = match.step;
-  if (step.type === 'fulltime') return match.winner === team ? 1 : 0;
+  if (step.type === 'fulltime') return match.winner === null ? 0.5 : match.winner === team ? 1 : 0;
   if (match.attacker === null || match.firstReceiver === null) return 0.5;
   if (step.type === 'halftime') return winFromPossession(match, team, 1 - match.firstReceiver);
-  const v = table(match.target.half, match.target.full);
   const att = match.attacker;
-  const shr = 1 - match.firstReceiver === team ? 0 : 1;
   const scores = match.teams.map(t => t.score);
-  const at = (extra, ball) => {
-    const s = [...scores];
-    s[att] += extra;
-    return v(s[team], s[1 - team], ball === team ? 0 : 1, match.half, shr);
-  };
+  let at;
+  if (clocked(match)) {
+    // A score in sudden death wins it; otherwise play goes on as the clock allows.
+    const n = possessionsAfter(match);
+    at = (extra, ball) => {
+      const d = lead(match, team) + (att === team ? extra : -extra);
+      return match.suddenDeath && extra ? (d > 0 ? 1 : 0) : clockWin(d, ball === team ? 0 : 1, n);
+    };
+  } else {
+    const v = table(match.target.half, match.target.full);
+    const shr = 1 - match.firstReceiver === team ? 0 : 1;
+    at = (extra, ball) => {
+      const s = [...scores];
+      s[att] += extra;
+      return v(s[team], s[1 - team], ball === team ? 0 : 1, match.half, shr);
+    };
+  }
   if (step.purpose === 'try') {
     const p = tryChance();
     const conv = 4 / 6;
-    return p * (conv * at(7, att) + (1 - conv) * at(5, att)) + (1 - p) * at(0, 1 - att);
+    // Whatever happens, the other side has the ball next.
+    return p * (conv * at(7, 1 - att) + (1 - conv) * at(5, 1 - att)) + (1 - p) * at(0, 1 - att);
   }
   if (step.purpose === 'kick') {
     const p = kickChance(step.range, kickBonus(match, att, step.kick));
     const points = step.kick === 'conversion' ? 2 : 3;
-    const miss = step.kick === 'conversion' ? at(0, att) : at(0, 1 - att);
-    return p * at(points, att) + (1 - p) * miss;
+    return p * at(points, 1 - att) + (1 - p) * at(0, 1 - att);
   }
   return winFromPossession(match, team);
 }
 
-// The live meter: the model above, plus the team cards. Each card's measured
-// lift (its value: the win rate it adds from the kick-off) becomes an edge
-// for its side that fades as the points run out. Four times the difference on
-// the log-odds matches the lift at the kick-off. The Expert CPU judges by the
-// model alone, since both sides' cards are already in its look-ahead.
+// A side's cards as an edge on the log-odds: each card's measured lift (its
+// value, the win rate it adds from the kick-off against no card) as log-odds,
+// added up for the side's two cards.
+const logit = p => Math.log(p / (1 - p));
+export const cardsEdge = (match, team) => teamCards(match, team).reduce((sum, card) => sum + logit(0.5 + (card.value || 0)), 0);
+
+// The live meter: the model above, plus the team cards. The difference in the
+// sides' card edges counts in full at the kick-off and fades as the match
+// runs out. The Expert CPU judges by the model alone, since both sides'
+// cards are already in its look-ahead.
 export function winMeter(match, team) {
   const p = winProbability(match, team);
   if (p <= 0 || p >= 1) return p;
-  const value = i => teamCard(match, i)?.value || 0;
-  const diff = value(team) - value(1 - team);
+  const diff = cardsEdge(match, team) - cardsEdge(match, 1 - team);
   if (!diff) return p;
-  const left = Math.max(0, 1 - Math.max(...match.teams.map(t => t.score)) / match.target.full);
-  return 1 / (1 + Math.exp(-(Math.log(p / (1 - p)) + 4 * diff * left)));
+  const left = clocked(match)
+    ? Math.min(1, possessionsAfter(match) * ROLLS_PER_POSSESSION / match.target.rolls)
+    : Math.max(0, 1 - Math.max(...match.teams.map(t => t.score)) / match.target.full);
+  return 1 / (1 + Math.exp(-(logit(p) + diff * left)));
 }

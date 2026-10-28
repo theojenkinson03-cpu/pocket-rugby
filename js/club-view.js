@@ -98,7 +98,7 @@ function history(club) {
   for (const s of [...club.seasons].reverse()) {
     const li = el('li', 'season-row');
     const head = el('span', 'sr-head');
-    head.append(el('b', null, s.name), el('span', null, `Won ${s.won}, lost ${s.lost}`));
+    head.append(el('b', null, s.name), el('span', null, `Won ${s.won}${s.drawn ? `, drawn ${s.drawn}` : ''}, lost ${s.lost}`));
     li.append(head);
     if (s.league) li.append(el('span', 'sr-line', `${s.league.comp}: ${ordinal(s.league.place)} of ${s.league.of} · ${s.league.outcome}`));
     if (s.europe) li.append(el('span', 'sr-line', `${s.europe.comp}: ${s.europe.outcome}`));

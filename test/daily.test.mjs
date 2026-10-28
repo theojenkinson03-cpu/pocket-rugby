@@ -94,8 +94,10 @@ test('the starting match: second half, scores that add up, the situation and twi
       assert.equal(t.bench, 1);
     });
     assert.ok(m.venue?.name);
-    if (s.cards) assert.deepEqual(m.teams.map(t => [t.card, t.cardRarity]), s.cards.map(c => [c.id, c.rarity]));
-    else assert.deepEqual(m.teams.map(t => t.card), [null, null]);
+    if (s.cards) {
+      assert.deepEqual(m.teams.map(t => t.cards), s.cards);
+      assert.equal(new Set(s.cards.flat().map(c => c.id)).size, 4, 'four different cards');
+    } else assert.deepEqual(m.teams.map(t => t.cards), [[], []]);
     assert.deepEqual(m.weather, s.weather);
     const step = m.step;
     const expected = { ball: ['attack', 0], defend: ['attack', 1], penalty: ['penalty', 0], scrum: ['setpiece', 0], lineout: ['setpiece', 1] }[s.situation];

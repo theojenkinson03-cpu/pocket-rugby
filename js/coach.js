@@ -4,16 +4,16 @@ import { cardTier } from './cards.js';
 import { possessive } from './players.js';
 
 export const TIPS = {
-  toss: { title: 'The coin toss', text: 'Call heads or tails. The winner receives the kick-off. With team cards on, the loser picks a card first.' },
-  draft: { title: 'Pick a team card', text: 'Rarer cards are stronger: Common, Rare, Epic and, now and then, Mythic. The toss loser picks first. The other side takes one of the two left, a rarity up if the first pick was rarer.' },
-  'scrum-half': { title: 'Your Scrum Half', text: 'The Scrum Half always plays first: after the kick-off, after every tackle and after winning the ball back. Tap to roll.' },
+  toss: { title: 'The coin toss', text: 'Call heads or tails. The winner receives the kick-off. With team cards on, the loser picks first.' },
+  draft: { title: 'Pick your team cards', text: 'Five cards, two each: the toss loser picks first and fourth, the winner second and third, and the last card is discarded. Rarer cards are stronger: Common, Rare, Epic and, now and then, Mythic.' },
+  'scrum-half': { title: 'Your Scrum Half', text: 'The Scrum Half always plays first: after the kick-off, after every tackle and after winning the ball back. Under the dice, the guide shows what each face would do: green is good, red is bad. Tap a face to read more.' },
   runner: { title: 'Run, pass or lose it', text: "This player's die decides. A run has an intensity the defence must match, a pass moves the ball on, and an error gives it away." },
   pass: { title: 'Choose a receiver', text: 'Break is the chance this player makes a line break, Error the chance they lose the ball. The Tip badge marks the best odds.' },
   tackle: { title: 'Make the tackle', text: "Roll two brown dice. If they add up to the intensity or more, the tackle is made. Fall short and they're through." },
   try: { title: 'Go for the line', text: 'Black die: TRY scores 5 points, VIDEO REF means roll again, and anything else is a changeover.' },
   conversion: { title: 'Conversion', text: 'Every try earns a kick for 2 more points. First the brown die sets the range: each pip is 10 metres.' },
   kick: { title: 'Kick at goal', text: "The black die's number, in tens of metres, must reach the range. Watch the gauge fill on the kick cam." },
-  'drop-range': { title: 'Drop-goal chance', text: 'The Centres and Fly Half can drop goal for 3 points. Roll the brown die for the range, then decide.' },
+  'drop-range': { title: 'Drop-goal chance', text: 'The Fly Half kicks every drop goal for 3 points (a Centre’s Drop Goal face gives the Fly Half the chance). Roll the brown die for the range, then decide.' },
   drop: { title: 'Kick or keep it?', text: 'Kick for 3 points now, or pass and keep the attack going. The percentage is your chance of landing it.' },
   penalty: { title: 'Penalty', text: 'One roll does two jobs: the black die checks for a yellow card (the yellow dot) and the brown die sets the range for a kick.' },
   'penalty-choice': { title: 'Kick or tap?', text: 'Kick at goal for 3 points, or quick tap for +1 intensity on your next 3 runs. The advantage ends after 3 tackles or an error.' },
@@ -28,6 +28,11 @@ export const TIPS = {
   wind: { title: 'Wind', text: 'Kicks with the wind at your back go 10 m further, and 10 m shorter into it. The ends change at half time, so the wind swaps sides.' },
   'card-played': { title: 'Team card in play', text: '' },
   'quick-tap': { title: 'Quick-tap advantage', text: 'Every run gets +1 intensity until the defence makes 3 tackles or you make an error.' },
+  restart: { title: 'After a score', text: 'Whoever concedes gets the ball back from the restart, so a lead is never safe.' },
+  clock: { title: 'The match clock', text: 'This match is played on the clock: a set number of rolls, half each way. The higher score at the end wins, and a draw can happen. When the rolls run out, play goes on until the ball is dead.' },
+  'last-play': { title: 'Last play', text: 'The clock has run out. The next score, turnover, knock-on or kick ends the half. A penalty can still be kicked at goal or tapped.' },
+  'sudden-death': { title: 'Sudden death', text: 'Level at full time in a knockout match: the next score of any kind wins it.' },
+  auto: { title: 'Auto-roll', text: 'Auto-roll rolls your dice for you and stops whenever there is a decision to make. Turn it on or off with the Auto button.' },
 };
 
 // The tip for this moment, if there is one not yet seen. Events are checked
@@ -42,7 +47,9 @@ export function tipFor(match, events, seen, humanTurn) {
       wetBall: 'rain',
       cardPlayed: 'card-played',
       quickTap: 'quick-tap',
-    }[e.type];
+      lastPlay: 'last-play',
+      suddenDeath: 'sudden-death',
+    }[e.type] || (e.type === 'possession' && e.reason === 'restart' ? 'restart' : null);
     if (id && fresh(id)) return id;
   }
   if (!humanTurn) return null;
@@ -62,6 +69,7 @@ export function tipFor(match, events, seen, humanTurn) {
     ruck: 'ruck',
   }[step.purpose];
   if (step.type === 'halftime') return fresh('halftime');
+  if (match.format === 'rolls' && match.attacker !== null && fresh('clock')) return 'clock';
   if (step.purpose === 'bench') return fresh('bench');
   // The wind matters the first time you line up a kick in it.
   const kicking = step.purpose === 'kick' || (step.type === 'choose' && (step.purpose === 'penalty' || step.purpose === 'drop'));

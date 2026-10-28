@@ -42,7 +42,7 @@ export function careerPage(career, { onReset }) {
   const tiles = el('div', 'stat-tiles');
   tiles.append(
     tile('Played', c.played, c.twoPlayer ? `+ ${c.twoPlayer} two-player` : null),
-    tile('Won', c.won, `Win rate ${pct(c.won, c.played)}`),
+    tile('Won', c.won, `Win rate ${pct(c.won, c.played)}${c.drawn ? ` · ${c.drawn} drawn` : ''}`),
     tile('Best streak', c.bestStreak, c.streak ? `Current ${c.streak}` : null),
     tile('Tries', c.tries, c.played ? `${(c.tries / c.played).toFixed(1)} a match` : null),
   );

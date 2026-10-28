@@ -135,7 +135,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
   // ---------------------------------------------------------------- scenes
 
   const scenes = {
-    kickoff({ teams, half, target, label = null, venue = null, conditions = null }) {
+    kickoff({ teams, half, target, label = null, venue = null, conditions = null, format = 'points' }) {
       return run({ duration: label || venue ? 2300 : 2000 }, (scene, later) => {
         scene.classList.add('kickoff');
         const sides = teams.map((t, i) => {
@@ -150,7 +150,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
           ...sides,
           el('div', 'ko-v', 'v'),
           el('div', 'ko-top', half === 1 ? 'Kick off' : 'Second half'),
-          el('div', 'ko-bottom', half === 1 ? `First to ${target.full} · half time at ${target.half}` : `First to ${target.full}`),
+          el('div', 'ko-bottom', format === 'rolls' ? `${target.rolls} rolls · ${Math.round(target.rolls / 2)} a half` : half === 1 ? `First to ${target.full} · half time at ${target.half}` : `First to ${target.full}`),
         );
         if (label) scene.append(el('div', 'ko-label', label));
         if (venue && half === 1) scene.append(el('div', `ko-venue${venue.neutral ? ' neutral' : ''}`, venue.neutral ? `${venue.name} · neutral ground` : venue.name));
@@ -446,7 +446,9 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     whistle({ full, teams, winner }) {
-      const color = full ? teams[winner] : null;
+      // A draw has no winner's colours.
+      const won = full && winner !== null && winner !== undefined;
+      const color = won ? teams[winner] : null;
       return run({ tone: full ? 'team' : 'dark', duration: full ? 3000 : 2100, color }, (scene, later) => {
         scene.classList.add('whistle');
         scene.append(el('div', 'wh-kicker', full ? 'Full time' : 'Half time'));
@@ -462,9 +464,9 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
           if (i === 0) board.append(el('div', 'wh-dash', '–'));
         });
         scene.append(board);
-        if (full) scene.append(title(`${teams[winner].name} win`, 'small late'));
+        if (full) scene.append(title(won ? `${teams[winner].name} win` : 'A draw', 'small late'));
         play('whistle', true);
-        if (full) {
+        if (won) {
           later(300, () => play('roar'));
           later(400, () => confetti(scene, [teams[winner].color, '#ffffff', '#f5cf1d', inkFor(teams[winner].color)], 180));
         }
@@ -480,7 +482,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
         teams.forEach((t, i) => {
           const col = el('div', `ds-col ${i ? 'right' : 'left'}`);
           kit(col, t);
-          col.append(el('div', 'ds-team', t.name), cardArt(t.card, { rarity: t.cardRarity || 'common' }));
+          col.append(el('div', 'ds-team', t.name), ...t.cards.map(c => cardArt(c.id, { rarity: c.rarity })));
           row.append(col);
           if (i === 0) row.append(el('div', 'ds-v', 'v'));
         });

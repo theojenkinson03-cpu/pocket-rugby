@@ -126,11 +126,12 @@ test('a try scores five, video ref re-rolls, and the conversion follows', () => 
   assert.equal(m.step.purpose, 'range');
   m = roll(m, dice(TACKLE_3)).state; // range 3
   assert.equal(m.step.purpose, 'kick');
-  const { state } = roll(m, dice(face('K', f => f.kick === 3)));
+  const { state, events } = roll(m, dice(face('K', f => f.kick === 3)));
   assert.equal(state.teams[0].score, 7);
-  // The scoring team receives the restart.
-  assert.equal(state.attacker, 0);
+  // The side that conceded has the ball from the restart.
+  assert.equal(state.attacker, 1);
   assert.equal(state.step.dice[0], 'S');
+  assert.equal(events.find(e => e.type === 'possession').reason, 'restart');
 });
 
 test('no try is a changeover', () => {

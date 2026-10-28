@@ -1,15 +1,17 @@
 // Turns engine events into commentary lines, tray headlines and big moments.
 
 import { METRES_PER_POINT, PLAYERS } from './dice.js';
-import { CARD_BY_ID, cardTier, RARITY_BY_ID } from './cards.js';
+import { CARD_BY_ID, cardsWith, cardTier, RARITY_BY_ID } from './cards.js';
 import { fullName, possessive, who } from './players.js';
+import { DECISION_SECONDS } from './engine.js';
 
 const pick = lines => lines[Math.floor(Math.random() * lines.length)];
 const pct = p => `${Math.round(p * 100)}%`;
 export const metres = n => `${n * METRES_PER_POINT} m`;
 const signed = n => (n < 0 ? `−${-n}` : `+${n}`);
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
-const cardName = (match, team) => CARD_BY_ID[match.teams[team].card]?.name || 'team card';
+// The name of the side's card (or cards) with an effect: "Golden Boot", "Golden Boot and Up and Under".
+const cardName = (match, team, test) => cardsWith(match, team, test).map(c => CARD_BY_ID[c.id].name).join(' and ') || 'team card';
 
 // "5 (3 + 3, −1 each for the card, +1 Rush Defence)": the dice as rolled, then adjustments.
 function tackleSum(e, match) {
@@ -18,7 +20,7 @@ function tackleSum(e, match) {
   const extra = bonus[0] + bonus[1];
   const notes = [];
   if (e.modifier) notes.push(`${signed(e.modifier)} each for the card`);
-  if (extra) notes.push(`${signed(extra)} ${cardName(match, e.team)}`);
+  if (extra) notes.push(`${signed(extra)} ${cardName(match, e.team, fx => fx.tackleBonus)}`);
   return `${e.total} (${rolled.join(' + ')}${notes.length ? `, ${notes.join(', ')}` : ''})`;
 }
 
@@ -26,8 +28,8 @@ function tackleSum(e, match) {
 function runNotes(e, match) {
   const notes = [];
   if (e.quickTap) notes.push('+1 advantage');
-  if (e.card) notes.push(`${signed(e.card)} ${cardName(match, e.team)}`);
-  if (e.fortress) notes.push(`${signed(-e.fortress)} ${cardName(match, 1 - e.team)}`);
+  if (e.card) notes.push(`${signed(e.card)} ${cardName(match, e.team, fx => fx.runBonus?.[e.pos])}`);
+  if (e.fortress) notes.push(`${signed(-e.fortress)} ${cardName(match, 1 - e.team, fx => fx.specialDefence || fx.hitUpDefence)}`);
   if (e.injury) notes.push(`−${e.injury} injury`);
   return notes.length ? ` (${e.value} ${notes.join(', ')})` : '';
 }
@@ -99,8 +101,8 @@ export function narrate(events, match) {
       case 'deal': {
         const mythic = e.cards.filter(id => e.rarity?.[id] === 'mythic');
         const best = mythic.length ? ` ${mythic.length > 1 ? `${mythic.length} of them are` : 'One of them is'} MYTHIC!` : '';
-        say(`Three team cards are dealt.${best} ${name(e.first)} lost the toss, so they pick first.`, e.first, mythic.length ? 'big' : 'info');
-        head(mythic.length ? 'Mythic card!' : 'Team cards', `${name(e.first)} pick first. ${name(1 - e.first)} take one of the other two.`);
+        say(`Five team cards are dealt.${best} ${name(e.first)} lost the toss, so they pick first and fourth; ${name(1 - e.first)} pick second and third.`, e.first, mythic.length ? 'big' : 'info');
+        head(mythic.length ? 'Mythic card!' : 'Team cards', `${name(e.first)} pick first. Two cards each; the last one left is discarded.`);
         if (mythic.length) out.moments.push({ kind: 'mythic', team: e.first, cards: mythic, title: 'Mythic card', sub: '' });
         break;
       }
@@ -108,17 +110,14 @@ export function narrate(events, match) {
       case 'draft': {
         const card = cardTier(e.card, e.rarity);
         say(`${name(e.team)} take ${cardLabel(e.card, e.rarity)}: ${card.text}`, e.team, 'big');
-        head(`${name(e.team)}: ${card.name}`, e.first ? `${name(1 - e.team)} pick from the other two.` : 'Both sides have their card. Kick-off!');
-        if (!e.first) out.moments.push({ kind: 'draft', team: e.team, title: 'Team cards', sub: '' });
+        head(`${name(e.team)}: ${card.name}`, e.last ? 'Both sides have their two cards. Kick-off!' : `${name(match.step.team)} to pick.`);
+        if (e.last) out.moments.push({ kind: 'draft', team: e.team, title: 'Team cards', sub: '' });
         break;
       }
 
-      case 'catchUp': {
-        const card = CARD_BY_ID[e.card];
-        say(`Catch-up: the first pick was rarer, so ${possessive(name(e.team))} ${card.name} goes up from ${RARITY_BY_ID[e.from].name} to ${RARITY_BY_ID[e.to].name}.`, e.team, 'big');
-        out.detail = `Catch-up: ${card.name} goes up to ${RARITY_BY_ID[e.to].name}. Kick-off!`;
+      case 'discard':
+        say(`${cardLabel(e.card, e.rarity)} is left over and goes back in the pack.`);
         break;
-      }
 
       case 'cardPlayed': {
         const card = CARD_BY_ID[e.card];
@@ -131,6 +130,7 @@ export function narrate(events, match) {
 
       case 'possession':
         if (e.reason === 'kickoff') say(`${name(e.team)} gather the kick-off. Scrum Half to play.`, e.team);
+        else if (e.reason === 'restart') say(`${name(e.team)} take the restart. Scrum Half to play.`, e.team);
         break;
 
       case 'run': {
@@ -157,7 +157,8 @@ export function narrate(events, match) {
         break;
 
       case 'dropChance':
-        say(`${cap(player(e.team, e.pos))} drops into the pocket. Drop goal on?`, e.team);
+        if (e.from) say(`${cap(player(e.team, e.from))} gives it back to ${player(e.team, e.pos)} in the pocket. Drop goal on?`, e.team);
+        else say(`${cap(player(e.team, e.pos))} drops into the pocket. Drop goal on?`, e.team);
         head('Drop-goal chance', 'Roll the brown die to see the range.');
         break;
 
@@ -240,7 +241,7 @@ export function narrate(events, match) {
 
       case 'range': {
         const card = e.card ?? e.bonus;
-        const extras = [card ? `${metres(card)} from ${cardName(match, e.team)}` : '', windNote(e.wind || 0)].filter(Boolean);
+        const extras = [card ? `${metres(card)} from ${cardName(match, e.team, fx => fx.kickBonus?.[e.kick])}` : '', windNote(e.wind || 0)].filter(Boolean);
         const boost = extras.length ? ` with ${extras.join(' and ')}` : '';
         if (e.kick === 'conversion') say(`Conversion from ${metres(e.range)}.`, e.team);
         if (e.kick === 'drop') say(`Drop-goal range: ${metres(e.range)}.`, e.team);
@@ -263,7 +264,7 @@ export function narrate(events, match) {
         const what = { conversion: 'Conversion', penalty: 'Penalty goal', drop: 'Drop goal' }[e.kick];
         const kicker = e.kicker ? player(e.team, e.kicker) : name(e.team);
         const card = e.card ?? e.bonus;
-        const extras = [card ? `${signed(card * METRES_PER_POINT)} m ${cardName(match, e.team)}` : '', windNote(e.wind || 0)].filter(Boolean);
+        const extras = [card ? `${signed(card * METRES_PER_POINT)} m ${cardName(match, e.team, fx => fx.kickBonus?.[e.kick])}` : '', windNote(e.wind || 0)].filter(Boolean);
         const struck = extras.length ? `${metres(e.distance)} (${metres(e.rolled)} ${extras.join(' ')})` : metres(e.distance);
         if (e.good) {
           say(`${what}! ${cap(kicker)} strikes it ${struck}, ${metres(e.range)} needed.`, e.team, 'score');
@@ -345,8 +346,25 @@ export function narrate(events, match) {
       case 'wetBall':
         break;
       case 'fulltime':
-        say(`FULL TIME! ${name(e.winner)} win. ${scoreLine(match)}.`, e.winner, 'score');
+        if (e.winner === null) say(`FULL TIME! It's a draw. ${scoreLine(match)}.`, null, 'score');
+        else say(`FULL TIME! ${name(e.winner)} win. ${scoreLine(match)}.`, e.winner, 'score');
         out.moments.push({ kind: 'fulltime', team: e.winner, title: 'Full time', sub: scoreLine(match) });
+        break;
+      case 'lastPlay': {
+        const end = e.half === 1 ? 'half time' : 'full time';
+        say(`The clock is out: last play! The next time the ball goes dead it's ${end}.`, null, 'big');
+        head('Last play', `The rolls are up. The next score, turnover or stoppage ends the half.`);
+        out.moments.push({ kind: 'lastplay', team: null, title: 'Last play', sub: `Next stoppage: ${end}` });
+        break;
+      }
+      case 'suddenDeath':
+        say(`All square at full time! Sudden death: the next score wins it.`, null, 'big');
+        head('Sudden death', 'The next score of any kind wins the match.');
+        out.moments.push({ kind: 'suddendeath', team: null, title: 'Sudden death', sub: 'Next score wins' });
+        break;
+      case 'timeout':
+        say(`${name(e.team)} ran out of time to decide. Penalty to ${name(1 - e.team)}!`, e.team, 'bad');
+        head('Out of time', `${name(e.team)} took longer than ${DECISION_SECONDS} seconds. Penalty to ${name(1 - e.team)}.`);
         break;
     }
   }

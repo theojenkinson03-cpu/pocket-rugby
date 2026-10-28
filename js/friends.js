@@ -24,9 +24,9 @@ export function hashText(text) {
 }
 
 // The league's settings, as stored in its shared document.
-export function newFriendsLeague({ code, league = 'prem', season = 'short', length = 'quick', cards = true, bench = true, weather = false, host, seed }) {
+export function newFriendsLeague({ code, league = 'prem', season = 'short', length = 'quick', format = 'rolls', cards = true, bench = true, weather = false, host, seed }) {
   if (!LEAGUES[league]) throw new Error(`no league ${league}`);
-  return { v: FRIENDS_VERSION, code, league, season, length, cards: !!cards, bench: !!bench, weather: !!weather, host, seed: seed >>> 0, status: 'lobby', created: Date.now() };
+  return { v: FRIENDS_VERSION, code, league, season, length, format: format === 'points' ? 'points' : 'rolls', cards: !!cards, bench: !!bench, weather: !!weather, host, seed: seed >>> 0, status: 'lobby', created: Date.now() };
 }
 
 // The dice for a CPU-against-CPU fixture: the same on every phone.
@@ -51,6 +51,8 @@ export function rebuild(settings, clubs, results, me, cache = {}) {
     userTeam: myClub || '__watching',
     season: settings.season,
     length: settings.length,
+    // Leagues made before the clock were first to a score.
+    format: settings.format || 'points',
     cards: settings.cards,
     bench: settings.bench,
     weather: settings.weather,

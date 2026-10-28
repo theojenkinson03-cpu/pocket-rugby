@@ -1,4 +1,9 @@
 // Renders the dice: 3D cubes that tumble onto a face, and flat face tiles.
+// A cube has six faces round a solid core (so no gaps show at the rounded
+// edges as it turns) and a shadow on the table under it, drawn as its own
+// element: a filter on the cube's parent would flatten the 3D in Safari.
+// Badges in a die's top-right corner show what changes its numbers: an
+// injury, the sin bin, a red card, advantage, the wind or a team card.
 
 import { DICE, PLAYERS } from './dice.js';
 
@@ -73,13 +78,25 @@ function paint(node, dieId) {
   node.dataset.die = dieId;
 }
 
-export function createDie(dieId, faceIndex = 0) {
+// The core: three planes through the middle, in the die's colour.
+const CORE = ['rotateX(90deg)', 'rotateY(90deg)', 'none'];
+
+export function createDie(dieId, faceIndex = 0, badges = []) {
   const die = document.createElement('div');
   die.className = 'die';
   paint(die, dieId);
   die.setAttribute('role', 'img');
+  const shadow = document.createElement('i');
+  shadow.className = 'die-shadow';
+  shadow.setAttribute('aria-hidden', 'true');
   const cube = document.createElement('div');
   cube.className = 'cube';
+  for (const t of CORE) {
+    const plane = document.createElement('i');
+    plane.className = 'core';
+    plane.style.transform = t;
+    cube.append(plane);
+  }
   DICE[dieId].faces.forEach((_, i) => {
     const face = document.createElement('div');
     face.className = 'face';
@@ -87,16 +104,49 @@ export function createDie(dieId, faceIndex = 0) {
     face.innerHTML = faceHTML(dieId, i);
     cube.append(face);
   });
-  die.append(cube);
+  // The lift carries the perspective and the drop; the cube turns inside it.
+  const lift = document.createElement('div');
+  lift.className = 'lift';
+  lift.append(cube);
+  die.append(shadow, lift);
+  addBadges(die, badges);
   die._angle = { x: 0, y: 0 };
   setFace(die, faceIndex);
   return die;
 }
 
+const faceNodes = die => die.querySelectorAll('.cube > .face');
+
+// A badge: {kind, kinds, text, label}: an icon for each kind of change
+// ('injury', 'sinbin', 'red', 'advantage', 'wind', 'card') and the total.
+export function badgeNode({ kind, kinds = [kind], text, label }) {
+  const b = document.createElement('span');
+  b.className = `die-badge b-${kind}${kinds.length > 1 ? ' multi' : ''}`;
+  for (const k of kinds) {
+    const icon = document.createElement('i');
+    icon.className = `bi-${k}`;
+    icon.setAttribute('aria-hidden', 'true');
+    b.append(icon);
+  }
+  b.append(document.createTextNode(text));
+  if (label) b.title = label;
+  return b;
+}
+
+function addBadges(node, badges = []) {
+  badges = badges.filter(Boolean);
+  if (!badges.length) return;
+  const host = document.createElement('span');
+  host.className = 'die-badges';
+  badges.forEach(badge => host.append(badgeNode(badge)));
+  node.append(host);
+  node.dataset.badges = badges.flatMap(b => b.kinds || [b.kind]).join(' ');
+}
+
 export function setFace(die, faceIndex) {
   const [x, y] = SHOW_SIDE[faceIndex];
   die._angle = { x, y };
-  const cube = die.firstChild;
+  const cube = die.querySelector('.cube');
   cube.style.transition = 'none';
   cube.style.transform = `rotateX(${x}deg) rotateY(${y}deg)`;
   markFace(die, faceIndex);
@@ -104,18 +154,19 @@ export function setFace(die, faceIndex) {
 
 function markFace(die, faceIndex) {
   die.dataset.face = faceIndex;
-  die.setAttribute('aria-label', `${DICE[die.dataset.die].name} die: ${faceLabel(die.dataset.die, faceIndex)}`);
-  [...die.firstChild.children].forEach((f, i) => f.classList.toggle('up', i === faceIndex));
+  const badges = [...die.querySelectorAll('.die-badge')].map(b => b.title).filter(Boolean);
+  die.setAttribute('aria-label', `${DICE[die.dataset.die].name} die: ${faceLabel(die.dataset.die, faceIndex)}${badges.length ? `. ${badges.join('. ')}` : ''}`);
+  faceNodes(die).forEach((f, i) => f.classList.toggle('up', i === faceIndex));
 }
 
 // Next angle equal to `base` (mod 360) that is at least `min` degrees past `from`.
 const ahead = (from, base, min) => base + 360 * Math.ceil((from + min - base) / 360);
 
 export function rollTo(die, faceIndex, { duration = 950, delay = 0, reduced = false } = {}) {
-  const cube = die.firstChild;
+  const cube = die.querySelector('.cube');
   const [bx, by] = SHOW_SIDE[faceIndex];
   die.classList.remove('landed');
-  [...cube.children].forEach(f => f.classList.remove('up'));
+  faceNodes(die).forEach(f => f.classList.remove('up'));
 
   if (reduced) {
     setFace(die, faceIndex);
@@ -131,13 +182,21 @@ export function rollTo(die, faceIndex, { duration = 950, delay = 0, reduced = fa
   void cube.offsetWidth;
   cube.style.transform = `rotateX(${x}deg) rotateY(${y}deg)`;
 
+  // The cube drops in and bounces; its shadow grows as it nears the table.
   const drift = (Math.random() - 0.5) * 60;
-  die.animate([
+  die.querySelector('.lift').animate([
     { transform: `translate(${drift}px, -70px) scale(.55)`, opacity: 0 },
     { opacity: 1, offset: 0.15 },
     { transform: `translate(${drift * 0.3}px, 8px) scale(1.06)`, offset: 0.62 },
     { transform: 'translate(0, -6px) scale(.99)', offset: 0.8 },
     { transform: 'none' },
+  ], { duration, delay, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'backwards' });
+  die.querySelector('.die-shadow')?.animate([
+    { transform: 'scale(.3)', opacity: 0 },
+    { transform: 'scale(.6)', opacity: 0.5, offset: 0.3 },
+    { transform: 'scale(1.05)', opacity: 1, offset: 0.62 },
+    { transform: 'scale(.9)', opacity: 0.85, offset: 0.8 },
+    { transform: 'none', opacity: 1 },
   ], { duration, delay, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'backwards' });
 
   return wait(duration + delay).then(() => {
@@ -156,12 +215,13 @@ export function faceTile(dieId, index, extraClass = '') {
   return tile;
 }
 
-export function dieChip(dieId, text = PLAYERS[dieId]?.short ?? '') {
+export function dieChip(dieId, text = PLAYERS[dieId]?.short ?? '', badges = []) {
   const chip = document.createElement('span');
   chip.className = 'die-chip';
   paint(chip, dieId);
   chip.textContent = text;
   chip.setAttribute('aria-hidden', 'true');
+  addBadges(chip, badges);
   return chip;
 }
 

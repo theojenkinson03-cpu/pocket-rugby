@@ -79,7 +79,7 @@ test('the meter: team cards give an edge worth their measured lift at the kick-o
   const kickoff = (cards, scores = [0, 0]) => {
     const m = stateAt({ scores, firstReceiver: 0 });
     m.cards = true;
-    cards.forEach(([id, rarity], i) => Object.assign(m.teams[i], { card: id, cardRarity: rarity }));
+    cards.forEach(([id, rarity], i) => (m.teams[i].cards = id ? [{ id, rarity }] : []));
     return m;
   };
   // No cards, or the same card at the same rarity: the model as it is.

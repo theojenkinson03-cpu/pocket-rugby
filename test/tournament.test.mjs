@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { act, MATCH_LENGTHS, newMatch, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import {
+  bonusFor,
   advance, clash, createCup, createLeague, currentRound, isUserFixture, kits, LEAGUES, matchOptions, migrateTournament, NATIONS, NEUTRAL_GROUNDS,
   POINTS, QUALIFY, recordResult, resultFromMatch, roundName, roundRobin, SHORT_SEASON, simulateFixture, simulateRound, stageName, standings,
   TEAM_BY_ID, teamOf, userAlive, userFixture, userRecord, venue,
@@ -113,27 +114,34 @@ test('league seasons: short is six rounds, full is everyone once, with a bye eac
 function pool(results) {
   const t = createCup({ userTeam: 'nzl', rng: seededRng(1) });
   const ids = t.pools.A;
-  t.fixtures = results.map(([h, a, score, tries], i) => ({ id: `x${i}`, stage: 'pool', round: 0, group: 'A', home: ids[h], away: ids[a], result: { score, tries, winner: score[0] > score[1] ? 'home' : 'away' } }));
+  t.fixtures = results.map(([h, a, score, tries, winner], i) => ({ id: `x${i}`, stage: 'pool', round: 0, group: 'A', home: ids[h], away: ids[a], result: { score, tries, winner: winner || (score[0] > score[1] ? 'home' : 'away') } }));
   return { t, ids };
 }
 
-test('table points: 4 for a win, a bonus for 4 tries, a bonus for losing by 7 or fewer', () => {
-  assert.deepEqual(POINTS, { win: 4, tryBonus: 1, losingBonus: 1, tryBonusAt: 4, losingBonusWithin: 7 });
+test('table points: 4 for a win, 2 for a draw, a bonus for winning by 10+ or losing by 5 or fewer', () => {
+  assert.deepEqual(POINTS, { win: 4, draw: 2, bigWinBonus: 1, bigWinBy: 10, losingBonus: 1, losingBonusWithin: 5 });
   const { t, ids } = pool([
-    [0, 1, [30, 25], [4, 4]], // home win with try bonus; away lose by 5 with tries: 1 + 1
-    [2, 3, [30, 22], [2, 3]], // lose by 8: nothing
-    [0, 2, [12, 30], [1, 5]], // away win with try bonus; home lose by 18: nothing
+    [0, 1, [30, 25], [4, 4]], // home win by 5: 4; away lose by 5: 1 (tries don't matter)
+    [2, 3, [30, 22], [2, 3]], // win by 8: 4; lose by 8: nothing
+    [0, 2, [12, 30], [1, 5]], // away win by 18: 4 + 1; home lose by 18: nothing
   ]);
   const rows = Object.fromEntries(standings(t, 'A').map(r => [r.id, r]));
-  assert.deepEqual([rows[ids[0]].points, rows[ids[0]].bonus, rows[ids[0]].won, rows[ids[0]].lost], [5, 1, 1, 1]);
-  assert.deepEqual([rows[ids[1]].points, rows[ids[1]].bonus], [2, 2], 'losing bonus and try bonus');
-  assert.deepEqual([rows[ids[2]].points, rows[ids[2]].played], [9, 2]);
+  assert.deepEqual([rows[ids[0]].points, rows[ids[0]].bonus, rows[ids[0]].won, rows[ids[0]].lost], [4, 0, 1, 1]);
+  assert.deepEqual([rows[ids[1]].points, rows[ids[1]].bonus], [1, 1], 'the losing bonus');
+  assert.deepEqual([rows[ids[2]].points, rows[ids[2]].played, rows[ids[2]].bonus], [9, 2, 1], 'a big-win bonus');
   assert.deepEqual([rows[ids[3]].points, rows[ids[3]].for, rows[ids[3]].against], [0, 22, 30]);
-  // Lose by exactly 7: the bonus; by 8: none.
-  const edge = pool([[0, 1, [27, 20], [0, 0]], [2, 3, [28, 20], [0, 0]]]);
+  // The edges: win by exactly 10 and by 9; lose by exactly 5 and by 6.
+  const edge = pool([[0, 1, [20, 10], [0, 0]], [2, 3, [19, 10], [0, 0]]]);
   const e = Object.fromEntries(standings(edge.t, 'A').map(r => [r.id, r.points]));
-  assert.equal(e[edge.ids[1]], 1);
-  assert.equal(e[edge.ids[3]], 0);
+  assert.deepEqual([e[edge.ids[0]], e[edge.ids[2]]], [5, 4]);
+  const close = pool([[0, 1, [20, 15], [0, 0]], [2, 3, [21, 15], [0, 0]]]);
+  const c = Object.fromEntries(standings(close.t, 'A').map(r => [r.id, r.points]));
+  assert.deepEqual([c[close.ids[1]], c[close.ids[3]]], [1, 0]);
+  // A draw: 2 each, no bonus, in the drawn column.
+  const drawn = pool([[0, 1, [14, 14], [2, 2], 'draw']]);
+  const d = standings(drawn.t, 'A').filter(r => r.played);
+  assert.deepEqual(d.map(r => [r.points, r.drawn, r.won, r.lost, r.bonus]), [[2, 1, 0, 0, 0], [2, 1, 0, 0, 0]]);
+  assert.deepEqual([bonusFor(30, 20), bonusFor(30, 21), bonusFor(10, 15), bonusFor(10, 16), bonusFor(7, 7)], ['big', null, 'close', null, null]);
 });
 
 test('table order: points, then points difference, then tries', () => {
@@ -464,8 +472,10 @@ function playUser(t, rng) {
     const a = s.type === 'roll' ? { type: 'roll' } : s.type === 'halftime' ? { type: 'continue' } : { type: 'choose', value: cpuChoice({ ...m, cpuLevel: 'pro' }, rng) };
     m = act(m, a, rng).state;
   }
+  // On the clock, a knockout is never drawn: it goes to sudden death.
+  if (f.stage !== 'pool' && f.stage !== 'league') assert.notEqual(m.winner, null, `${f.stage} decided`);
   recordResult(t, f.id, resultFromMatch(f, m, f.home === t.userTeam));
-  return m.winner === 0;
+  return m.winner === null ? 'drawn' : m.winner === 0 ? 'won' : 'lost';
 }
 
 test('whole tournaments play out to one champion, the user alive exactly while they have a match or a bye', () => {
@@ -475,14 +485,13 @@ test('whole tournaments play out to one champion, the user alive exactly while t
     const comp = comps[seed % comps.length];
     const roster = comp === 'cup' ? NATIONS : LEAGUES[comp].teams;
     const userTeam = roster[(seed * 3) % roster.length].id;
-    const t = comp === 'cup' ? createCup({ userTeam, length: 'quick', rng }) : createLeague({ league: comp, userTeam, length: 'quick', season: seed < 10 ? 'short' : 'full', rng });
-    let won = 0;
-    let lost = 0;
+    const format = seed % 2 ? 'rolls' : 'points';
+    const t = comp === 'cup' ? createCup({ userTeam, length: 'quick', format, rng }) : createLeague({ league: comp, userTeam, length: 'quick', format, season: seed < 10 ? 'short' : 'full', rng });
+    const record = { won: 0, drawn: 0, lost: 0 };
     for (let guard = 0; t.stage !== 'done' && guard < 40; guard++) {
       if (userFixture(t)) {
         assert.ok(userAlive(t));
-        if (playUser(t, rng)) won++;
-        else lost++;
+        record[playUser(t, rng)]++;
       } else {
         // No match: knocked out, a league bye, or a top-two wait in the Top 14.
         const bye = t.stage === 'league' || (t.byes || []).includes(t.userTeam);
@@ -493,7 +502,9 @@ test('whole tournaments play out to one champion, the user alive exactly while t
     }
     assert.equal(t.stage, 'done');
     assert.ok(t.teams.some(x => x.id === t.champion));
-    assert.deepEqual(userRecord(t), { won, lost });
+    assert.deepEqual(userRecord(t), record);
+    // Knockouts never end level; league and pool matches on the clock can.
+    assert.ok(t.fixtures.every(f => f.result.winner !== 'draw' || f.stage === 'pool' || f.stage === 'league'));
     assert.equal(userAlive(t), t.champion === t.userTeam);
     // Every fixture has a result, and the knockouts have the right shape.
     assert.ok(t.fixtures.every(f => f.result));

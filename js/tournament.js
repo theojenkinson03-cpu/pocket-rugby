@@ -162,7 +162,18 @@ export const CHAMPIONS_CUP = {
 export const QUALIFY = { top4: 4, top6: 6, top8: 8, super6: 6 };
 export const SHORT_SEASON = 6;
 
-export const POINTS = { win: 4, tryBonus: 1, losingBonus: 1, tryBonusAt: 4, losingBonusWithin: 7 };
+// Table points: 4 for a win, 2 for a draw, and a bonus point for winning by
+// 10 or more or losing by 5 or fewer. (Not rugby's usual four-try bonus:
+// here the bonus is for the margin, so it means the same in every format.)
+export const POINTS = { win: 4, draw: 2, bigWinBonus: 1, bigWinBy: 10, losingBonus: 1, losingBonusWithin: 5 };
+
+// The bonus point a result earns a side: {kind: 'big'|'close'} or null.
+export function bonusFor(mine, theirs) {
+  const margin = mine - theirs;
+  if (margin >= POINTS.bigWinBy) return 'big';
+  if (margin < 0 && -margin <= POINTS.losingBonusWithin) return 'close';
+  return null;
+}
 
 const shuffle = (list, rng) => {
   const a = [...list];
@@ -205,7 +216,7 @@ function makeTeams(roster, rng) {
   return roster.map(team => ({ ...team, roster: randomRoster(team.flavour, rng) }));
 }
 
-export function createCup({ userTeam, length = 'quick', cards = true, bench = false, weather = false, rng = Math.random }) {
+export function createCup({ userTeam, length = 'quick', format = 'points', cards = true, bench = false, weather = false, rng = Math.random }) {
   const others = shuffle(NATIONS.filter(n => n.id !== userTeam), rng).slice(0, 7);
   const field = shuffle([NATIONS.find(n => n.id === userTeam), ...others], rng);
   const pools = { A: field.slice(0, 4).map(n => n.id), B: field.slice(4).map(n => n.id) };
@@ -217,13 +228,13 @@ export function createCup({ userTeam, length = 'quick', cards = true, bench = fa
   }
   // One of the eight hosts the semi-finals and the final.
   const host = field[Math.floor(rng() * field.length)].id;
-  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, cards, bench, weather, userTeam, host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
+  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, format, cards, bench, weather, userTeam, host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
 }
 
 // season: 'full' (everyone plays everyone once) or 'short' (the first
 // SHORT_SEASON rounds of that schedule). With an odd number of teams, one
 // side has a bye each round.
-export function createLeague({ league = 'prem', userTeam, length = 'quick', cards = true, bench = false, weather = false, season = 'short', rng = Math.random }) {
+export function createLeague({ league = 'prem', userTeam, length = 'quick', format = 'points', cards = true, bench = false, weather = false, season = 'short', rng = Math.random }) {
   const L = LEAGUES[league];
   const field = L.teams.map(c => c.id);
   const schedule = roundRobin(shuffle(field, rng));
@@ -241,6 +252,7 @@ export function createLeague({ league = 'prem', userTeam, length = 'quick', card
     season,
     rounds: rounds.length,
     length,
+    format,
     cards,
     bench,
     weather,
@@ -288,7 +300,7 @@ export function championsPoolRounds(ids, rng = Math.random) {
 }
 
 // `pools`: the draw, by default the real 2026-27 one.
-export function createChampions({ userTeam, length = 'quick', cards = true, bench = false, weather = false, rng = Math.random, pools: drawn = CHAMPIONS_CUP.pools }) {
+export function createChampions({ userTeam, length = 'quick', format = 'points', cards = true, bench = false, weather = false, rng = Math.random, pools: drawn = CHAMPIONS_CUP.pools }) {
   const C = CHAMPIONS_CUP;
   const pools = Object.fromEntries(Object.entries(drawn).map(([group, ids]) => [group, [...ids]]));
   const fixtures = [];
@@ -303,6 +315,7 @@ export function createChampions({ userTeam, length = 'quick', cards = true, benc
     name: C.name,
     short: C.short,
     length,
+    format,
     cards,
     bench,
     weather,
@@ -347,6 +360,7 @@ export function migrateTournament(t) {
     if (known.kit) side.kit ??= known.kit;
   }
   t.byes ??= [];
+  t.format ??= 'points';
   return t;
 }
 
@@ -403,10 +417,12 @@ export function kits(t, f) {
   return [dressed(home, { color: home.color, kit: home.kit || null }), dressed(away, stripAgainst(away, home.color))];
 }
 
-// A competition's rules for one of its matches: length, cards, bench, and
-// fresh weather for each match when it's on.
-export function matchRules(t, rng = Math.random) {
-  return { length: t.length, cards: t.cards, bench: !!t.bench, weather: t.weather ? rollWeather(rng) : null };
+// A competition's rules for one of its matches: length and format, cards,
+// bench, and fresh weather for each match when it's on. Knockout matches on
+// the clock can't end level: a draw goes to sudden death.
+export const isKnockout = f => !!f && f.stage !== 'pool' && f.stage !== 'league';
+export function matchRules(t, rng = Math.random, f = null) {
+  return { length: t.length, format: t.format || 'points', decider: isKnockout(f), cards: t.cards, bench: !!t.bench, weather: t.weather ? rollWeather(rng) : null };
 }
 
 // The user's match, with the user always as team 0 in their first-choice
@@ -417,7 +433,7 @@ export function matchOptions(t, f) {
   const opponent = teamOf(t, userHome ? f.away : f.home);
   const mine = dressed(me, { color: me.color, kit: me.kit || null });
   const theirs = dressed(opponent, stripAgainst(opponent, me.color));
-  return { mode: '1p', teams: [mine, theirs], ...matchRules(t), cpuLevel: opponent.level, cpuPersonality: opponent.personality, venue: venue(t, f) };
+  return { mode: '1p', teams: [mine, theirs], ...matchRules(t, Math.random, f), cpuLevel: opponent.level, cpuPersonality: opponent.personality, venue: venue(t, f) };
 }
 
 // A finished match as a fixture result, home side first: the score, tries,
@@ -430,7 +446,7 @@ export function resultFromMatch(f, match, userIsHome) {
   return {
     score: [home.score, away.score],
     tries: [home.stats.tries, away.stats.tries],
-    winner: (match.winner === 0) === userIsHome ? 'home' : 'away',
+    winner: match.winner === null ? 'draw' : (match.winner === 0) === userIsHome ? 'home' : 'away',
     players: [packPlayers(home.players), packPlayers(away.players)],
     potm: potm ? { side: (potm.team === 0) === userIsHome ? 0 : 1, pos: potm.pos } : null,
   };
@@ -440,7 +456,7 @@ export function resultFromMatch(f, match, userIsHome) {
 export function simulateFixture(t, f, rng = Math.random) {
   const [home, away] = kits(t, f);
   const sides = [teamOf(t, f.home), teamOf(t, f.away)];
-  let m = newMatch({ mode: '2p', teams: [home, away], ...matchRules(t, rng) });
+  let m = newMatch({ mode: '2p', teams: [home, away], ...matchRules(t, rng, f) });
   for (let guard = 0; m.step.type !== 'fulltime' && guard < 5000; guard++) {
     const step = m.step;
     let action;
@@ -485,29 +501,28 @@ function tableOrder(a, b) {
 
 export function standings(t, group) {
   const ids = t.pools[group];
-  const rows = Object.fromEntries(ids.map(id => [id, { id, played: 0, won: 0, lost: 0, for: 0, against: 0, triesFor: 0, bonus: 0, points: 0 }]));
+  const rows = Object.fromEntries(ids.map(id => [id, { id, played: 0, won: 0, drawn: 0, lost: 0, for: 0, against: 0, triesFor: 0, bonus: 0, points: 0 }]));
   for (const f of t.fixtures) {
     if (f.group !== group || !f.result) continue;
     const r = f.result;
     [[f.home, 0], [f.away, 1]].forEach(([id, side]) => {
       const row = rows[id];
-      const won = (r.winner === 'home') === (side === 0);
       row.played++;
       row.for += r.score[side];
       row.against += r.score[1 - side];
       row.triesFor += r.tries[side];
-      if (won) {
+      if (r.winner === 'draw') {
+        row.drawn++;
+        row.points += POINTS.draw;
+      } else if ((r.winner === 'home') === (side === 0)) {
         row.won++;
         row.points += POINTS.win;
       } else {
         row.lost++;
-        if (r.score[1 - side] - r.score[side] <= POINTS.losingBonusWithin) {
-          row.points += POINTS.losingBonus;
-          row.bonus++;
-        }
       }
-      if (r.tries[side] >= POINTS.tryBonusAt) {
-        row.points += POINTS.tryBonus;
+      const bonus = bonusFor(r.score[side], r.score[1 - side]);
+      if (bonus) {
+        row.points += bonus === 'big' ? POINTS.bigWinBonus : POINTS.losingBonus;
         row.bonus++;
       }
     });
@@ -616,13 +631,15 @@ export function userAlive(t) {
 // The user's record in this tournament so far.
 export function userRecord(t) {
   let won = 0;
+  let drawn = 0;
   let lost = 0;
   for (const f of t.fixtures) {
     if (!f.result || !isUserFixture(t, f)) continue;
-    if (winnerOf(f) === t.userTeam) won++;
+    if (f.result.winner === 'draw') drawn++;
+    else if (winnerOf(f) === t.userTeam) won++;
     else lost++;
   }
-  return { won, lost };
+  return { won, drawn, lost };
 }
 
 export const STAGE_NAMES = { pool: 'Pool stage', league: 'Regular season', r16: 'Round of 16', qf: 'Quarter-finals', semi: 'Semi-finals', final: 'Final', done: 'Finished' };

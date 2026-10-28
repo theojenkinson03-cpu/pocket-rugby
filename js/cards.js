@@ -1,11 +1,12 @@
-// Team cards: one each per match, drafted after the toss. Every card is data
-// the engine reads at a named hook, so each effect is small and testable.
+// Team cards: two each per match, drafted after the toss from five dealt
+// cards. The toss loser picks first and fourth, the winner second and third,
+// and the fifth card is discarded. Every card is data the engine reads at a
+// named hook, so each effect is small and testable.
 //
 // Each card comes in four rarities. A Common card is the card as it always
 // was; every rarity above it keeps everything below and adds to it. Rarity is
-// rolled for each card as it is dealt: Mythic turns up in about one deal in
-// nine. The side picking second catches up a rarity when the first pick was
-// rarer (see catchUp).
+// rolled for each card as it is dealt, so a Mythic can turn up as any pick:
+// one in five deals has at least one.
 //
 // value: how much the card lifts a side's chance of winning against a side
 // with no card (its win rate above 50%), measured over 10,000 CPU matches
@@ -180,7 +181,10 @@ export const CARDS = [
 
 export const CARD_BY_ID = Object.fromEntries(CARDS.map(c => [c.id, c]));
 export const CARD_IDS = CARDS.map(c => c.id);
-export const DEAL_SIZE = 3;
+export const DEAL_SIZE = 5;
+// Who picks, in order: the toss loser first and fourth, the winner second and third.
+export const DRAFT_ORDER = ['loser', 'winner', 'winner', 'loser'];
+export const CARDS_EACH = 2;
 
 // One card at one rarity: its name and kind, with that rarity's text, effects and value.
 const TIERS = Object.fromEntries(CARDS.map(c => [c.id, Object.fromEntries(RARITY_IDS.map(r => {
@@ -192,11 +196,13 @@ export function cardTier(id, rarity = 'common') {
   return TIERS[id]?.[rarity] || TIERS[id]?.common || null;
 }
 
-// The card a team holds, at its rarity, or null.
-export function teamCard(match, team) {
-  const t = match.teams[team];
-  return t.card ? cardTier(t.card, t.cardRarity) : null;
+// The cards a team holds, each at its rarity.
+export function teamCards(match, team) {
+  return (match.teams[team].cards || []).map(c => cardTier(c.id, c.rarity));
 }
+
+// What a team's cards are worth together: the sum of their measured values.
+export const cardsValue = (match, team) => teamCards(match, team).reduce((sum, card) => sum + (card.value || 0), 0);
 
 // A rarity for one dealt card, from the odds above.
 export function rollRarity(rng) {
@@ -208,16 +214,41 @@ export function rollRarity(rng) {
   return RARITIES[0].id;
 }
 
-// The draft's catch-up: picking second, a card goes up one rarity when the
-// card picked first is rarer.
-export function catchUp(firstRarity, rarity) {
-  const [first, mine] = [RARITY_IDS.indexOf(firstRarity), RARITY_IDS.indexOf(rarity)];
-  return first > mine ? RARITY_IDS[mine + 1] : rarity;
-}
-
 const NONE = Object.freeze({});
 
-// The effects a team's card gives it, or none.
+// Two cards' effects as one: numbers add up (the highest ruckMax counts),
+// lists join, switches stay on, and nested effects merge key by key. The
+// five dealt cards are all different, so no effect is ever counted twice.
+function merge(into, fx) {
+  for (const [key, value] of Object.entries(fx)) {
+    const have = into[key];
+    if (Array.isArray(value)) into[key] = [...new Set([...(have || []), ...value])];
+    else if (value && typeof value === 'object') into[key] = merge(have ? { ...have } : {}, value);
+    else if (typeof value === 'number') into[key] = have === undefined ? value : key === 'ruckMax' ? Math.max(have, value) : have + value;
+    else into[key] = have ?? value;
+  }
+  return into;
+}
+
+const merged = new Map();
+
+// The effects a team's cards give it together, or none.
 export function cardEffects(match, team) {
-  return teamCard(match, team)?.effects || NONE;
+  const cards = match.teams[team].cards;
+  if (!cards?.length) return NONE;
+  if (cards.length === 1) return cardTier(cards[0].id, cards[0].rarity).effects;
+  const key = cards.map(c => `${c.id}:${c.rarity}`).join('|');
+  if (!merged.has(key)) merged.set(key, Object.freeze(cards.reduce((fx, c) => merge(fx, cardTier(c.id, c.rarity).effects), {})));
+  return merged.get(key);
+}
+
+// Which of a team's cards does something: the first whose effects pass
+// `test`, as {id, rarity}, or null. For saying which card just played.
+export function cardWith(match, team, test) {
+  return cardsWith(match, team, test)[0] || null;
+}
+
+// All of a team's cards whose effects pass `test`.
+export function cardsWith(match, team, test) {
+  return (match.teams[team].cards || []).filter(c => test(cardTier(c.id, c.rarity).effects));
 }

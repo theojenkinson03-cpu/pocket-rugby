@@ -97,10 +97,14 @@ export function closeCompetition(club, t) {
     if (!f.result || (f.home !== team && f.away !== team)) continue;
     const side = f.home === team ? 0 : 1;
     const [mine, theirs] = [f.result.score[side], f.result.score[1 - side]];
-    const won = (f.result.winner === 'home') === (side === 0);
+    const drawn = f.result.winner === 'draw';
+    const won = !drawn && (f.result.winner === 'home') === (side === 0);
     const against = teamOf(t, side ? f.home : f.away)?.name || '';
     const base = { score: `${mine}–${theirs}`, against, season: season.name, comp };
-    if (won) {
+    if (drawn) {
+      season.drawn = (season.drawn || 0) + 1;
+      club.run = 0;
+    } else if (won) {
       season.won++;
       club.run++;
       keepRecord(records, 'biggestWin', { ...base, margin: mine - theirs }, (a, b) => a.margin > b.margin);
@@ -164,6 +168,7 @@ export function finishSeason(club) {
     league: season.league,
     europe: season.europe,
     won: season.won,
+    drawn: season.drawn || 0,
     lost: season.lost,
     topScorer: top && top.tries ? { name: top.name, tries: top.tries } : null,
   });

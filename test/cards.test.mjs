@@ -6,20 +6,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, breakChance, draftRarity, isLegal, kickChance, migrate, newMatch, receiverOdds, seededRng, VERSION } from '../js/engine.js';
-import { CARD_BY_ID, CARD_IDS, CARDS, cardEffects, cardTier, catchUp, DEAL_SIZE, RARITIES, RARITY_IDS, rollRarity, teamCard } from '../js/cards.js';
+import { act, breakChance, drafterOf, isLegal, kickChance, migrate, newMatch, receiverOdds, seededRng, VERSION } from '../js/engine.js';
+import { CARD_BY_ID, CARD_IDS, CARDS, cardEffects, cardsValue, cardTier, cardWith, DEAL_SIZE, DRAFT_ORDER, RARITIES, RARITY_IDS, rollRarity, teamCards } from '../js/cards.js';
 import { DICE } from '../js/dice.js';
 import { choose, dice, OUTSIDE_BACKS, roll, stateAt } from './helpers.mjs';
 
 // A state with the given team cards: [attacking side's, defending side's],
-// each an id ('jackal', a Common card) or an id and a rarity ('jackal:mythic').
+// each an id ('jackal', a Common card), an id and a rarity ('jackal:mythic'),
+// or two of those joined by '+'.
 function carded(cards, opts = {}) {
   const m = stateAt(opts);
   m.cards = true;
   m.teams.forEach((t, i) => {
-    const [id, rarity] = (cards[i] ?? '').split(':');
-    t.card = id || null;
-    t.cardRarity = id ? rarity || 'common' : null;
+    t.cards = (cards[i] ?? '').split('+').filter(Boolean).map(card => {
+      const [id, rarity] = card.split(':');
+      return { id, rarity: rarity || 'common' };
+    });
   });
   return m;
 }
@@ -53,16 +55,44 @@ test('twelve cards, each in four rarities with a name, a kind, a description and
   assert.equal(cardTier('jackal').rarity, 'common', 'Common by default');
   assert.equal(cardTier('jackal', 'nonsense').rarity, 'common');
   assert.equal(cardTier('nonsense'), null);
-  assert.equal(DEAL_SIZE, 3);
+  assert.equal(DEAL_SIZE, 5);
+  assert.deepEqual(DRAFT_ORDER, ['loser', 'winner', 'winner', 'loser']);
   assert.deepEqual(cardEffects(stateAt(), 0), {}, 'no card, no effects');
   assert.ok(Object.isFrozen(cardEffects(stateAt(), 0)));
-  assert.equal(teamCard(stateAt(), 0), null);
+  assert.deepEqual(teamCards(stateAt(), 0), []);
   const m = carded(['fortress:epic', 'fortress']);
-  assert.deepEqual([teamCard(m, 0).rarity, cardEffects(m, 0).specialDefence], ['epic', 4]);
-  assert.deepEqual([teamCard(m, 1).rarity, cardEffects(m, 1).specialDefence], ['common', 2]);
-  // A card from before rarities (no rarity saved) is Common.
-  m.teams[0].cardRarity = undefined;
-  assert.equal(cardEffects(m, 0).specialDefence, 2);
+  assert.deepEqual([teamCards(m, 0)[0].rarity, cardEffects(m, 0).specialDefence], ['epic', 4]);
+  assert.deepEqual([teamCards(m, 1)[0].rarity, cardEffects(m, 1).specialDefence], ['common', 2]);
+});
+
+test('two cards work together: numbers add up, lists join, and each effect says which card it came from', () => {
+  // Kicking bonuses from two cards add up.
+  const kicks = carded(['golden-boot:rare+up-and-under:epic', null]);
+  assert.deepEqual(cardEffects(kicks, 0).kickBonus, { conversion: 4, penalty: 4, drop: 2 });
+  assert.ok(Object.isFrozen(cardEffects(kicks, 0)));
+  assert.equal(cardEffects(kicks, 0), cardEffects(carded(['golden-boot:rare+up-and-under:epic', null]), 0), 'worked out once');
+  // Run bonuses for different players sit side by side; face swaps merge player by player.
+  const attack = carded(['big-pack:mythic+sure-hands:mythic', null]);
+  const fx = cardEffects(attack, 0);
+  assert.deepEqual(fx.runBonus, { F: { hitUp: 3, special: 4 }, S: { hitUp: 2, special: 0 }, W: { hitUp: 2, special: 2 } });
+  assert.deepEqual(fx.faceSwap, { F: { knockon: 'pass' }, W: { knockon: 'pass', touch: 'pass' }, B: { touch: 'pass' } });
+  // Lists join without repeats; switches stay on; the higher ruck limit counts.
+  const defence = carded(['jackal:epic+rush-defence:epic', null]);
+  assert.deepEqual(cardEffects(defence, 0).ruckAlsoWins, ['video', 'notry']);
+  assert.equal(cardEffects(defence, 0).ruckOnSecond, true);
+  assert.equal(cardEffects(defence, 0).ruckMax, 5);
+  const drops = carded(['golden-boot:mythic+drop-artist:mythic', null]);
+  assert.deepEqual(cardEffects(drops, 0).passToDrop, ['B', 'C', 'F', 'W']);
+  assert.equal(cardEffects(drops, 0).kickBonus.drop, 8);
+  // Limited uses keep their own counters.
+  const uses = carded(['clinical:rare+squeaky-clean', null]);
+  assert.deepEqual(cardEffects(uses, 0).uses, { tryRerolls: { n: 1, per: 'half' }, ownFeedPenalty: { n: 1, per: 'match' } });
+  // Which card did it.
+  assert.deepEqual(cardWith(uses, 0, f => f.uses?.ownFeedPenalty), { id: 'squeaky-clean', rarity: 'common' });
+  assert.equal(cardWith(uses, 0, f => f.kickBonus), null);
+  // Their worth together is the sum of their measured values.
+  assert.ok(Math.abs(cardsValue(kicks, 0) - cardTier('golden-boot', 'rare').value - cardTier('up-and-under', 'epic').value) < 1e-12);
+  assert.equal(cardsValue(kicks, 1), 0);
 });
 
 // Measured by scripts/balance-cards.mjs: how far each card lifts the win
@@ -214,13 +244,16 @@ test('Drop-Goal Artist: +2 on drop goals and the Outside Backs\' open pass is a 
   const { state, events } = roll(attackWith(['drop-artist', null], 'W'), dice(W_PASS));
   assert.deepEqual(played(events).map(e => e.what), ['dropChance']);
   assert.deepEqual([state.step.purpose, state.step.kick], ['range', 'drop']);
+  // The Outside Back gives it to the Fly Half, who takes the drop goal.
+  assert.deepEqual(events.find(e => e.type === 'dropChance'), { type: 'dropChance', team: 0, pos: 'B', from: 'W' });
+  assert.equal(state.carrier, 'B');
   // Range 5 (face 5), then kick: only the 6 and the 5 would land without the card; with it, 4 and 6 and 5.
   let s = roll(state, dice(5)).state;
   assert.deepEqual(s.step.options, ['kick', 'pass']);
   s = choose(s, 'kick').state;
-  assert.equal(s.step.kicker, 'W');
+  assert.equal(s.step.kicker, 'B');
   const kick = roll(s, dice(1)).events.find(e => e.type === 'kick');
-  assert.deepEqual([kick.rolled, kick.bonus, kick.good, kick.kicker], [4, 2, true, 'W']);
+  assert.deepEqual([kick.rolled, kick.bonus, kick.good, kick.kicker], [4, 2, true, 'B']);
   // Other players' open passes stay passes.
   for (const pos of ['F', 'C', 'B']) {
     const f = DICE[pos].faces.findIndex(x => x.kind === 'pass' && !x.to);
@@ -613,59 +646,50 @@ test('Squeaky Clean: always on your own feed (Rare), their feed once a match (Ep
   assert.equal(roll(carded(['squeaky-clean:mythic', null], { step: step(1), attacker: 1 }), dice(AGAINST)).state.step.team, 0);
 });
 
-test('catch-up: picking second, a card goes up one rarity when the first pick was rarer', () => {
-  assert.equal(catchUp('mythic', 'common'), 'rare', 'one rarity, not all the way');
-  assert.equal(catchUp('rare', 'common'), 'rare');
-  assert.equal(catchUp('epic', 'rare'), 'epic');
-  assert.equal(catchUp('mythic', 'epic'), 'mythic');
-  assert.equal(catchUp('rare', 'rare'), 'rare', 'no catch-up from level');
-  assert.equal(catchUp('common', 'epic'), 'epic', 'never down');
-  // The first pick sees the cards as dealt; the second sees them caught up.
-  let m = newMatch({ mode: '2p', cards: true });
-  m = act(m, { type: 'choose', value: 'heads' }, () => 0.1).state;
-  m.deal = ['jackal', 'fortress', 'clinical'];
-  m.dealRarity = { jackal: 'mythic', fortress: 'common', clinical: 'epic' };
-  m.step = { ...m.step, options: [...m.deal] };
-  assert.deepEqual(m.deal.map(id => draftRarity(m, id)), ['mythic', 'common', 'epic']);
-  m = choose(m, 'jackal').state;
-  assert.deepEqual(m.step.options.map(id => draftRarity(m, id)), ['rare', 'mythic']);
-  const { state, events } = choose(m, 'fortress');
-  assert.equal(state.teams[state.firstReceiver].cardRarity, 'rare');
-  assert.deepEqual(events.filter(e => e.type !== 'possession').map(e => [e.type, e.rarity ?? e.to, e.dealt ?? e.from]), [['draft', 'rare', 'common'], ['catchUp', 'rare', 'common']]);
-  // Took the rarer card first? Nothing to catch up.
-  let n = newMatch({ mode: '2p', cards: true });
-  n = act(n, { type: 'choose', value: 'heads' }, () => 0.1).state;
-  n.deal = ['jackal', 'fortress', 'clinical'];
-  n.dealRarity = { jackal: 'common', fortress: 'rare', clinical: 'common' };
-  n.step = { ...n.step, options: [...n.deal] };
-  n = choose(n, 'jackal').state;
-  const level = choose(n, 'fortress');
-  assert.equal(level.state.teams[level.state.firstReceiver].cardRarity, 'rare');
-  assert.ok(!level.events.some(e => e.type === 'catchUp'));
-});
-
-test('a saved match from before rarities loads with Common cards', () => {
-  const old = carded(['jackal', 'fortress']);
+test('a saved match from before rarities loads with Common cards, one each', () => {
+  const old = stateAt();
+  old.cards = true;
   old.version = 2;
   old.deal = ['jackal', 'fortress', 'clinical'];
   delete old.dealRarity;
   delete old.quickTapFrom;
-  for (const t of old.teams) {
-    delete t.cardRarity;
+  old.teams.forEach((t, i) => {
+    delete t.cards;
+    t.card = ['jackal', 'fortress'][i];
     t.cardUses = { tryRerolls: 0, ownFeedPenalty: 1 };
-  }
+  });
   const m = migrate(old);
   assert.equal(m.version, VERSION);
   assert.deepEqual(m.dealRarity, { jackal: 'common', fortress: 'common', clinical: 'common' });
-  assert.deepEqual(m.teams.map(t => t.cardRarity), ['common', 'common']);
+  assert.deepEqual(m.teams.map(t => t.cards), [[{ id: 'jackal', rarity: 'common' }], [{ id: 'fortress', rarity: 'common' }]]);
+  assert.ok(m.teams.every(t => !('card' in t) && !('cardRarity' in t)));
   assert.deepEqual(m.teams[0].cardUses, { tryRerolls: 0, ownFeedPenalty: 1, theirFeedPenalty: 0 });
   assert.equal(m.quickTapFrom, null);
 });
 
-test('the draft: three different cards, the toss loser picks first, the winner from the other two', () => {
+test('a draft saved half way through, from when three cards were dealt, carries on and ends with one left over', () => {
+  let m = newMatch({ mode: '2p', cards: true });
+  m = act(m, { type: 'choose', value: 'heads' }, () => 0.1).state;
+  const loser = 1 - m.firstReceiver;
+  m.version = 5;
+  m.deal = ['jackal', 'fortress', 'clinical'];
+  m.dealRarity = { jackal: 'rare', fortress: 'common', clinical: 'epic' };
+  m.teams.forEach(t => delete t.cards);
+  m.teams[loser].card = 'jackal';
+  m.teams[loser].cardRarity = 'rare';
+  m.step = { type: 'choose', purpose: 'draft', team: m.firstReceiver, options: ['fortress', 'clinical'], first: false };
+  m = migrate(m);
+  assert.deepEqual(m.step, { type: 'choose', purpose: 'draft', team: m.firstReceiver, options: ['fortress', 'clinical'], pick: 1 });
+  const done = choose(m, 'clinical');
+  assert.deepEqual(done.state.teams[m.firstReceiver].cards, [{ id: 'clinical', rarity: 'epic' }]);
+  assert.deepEqual(done.events.map(e => e.type), ['draft', 'discard', 'possession']);
+  assert.equal(done.events[0].last, true);
+});
+
+test('the draft: five different cards; the toss loser picks first and fourth, the winner second and third; the last is discarded', () => {
   const counts = Object.fromEntries(CARD_IDS.map(id => [id, 0]));
   const rarities = Object.fromEntries(RARITY_IDS.map(r => [r, 0]));
-  let catchUps = 0;
+  let mythicDeals = 0;
   const DEALS = 3000;
   for (let g = 0; g < DEALS; g++) {
     const rng = seededRng(g + 5);
@@ -674,47 +698,44 @@ test('the draft: three different cards, the toss loser picks first, the winner f
     const toss = act(m, { type: 'choose', value: g % 3 ? 'heads' : 'tails' }, rng);
     m = toss.state;
     const deal = toss.events.find(e => e.type === 'deal');
-    assert.equal(deal.cards.length, 3);
-    assert.equal(new Set(deal.cards).size, 3, 'three different cards');
+    assert.equal(deal.cards.length, 5);
+    assert.equal(new Set(deal.cards).size, 5, 'five different cards');
     deal.cards.forEach(id => counts[id]++);
-    // Each card at a rarity of its own.
+    // Each card at a rarity of its own, with no catching up: what you see is what you get.
     assert.deepEqual(Object.keys(deal.rarity).sort(), [...deal.cards].sort());
     assert.deepEqual(m.dealRarity, deal.rarity);
     for (const id of deal.cards) rarities[deal.rarity[id]]++;
+    if (deal.cards.some(id => deal.rarity[id] === 'mythic')) mythicDeals++;
     const loser = 1 - m.firstReceiver;
+    const winner = m.firstReceiver;
     assert.equal(deal.first, loser);
-    assert.deepEqual(m.step, { type: 'choose', purpose: 'draft', team: loser, options: deal.cards, first: true });
+    assert.deepEqual([0, 1, 2, 3].map(pick => drafterOf(m, pick)), [loser, winner, winner, loser]);
+    assert.deepEqual(m.step, { type: 'choose', purpose: 'draft', team: loser, options: deal.cards, pick: 0 });
     assert.ok(!isLegal(m, { type: 'choose', value: CARD_IDS.find(id => !deal.cards.includes(id)) }), 'only dealt cards');
-    const firstPick = deal.cards[g % 3];
-    const picked = choose(m, firstPick);
-    m = picked.state;
-    assert.equal(m.teams[loser].card, firstPick);
-    assert.equal(m.teams[loser].cardRarity, deal.rarity[firstPick]);
-    assert.equal(picked.events[0].rarity, deal.rarity[firstPick]);
-    assert.equal(m.step.team, m.firstReceiver);
-    assert.deepEqual(m.step.options, deal.cards.filter(id => id !== firstPick));
-    assert.ok(!isLegal(m, { type: 'choose', value: firstPick }), "can't take the same card");
-    const second = m.step.options[g % 2];
-    const caughtUp = catchUp(deal.rarity[firstPick], deal.rarity[second]);
-    assert.equal(draftRarity(m, second), caughtUp);
-    const done = choose(m, second);
-    m = done.state;
-    assert.equal(m.teams[m.firstReceiver].card, second);
-    assert.equal(m.teams[m.firstReceiver].cardRarity, caughtUp);
-    if (caughtUp !== deal.rarity[second]) {
-      catchUps++;
-      assert.deepEqual(done.events.find(e => e.type === 'catchUp'), { type: 'catchUp', team: m.firstReceiver, card: second, from: deal.rarity[second], to: caughtUp });
-      done.events = done.events.filter(e => e.type !== 'catchUp');
+    let left = [...deal.cards];
+    for (const [pick, team] of [[0, loser], [1, winner], [2, winner], [3, loser]]) {
+      assert.deepEqual([m.step.purpose, m.step.team, m.step.pick], ['draft', team, pick]);
+      assert.deepEqual(m.step.options, left);
+      const id = left[(g + pick) % left.length];
+      const { state, events } = choose(m, id);
+      m = state;
+      left = left.filter(x => x !== id);
+      assert.ok(!isLegal(m, { type: 'choose', value: id }), "can't take the same card twice");
+      assert.deepEqual(events[0], { type: 'draft', team, card: id, rarity: deal.rarity[id], pick, last: pick === 3 });
+      assert.deepEqual(m.teams[team].cards.at(-1), { id, rarity: deal.rarity[id] });
+      if (pick === 3) assert.deepEqual(events.slice(1).map(e => e.type), ['discard', 'possession']);
+      if (pick === 3) assert.deepEqual(events[1], { type: 'discard', card: left[0], rarity: deal.rarity[left[0]] });
     }
-    assert.notEqual(m.teams[0].card, m.teams[1].card);
+    assert.deepEqual(m.teams.map(t => t.cards.length), [2, 2]);
+    assert.equal(new Set(m.teams.flatMap(t => t.cards.map(c => c.id))).size, 4);
     assert.equal(m.attacker, m.firstReceiver, 'the toss winner receives the kick-off');
     assert.deepEqual(m.step.dice, ['S']);
-    assert.deepEqual(done.events.map(e => e.type), ['draft', 'possession']);
   }
-  // Every card is dealt about a quarter of the time, at the rarities' odds.
-  for (const id of CARD_IDS) assert.ok(Math.abs(counts[id] / DEALS - 0.25) < 0.035, `${id} dealt ${counts[id]} times`);
-  for (const r of RARITIES) assert.ok(Math.abs(rarities[r.id] / (3 * DEALS) - r.odds) < 0.015, `${r.id} dealt ${rarities[r.id]} times`);
-  assert.ok(catchUps > DEALS * 0.15, `the second pick caught up in ${catchUps} of ${DEALS} drafts`);
+  // Every card is dealt five times in twelve, at the rarities' odds; a
+  // Mythic shows up in about one deal in five.
+  for (const id of CARD_IDS) assert.ok(Math.abs(counts[id] / DEALS - 5 / 12) < 0.04, `${id} dealt ${counts[id]} times`);
+  for (const r of RARITIES) assert.ok(Math.abs(rarities[r.id] / (5 * DEALS) - r.odds) < 0.012, `${r.id} dealt ${rarities[r.id]} times`);
+  assert.ok(Math.abs(mythicDeals / DEALS - (1 - 0.96 ** 5)) < 0.03, `a Mythic in ${mythicDeals} of ${DEALS} deals`);
   // With cards off there is no draft.
   const off = act(newMatch({ mode: '2p' }), { type: 'choose', value: 'heads' }, seededRng(1));
   assert.ok(!off.events.some(e => e.type === 'deal'));
@@ -724,7 +745,7 @@ test('the draft: three different cards, the toss loser picks first, the winner f
 // The odds the game shows, checked by playing every face and every pair of
 // tackle dice through the engine.
 function counted(m, team, pos) {
-  const cardOf = t => (t.card ? `${t.card}:${t.cardRarity}` : null);
+  const cardOf = t => t.cards.map(c => `${c.id}:${c.rarity}`).join('+') || null;
   const start = attackWith([cardOf(m.teams[0]), cardOf(m.teams[1])], pos, { sinBin: [false, m.teams[1].sinBin], yellows: [0, m.teams[1].yellows] });
   let lineBreak = 0;
   let error = 0;
@@ -754,9 +775,12 @@ test('pass odds with any card at any rarity on either side match a count of ever
       }
     }
   }
-  // A card on each side at once.
-  const both = carded(['big-pack:mythic', 'rush-defence:mythic']);
-  for (const pos of OUTSIDE_BACKS) assert.ok(Math.abs(receiverOdds(both, 0, pos).lineBreak - counted(both, 0, pos).lineBreak) < 1e-9);
+  // Cards on each side at once, two each.
+  const both = carded(['big-pack:mythic+sure-hands:epic', 'rush-defence:mythic+fortress:rare']);
+  for (const pos of OUTSIDE_BACKS) {
+    const [shown, real] = [receiverOdds(both, 0, pos), counted(both, 0, pos)];
+    assert.ok(Math.abs(shown.lineBreak - real.lineBreak) < 1e-9 && Math.abs(shown.error - real.error) < 1e-9, pos);
+  }
 });
 
 test('breakChance with a bonus on one or both dice counts the 36 pairs', () => {

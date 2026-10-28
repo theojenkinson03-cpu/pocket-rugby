@@ -62,10 +62,11 @@ export function cardArt(id, { rarity = 'common', taken = null, uses = null, tag 
 }
 
 // What's left of a limited card's uses (the first one counted by the half
-// or the match), or null for cards without such a limit.
-export function cardUses(match, team) {
+// or the match), or null for cards without such a limit. `card`: one of the
+// side's cards, {id, rarity}.
+export function cardUses(match, team, card) {
   const t = match.teams[team];
-  const limits = t.card ? cardTier(t.card, t.cardRarity).effects.uses : null;
+  const limits = card ? cardTier(card.id, card.rarity).effects.uses : null;
   const counted = Object.entries(limits || {}).find(([, limit]) => limit.per === 'half' || limit.per === 'match');
   if (!counted) return null;
   const [key, limit] = counted;

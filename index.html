@@ -85,11 +85,17 @@
         </div>
       </div>
 
+      <fieldset class="seg" id="seg-format">
+        <legend>Match type</legend>
+        <label><input type="radio" name="format" value="rolls" id="format-rolls"><span>On the clock<small>A set number of rolls</small></span></label>
+        <label><input type="radio" name="format" value="points" id="format-points"><span>Race<small>First to a score</small></span></label>
+      </fieldset>
+
       <fieldset class="seg seg-3" id="seg-length">
         <legend>Match length</legend>
-        <label><input type="radio" name="length" value="quick" id="len-quick"><span>Quick<small>HT 10 · FT 20</small></span></label>
-        <label><input type="radio" name="length" value="standard" id="len-standard"><span>Standard<small>HT 15 · FT 30</small></span></label>
-        <label><input type="radio" name="length" value="long" id="len-long"><span>Marathon<small>HT 25 · FT 50</small></span></label>
+        <label><input type="radio" name="length" value="quick" id="len-quick"><span>Quick<small id="len-quick-note">60 rolls</small></span></label>
+        <label><input type="radio" name="length" value="standard" id="len-standard"><span>Standard<small id="len-standard-note">100 rolls</small></span></label>
+        <label><input type="radio" name="length" value="long" id="len-long"><span>Marathon<small id="len-long-note">160 rolls</small></span></label>
       </fieldset>
 
       <fieldset class="seg seg-3" id="seg-cpu">
@@ -107,7 +113,7 @@
         <label><input type="radio" name="style" value="pack" id="style-pack"><span>Forwards<small>Keeps it tight</small></span></label>
       </fieldset>
 
-      <label class="toggle toggle-card" for="setup-cards"><span><b>Team cards</b><small>Three cards are dealt after the toss. The toss loser picks first.</small></span><input type="checkbox" id="setup-cards"><i aria-hidden="true"></i></label>
+      <label class="toggle toggle-card" for="setup-cards"><span><b>Team cards</b><small>Five cards are dealt after the toss; you pick two each. The toss loser picks first.</small></span><input type="checkbox" id="setup-cards"><i aria-hidden="true"></i></label>
       <label class="toggle toggle-card" for="setup-bench"><span><b>Bench</b><small>One replacement a half clears an injured player’s penalty.</small></span><input type="checkbox" id="setup-bench"><i aria-hidden="true"></i></label>
       <label class="toggle toggle-card" for="setup-weather"><span><b>Weather</b><small>Rain makes the Forwards and Centres knock on; wind adds or takes 10 m off every kick.</small></span><input type="checkbox" id="setup-weather"><i aria-hidden="true"></i></label>
 
@@ -191,6 +197,7 @@
       </div>
       <div class="board-mid">
         <span class="board-half" id="board-half"></span>
+        <span class="board-clock" id="board-clock" role="timer" hidden></span>
         <span class="board-target" id="board-target"></span>
       </div>
       <div class="side" data-team="1">
@@ -211,6 +218,7 @@
       <p class="draft-kicker">Team cards</p>
       <h2 class="draft-title" id="draft-title"></h2>
       <p class="draft-sub" id="draft-sub"></p>
+      <ol class="draft-order" id="draft-order" aria-label="Pick order"></ol>
       <div class="draft-cards" id="draft-cards"></div>
       <p class="draft-status" id="draft-status"></p>
     </section>
@@ -228,6 +236,11 @@
         <p class="headline" id="headline"></p>
         <p class="detail" id="detail"></p>
       </div>
+      <section class="guide" id="guide" hidden aria-label="What each face would do">
+        <p class="guide-head" id="guide-head"></p>
+        <div class="guide-faces" id="guide-faces"></div>
+        <p class="guide-text" id="guide-text" aria-live="polite"></p>
+      </section>
       <div class="moment" id="moment" hidden></div>
     </div>
 
@@ -283,6 +296,8 @@
     <label class="toggle select-row" for="set-cinema"><span><b>Cinematics</b><small>Replays, slow motion and the kick cam</small></span>
       <select id="set-cinema"><option value="full">Full</option><option value="short">Short</option><option value="off">Off</option></select></label>
     <label class="toggle"><span><b>Sound</b><small>Dice, whistles and the crowd</small></span><input type="checkbox" id="set-sound"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Dice guide</b><small>Before each roll, what every face would do: green good, red bad</small></span><input type="checkbox" id="set-guide"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Auto-roll</b><small>Roll your dice for you, stopping at every decision (always on to start an online match)</small></span><input type="checkbox" id="set-autoroll"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Show odds</b><small>Chances next to every decision</small></span><input type="checkbox" id="set-odds"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Win meter</b><small>Each side's chance of winning, live</small></span><input type="checkbox" id="set-meter"><i aria-hidden="true"></i></label>
     <label class="toggle"><span><b>Coach tips</b><small>Explains each part of the game the first time it comes up</small></span><input type="checkbox" id="set-coach"><i aria-hidden="true"></i></label>
