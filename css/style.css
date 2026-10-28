@@ -365,6 +365,8 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .btn-resume small { color: rgb(255 255 255 / 0.8); }
 .home-links { display: flex; gap: 18px; justify-content: center; }
 .fineprint { margin: 6px 0 0; max-width: 34ch; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.build-tag { margin: 4px 0 0; font: 700 11px/1 var(--font-label); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.build-tag b { display: inline-block; margin-right: 6px; padding: 3px 6px; border-radius: 4px; background: #e0461c; color: #fff; letter-spacing: 0.14em; }
 
 /* ---------- Setup ---------- */
 .view-setup {

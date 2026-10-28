@@ -2092,6 +2092,14 @@ function start(data = {}) {
   bindKeys();
   applyPrefs();
 
+  // The dev channel says so on the title screen, with the commit it was built from.
+  const build = window.POCKET_RUGBY_BUILD;
+  if (build?.channel === 'dev') {
+    const tag = $('#build-tag');
+    tag.hidden = false;
+    tag.replaceChildren(el('b', null, 'Dev'), document.createTextNode(`Build ${build.commit} · ${build.date}`));
+  }
+
   document.querySelectorAll('[data-start]').forEach(btn => btn.addEventListener('click', () => {
     unlockAudio();
     ui.setup.mode = btn.dataset.start;
