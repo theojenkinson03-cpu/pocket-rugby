@@ -4,7 +4,8 @@
 
 import { act, newMatch } from './engine.js';
 import { cpuChoice } from './ai.js';
-import { randomRoster } from './players.js';
+import { playerOfTheMatch, randomRoster } from './players.js';
+import { packPlayers } from './season.js';
 
 export const NATIONS = [
   { id: 'nzl', name: 'New Zealand', short: 'NZL', color: '#121314', alt: '#f4f4f0', flavour: 'kiwi', personality: 'run', level: 'expert', ground: 'Eden Park' },
@@ -313,14 +314,19 @@ export function matchOptions(t, f) {
   return { mode: '1p', teams: [mine, theirs], length: t.length, cards: t.cards, cpuLevel: opponent.level, cpuPersonality: opponent.personality, venue: venue(t, f) };
 }
 
+// A finished match as a fixture result, home side first: the score, tries,
+// each player's numbers (for the season stats) and the Player of the Match.
 export function resultFromMatch(f, match, userIsHome) {
   const [mine, theirs] = match.teams;
   const home = userIsHome ? mine : theirs;
   const away = userIsHome ? theirs : mine;
+  const potm = playerOfTheMatch(match);
   return {
     score: [home.score, away.score],
     tries: [home.stats.tries, away.stats.tries],
     winner: (match.winner === 0) === userIsHome ? 'home' : 'away',
+    players: [packPlayers(home.players), packPlayers(away.players)],
+    potm: potm ? { side: (potm.team === 0) === userIsHome ? 0 : 1, pos: potm.pos } : null,
   };
 }
 
@@ -341,7 +347,7 @@ export function simulateFixture(t, f, rng = Math.random) {
     }
     m = act(m, action, rng).state;
   }
-  return { score: m.teams.map(x => x.score), tries: m.teams.map(x => x.stats.tries), winner: m.winner === 0 ? 'home' : 'away' };
+  return resultFromMatch(f, m, true);
 }
 
 export function recordResult(t, fixtureId, result) {

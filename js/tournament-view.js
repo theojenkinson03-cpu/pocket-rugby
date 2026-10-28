@@ -3,6 +3,10 @@
 
 import { currentRound, isUserFixture, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, teamOf, userAlive, userFixture, userRecord, venue } from './tournament.js';
 import { LEVELS, PERSONALITIES } from './ai.js';
+import { leaders, LEADER_STATS, playerOfTheSeason, seasonPlayers, teamOfTheSeason } from './season.js';
+import { statLine } from './players.js';
+import { PLAYERS, POSITIONS } from './dice.js';
+import { dieChip } from './dice-view.js';
 import { MATCH_LENGTHS } from './engine.js';
 import { button, el, tallButton } from './dom.js';
 import { kitVars } from './color.js';
@@ -148,6 +152,8 @@ function nextMatchCard(t, handlers) {
     card.append(el('p', 'nc-kicker', `${tName(t)} · Final whistle`), el('h3', 'nc-title', mine ? 'Champions!' : `${champ.name} win the ${tName(t)}`));
     const rec = userRecord(t);
     card.append(el('p', 'nc-meta', `Your record: won ${rec.won}, lost ${rec.lost}.`));
+    const best = playerOfTheSeason(seasonPlayers(t));
+    if (best) card.append(el('p', 'nc-meta', `Player of the ${t.kind === 'league' ? 'season' : 'tournament'}: ${best.name}, ${teamOf(t, best.team).name} (${PLAYERS[best.pos].one}).`));
     card.append(button('New tournament', handlers.onNew, 'btn btn-primary', { primary: true }));
     return card;
   }
@@ -301,6 +307,66 @@ function results(t) {
   return wrap;
 }
 
+// ---- Season stats -----------------------------------------------------------
+
+const surnameOf = name => name.replace(/^[A-Z]\.\s*/, '');
+const SHOWN_LEADERS = ['tries', 'points', 'metres', 'tackles'];
+
+function playerCell(t, p) {
+  const team = teamOf(t, p.team);
+  const cell = el('span', 'sp-who');
+  cell.append(kitChip(team), el('b', null, surnameOf(p.name)), el('small', null, team.short));
+  return cell;
+}
+
+function leaderBoard(t, players, stat) {
+  const [, title, , [one, many]] = LEADER_STATS.find(([id]) => id === stat);
+  const list = leaders(players, stat);
+  const box = el('div', 'leader-box');
+  box.append(el('p', 'br-title', title));
+  const ol = el('ol', 'leaders');
+  if (!list.length) ol.append(el('li', 'tbd', 'Nobody yet'));
+  for (const p of list) {
+    const li = el('li', p.team === t.userTeam ? 'mine' : '');
+    li.append(playerCell(t, p), el('span', 'sp-num', `${p.value} ${p.value === 1 ? one : many}`));
+    ol.append(li);
+  }
+  box.append(ol);
+  return box;
+}
+
+// Leaders and the Team of the Season (so far, until the competition is over).
+export function seasonStats(t) {
+  const players = seasonPlayers(t);
+  if (!players.length) return null;
+  const done = t.stage === 'done';
+  const wrap = el('section', 'season-stats');
+  const word = t.kind === 'league' ? 'Season' : 'Tournament';
+  wrap.append(el('h3', 'page-h', `${word} stats`));
+  const grid = el('div', 'leader-grid');
+  for (const stat of SHOWN_LEADERS) grid.append(leaderBoard(t, players, stat));
+  wrap.append(grid);
+
+  const team = teamOfTheSeason(players);
+  const best = playerOfTheSeason(players);
+  const tots = el('div', 'tots');
+  tots.append(el('p', 'br-title', `Team of the ${word.toLowerCase()}${done ? '' : ' so far'}`));
+  const ul = el('ul', 'tots-list');
+  for (const pos of POSITIONS) {
+    const p = team[pos];
+    if (!p) continue;
+    const li = el('li', `${p.team === t.userTeam ? 'mine' : ''}${p === best ? ' best' : ''}`.trim());
+    const head = el('span', 'tots-head');
+    head.append(dieChip(pos), playerCell(t, p));
+    if (p === best) head.append(el('span', 'tots-star', done ? `Player of the ${word.toLowerCase()}` : 'Best so far'));
+    li.append(head, el('small', 'tots-line', `${PLAYERS[pos].one} · ${p.apps} ${p.apps === 1 ? 'match' : 'matches'} · ${statLine(p)}`));
+    ul.append(li);
+  }
+  tots.append(ul);
+  wrap.append(tots);
+  return wrap;
+}
+
 export function tournamentHub(t, handlers) {
   const page = el('div', 'page-inner');
   const me = teamOf(t, t.userTeam);
@@ -316,6 +382,8 @@ export function tournamentHub(t, handlers) {
 
   if (t.stage !== 'pool' && t.stage !== 'league') page.append(bracket(t));
   for (const group of Object.keys(t.pools)) page.append(table(t, group));
+  const stats = seasonStats(t);
+  if (stats) page.append(stats);
   const res = results(t);
   if (res) page.append(res);
 

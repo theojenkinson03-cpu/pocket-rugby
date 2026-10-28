@@ -423,9 +423,20 @@ test('a match result is recorded from the right side', () => {
   m.teams[0].stats.tries = 5;
   m.teams[1].stats.tries = 2;
   m.winner = 0;
+  m.teams[0].players.W.tries = 3;
+  m.teams[1].players.F.tackles = 9;
   const f = { home: 'a', away: 'b' };
-  assert.deepEqual(resultFromMatch(f, m, true), { score: [30, 12], tries: [5, 2], winner: 'home' });
-  assert.deepEqual(resultFromMatch(f, m, false), { score: [12, 30], tries: [2, 5], winner: 'away' });
+  const brief = r => ({ score: r.score, tries: r.tries, winner: r.winner });
+  const home = resultFromMatch(f, m, true);
+  const away = resultFromMatch(f, m, false);
+  assert.deepEqual(brief(home), { score: [30, 12], tries: [5, 2], winner: 'home' });
+  assert.deepEqual(brief(away), { score: [12, 30], tries: [2, 5], winner: 'away' });
+  // Player numbers go with their side, and so does the Player of the Match.
+  assert.equal(home.players[0].W[3], 3, 'the user at home: their Outside Backs scored 3');
+  assert.equal(away.players[1].W[3], 3, 'the user away: their numbers are the away side\'s');
+  assert.equal(away.players[0].F[4], 9);
+  assert.deepEqual(home.potm, { side: 0, pos: 'W' });
+  assert.deepEqual(away.potm, { side: 1, pos: 'W' });
 });
 
 test('simulated fixtures are real matches: a winner on the target, tries that add up', () => {
