@@ -1,11 +1,11 @@
 // The coach: a short tip the first time each part of the game comes up.
 
-import { CARD_BY_ID } from './cards.js';
+import { cardTier } from './cards.js';
 import { possessive } from './players.js';
 
 export const TIPS = {
   toss: { title: 'The coin toss', text: 'Call heads or tails. The winner receives the kick-off. With team cards on, the loser picks a card first.' },
-  draft: { title: 'Pick a team card', text: 'Three cards are dealt. The toss loser picks first; the other side picks from the two left. Your card lasts the whole match.' },
+  draft: { title: 'Pick a team card', text: 'Rarer cards are stronger: Common, Rare, Epic and, now and then, Mythic. The toss loser picks first. The other side takes one of the two left, a rarity up if the first pick was rarer.' },
   'scrum-half': { title: 'Your Scrum Half', text: 'The Scrum Half always plays first: after the kick-off, after every tackle and after winning the ball back. Tap to roll.' },
   runner: { title: 'Run, pass or lose it', text: "This player's die decides. A run has an intensity the defence must match, a pass moves the ball on, and an error gives it away." },
   pass: { title: 'Choose a receiver', text: 'Break is the chance this player makes a line break, Error the chance they lose the ball. The Tip badge marks the best odds.' },
@@ -66,6 +66,6 @@ export function tipText(id, events, match) {
   const tip = TIPS[id];
   if (id !== 'card-played') return tip;
   const e = events.find(x => x.type === 'cardPlayed');
-  const card = e && CARD_BY_ID[e.card];
+  const card = e && cardTier(e.card, e.rarity);
   return { title: tip.title, text: card ? `${possessive(match.teams[e.team].name)} ${card.name}: ${card.text}` : 'A team card just changed the result.' };
 }

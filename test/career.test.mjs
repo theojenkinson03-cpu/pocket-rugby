@@ -16,7 +16,9 @@ function finished({ scores = [30, 10], winner = scores[0] > scores[1] ? 0 : 1, l
   m.teams.forEach((t, i) => {
     Object.assign(t.stats, stats[i]);
     for (const [pos, p] of Object.entries(players[i])) Object.assign(t.players[pos], p);
-    t.card = cards[i];
+    const [card, rarity] = (cards[i] || '').split(':');
+    t.card = card || null;
+    t.cardRarity = card ? rarity || 'common' : null;
   });
   return m;
 }
@@ -24,9 +26,9 @@ function finished({ scores = [30, 10], winner = scores[0] > scores[1] ? 0 : 1, l
 const ctx = (over = {}) => ({ mode: '1p', level: 'pro', tournament: null, ...over });
 const unlocks = (match, tracker = newTracker(0), context = ctx(), career = newCareer()) => recordMatch(career, match, tracker, context);
 
-test('28 achievements, each with a name and a description', () => {
-  assert.equal(ACHIEVEMENTS.length, 28);
-  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 28);
+test('29 achievements, each with a name and a description', () => {
+  assert.equal(ACHIEVEMENTS.length, 29);
+  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 29);
   for (const a of ACHIEVEMENTS) assert.ok(a.name && a.text.endsWith('.') && typeof a.check === 'function', a.id);
   assert.equal(ACHIEVEMENT_BY_ID['first-win'].name, 'First Win');
 });
@@ -132,6 +134,29 @@ test('career achievements: five in a row, six cards', () => {
   assert.ok(!d.achievements['card-sharp']);
   recordMatch(d, finished({ cards: ['sure-hands', null] }), newTracker(0), ctx());
   assert.ok(d.achievements['card-sharp']);
+});
+
+test('Mythic: a win with a Mythic card, and the rarest version of each card you have won with', () => {
+  const c = newCareer();
+  recordMatch(c, finished({ cards: ['jackal:rare', null] }), newTracker(0), ctx());
+  assert.deepEqual(c.cardRarity, { jackal: 'rare' });
+  recordMatch(c, finished({ cards: ['jackal', null] }), newTracker(0), ctx());
+  assert.equal(c.cardRarity.jackal, 'rare', 'a Common win keeps the Rare');
+  recordMatch(c, finished({ scores: [10, 30], cards: ['jackal:mythic', null] }), newTracker(0), ctx());
+  assert.equal(c.cardRarity.jackal, 'rare', 'a defeat does not count');
+  assert.ok(!c.achievements.mythic);
+  recordMatch(c, finished({ cards: ['jackal:epic', null] }), newTracker(0), ctx());
+  assert.equal(c.cardRarity.jackal, 'epic');
+  recordMatch(c, finished({ cards: ['fortress:mythic', null] }), newTracker(0), ctx());
+  assert.deepEqual(c.cardRarity, { jackal: 'epic', fortress: 'mythic' });
+  assert.ok(c.achievements.mythic);
+  // The other side's Mythic is not yours.
+  assert.ok(!unlocks(finished({ cards: ['jackal', 'fortress:mythic'] })).includes('mythic'));
+  // A career saved before rarities had no record of them.
+  const old = newCareer();
+  delete old.cardRarity;
+  recordMatch(old, finished({ cards: ['clinical:rare', null] }), newTracker(0), ctx());
+  assert.deepEqual(old.cardRarity, { clinical: 'rare' });
 });
 
 // ---- The tracker: things only the match's events show ------------------

@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 
 import { act, MATCH_LENGTHS, newMatch, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
-import { POSSESSION, winFromPossession, winProbability } from '../js/winprob.js';
+import { POSSESSION, winFromPossession, winMeter, winProbability } from '../js/winprob.js';
+import { CARD_IDS, cardTier, RARITY_IDS } from '../js/cards.js';
 import { stateAt } from './helpers.mjs';
 
 test('possession outcomes are a probability distribution', () => {
@@ -72,6 +73,36 @@ test('special moments: full time, half time, a try roll, a kick', () => {
   const kick = stateAt({ step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 1 }, scores: [27, 20], half: 2 });
   assert.ok(winProbability(kick, 0) >= 5 / 6);
   for (const m of [tryRoll, kick, ht]) assert.ok(Math.abs(winProbability(m, 0) + winProbability(m, 1) - 1) < 1e-9);
+});
+
+test('the meter: team cards give an edge worth their measured lift at the kick-off, fading as the points run out', () => {
+  const kickoff = (cards, scores = [0, 0]) => {
+    const m = stateAt({ scores, firstReceiver: 0 });
+    m.cards = true;
+    cards.forEach(([id, rarity], i) => Object.assign(m.teams[i], { card: id, cardRarity: rarity }));
+    return m;
+  };
+  // No cards, or the same card at the same rarity: the model as it is.
+  const plain = stateAt({ scores: [7, 3], firstReceiver: 0 });
+  assert.equal(winMeter(plain, 0), winProbability(plain, 0));
+  const same = kickoff([['jackal', 'epic'], ['jackal', 'epic']], [7, 3]);
+  assert.equal(winMeter(same, 0), winProbability(same, 0));
+  for (const id of CARD_IDS) {
+    for (const rarity of RARITY_IDS) {
+      const m = kickoff([[id, rarity], [null, null]]);
+      const want = winProbability(m, 0) + cardTier(id, rarity).value;
+      assert.ok(Math.abs(winMeter(m, 0) - want) < 0.025, `${id} ${rarity}: ${winMeter(m, 0)} vs ${want}`);
+      assert.ok(Math.abs(winMeter(m, 0) + winMeter(m, 1) - 1) < 1e-9);
+    }
+  }
+  // The edge fades: smaller late on, gone at full time.
+  const early = kickoff([['fortress', 'mythic'], [null, null]], [5, 5]);
+  const late = kickoff([['fortress', 'mythic'], [null, null]], [25, 25]);
+  assert.ok(winMeter(early, 0) - winProbability(early, 0) > winMeter(late, 0) - winProbability(late, 0));
+  const done = kickoff([[null, null], ['fortress', 'mythic']], [30, 12]);
+  done.step = { type: 'fulltime' };
+  done.winner = 0;
+  assert.equal(winMeter(done, 0), 1);
 });
 
 test('the model agrees with simulated matches from the kick-off and from a lead', () => {

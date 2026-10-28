@@ -478,7 +478,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
         teams.forEach((t, i) => {
           const col = el('div', `ds-col ${i ? 'right' : 'left'}`);
           kit(col, t.color);
-          col.append(el('div', 'ds-team', t.name), cardArt(t.card));
+          col.append(el('div', 'ds-team', t.name), cardArt(t.card, { rarity: t.cardRarity || 'common' }));
           row.append(col);
           if (i === 0) row.append(el('div', 'ds-v', 'v'));
         });
@@ -490,17 +490,42 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
     },
 
     // A team card changes what the dice said.
-    cardplay({ team, card, line }) {
+    cardplay({ team, card, rarity = 'common', line }) {
       return run({ tone: 'clear', letterbox: false, duration: 1700, color: team.color }, (scene, later) => {
         scene.classList.add('cardplay');
         const glow = el('div', 'cp-glow');
-        const art = cardArt(card);
+        const art = cardArt(card, { rarity });
         art.classList.add('cp-card');
         scene.append(glow, art, sub(`${team.name} · ${line}`, 'cp-line'));
         play('whoosh');
         later(260, () => {
           play('stamp');
           if (haptics()) buzz(30);
+        });
+      });
+    },
+
+    // A Mythic card turns up in the deal: it flips in on a sunburst.
+    mythic({ cards, team }) {
+      return run({ duration: 2600 }, (scene, later) => {
+        scene.classList.add('mythic-scene');
+        scene.append(el('div', 'rays mythic-rays'), el('div', 'my-kicker', cards.length > 1 ? 'Mythic cards!' : 'Mythic card!'));
+        const row = el('div', 'my-row');
+        cards.forEach((id, i) => {
+          const art = cardArt(id, { rarity: 'mythic' });
+          art.classList.add('my-card');
+          art.style.animationDelay = `${180 + i * 160}ms`;
+          row.append(art);
+        });
+        scene.append(row, sub(`In the deal. ${team.name} pick first.`, 'late'));
+        play('whoosh');
+        later(320, () => {
+          play('stamp');
+          shake(6, 220);
+        });
+        later(480, () => {
+          play('roar');
+          confetti(scene, ['#e0461c', '#f2b01e', '#fff3c4', '#ffffff'], 120);
         });
       });
     },

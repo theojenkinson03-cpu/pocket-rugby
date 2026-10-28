@@ -1,8 +1,8 @@
 // Turns engine events into commentary lines, tray headlines and big moments.
 
 import { METRES_PER_POINT, PLAYERS } from './dice.js';
-import { CARD_BY_ID } from './cards.js';
-import { fullName, who } from './players.js';
+import { CARD_BY_ID, cardTier, RARITY_BY_ID } from './cards.js';
+import { fullName, possessive, who } from './players.js';
 
 const pick = lines => lines[Math.floor(Math.random() * lines.length)];
 const pct = p => `${Math.round(p * 100)}%`;
@@ -13,11 +13,12 @@ const cardName = (match, team) => CARD_BY_ID[match.teams[team].card]?.name || 't
 
 // "5 (3 + 3, −1 each for the card, +1 Rush Defence)": the dice as rolled, then adjustments.
 function tackleSum(e, match) {
-  const rolled = e.values.map(v => v - e.modifier);
-  if (e.bonus) rolled[0] -= e.bonus;
+  const bonus = Array.isArray(e.bonus) ? e.bonus : [e.bonus || 0, 0];
+  const rolled = e.values.map((v, i) => v - e.modifier - bonus[i]);
+  const extra = bonus[0] + bonus[1];
   const notes = [];
   if (e.modifier) notes.push(`${signed(e.modifier)} each for the card`);
-  if (e.bonus) notes.push(`${signed(e.bonus)} ${cardName(match, e.team)}`);
+  if (extra) notes.push(`${signed(extra)} ${cardName(match, e.team)}`);
   return `${e.total} (${rolled.join(' + ')}${notes.length ? `, ${notes.join(', ')}` : ''})`;
 }
 
@@ -37,14 +38,23 @@ const CARD_LINES = {
   touch: 'keep it in play instead of finding touch',
   intercept: 'see the interception coming and pass instead',
   dropChance: 'set up a drop-goal chance',
-  ruck: 'win the ruck on the video ref',
+  ruck: e => `win the ruck on ${RUCK_ROLLS[e.result] || 'the roll'}`,
   heldUp: 'are held up, but roll again',
   noTry: 'are ruled out, but roll again',
   penalty: 'talk the referee round: penalty to them',
   reset: 'take the reset scrum',
   notstraight: 'take the crooked throw',
-  advantage: 'carry the shove on: +1 on the next run',
+  advantage: e => `carry the shove on: +1 on the next ${e.runs > 1 ? `${e.runs} runs` : 'run'}`,
+  ownFeed: 'hold on to their own ball at the set piece',
+  steal: "steal the other side's ball at the set piece",
 };
+const RUCK_ROLLS = { video: 'the video ref', notry: 'a NO TRY', try: 'a TRY roll' };
+const cardLine = e => {
+  const line = CARD_LINES[e.what];
+  return (typeof line === 'function' ? line(e) : line) || 'play their card';
+};
+// "Golden Boot", or "Golden Boot (Mythic)" above Common.
+const cardLabel = (id, rarity) => `${CARD_BY_ID[id].name}${rarity && rarity !== 'common' ? ` (${RARITY_BY_ID[rarity].name})` : ''}`;
 
 // Returns { lines: [{text, team, tone}], headline, detail, moments: [{kind, team, title, sub}] }
 export function narrate(events, match) {
@@ -66,25 +76,36 @@ export function narrate(events, match) {
         head(e.result === 'heads' ? 'Heads' : 'Tails', `${name(e.winner)} win the toss and receive.`);
         break;
 
-      case 'deal':
-        say(`Three team cards are dealt. ${name(e.first)} lost the toss, so they pick first.`, e.first);
-        head('Team cards', `${name(e.first)} pick first. ${name(1 - e.first)} take one of the other two.`);
+      case 'deal': {
+        const mythic = e.cards.filter(id => e.rarity?.[id] === 'mythic');
+        const best = mythic.length ? ` ${mythic.length > 1 ? `${mythic.length} of them are` : 'One of them is'} MYTHIC!` : '';
+        say(`Three team cards are dealt.${best} ${name(e.first)} lost the toss, so they pick first.`, e.first, mythic.length ? 'big' : 'info');
+        head(mythic.length ? 'Mythic card!' : 'Team cards', `${name(e.first)} pick first. ${name(1 - e.first)} take one of the other two.`);
+        if (mythic.length) out.moments.push({ kind: 'mythic', team: e.first, cards: mythic, title: 'Mythic card', sub: '' });
         break;
+      }
 
       case 'draft': {
-        const card = CARD_BY_ID[e.card];
-        say(`${name(e.team)} take ${card.name}: ${card.text}`, e.team, 'big');
+        const card = cardTier(e.card, e.rarity);
+        say(`${name(e.team)} take ${cardLabel(e.card, e.rarity)}: ${card.text}`, e.team, 'big');
         head(`${name(e.team)}: ${card.name}`, e.first ? `${name(1 - e.team)} pick from the other two.` : 'Both sides have their card. Kick-off!');
         if (!e.first) out.moments.push({ kind: 'draft', team: e.team, title: 'Team cards', sub: '' });
         break;
       }
 
+      case 'catchUp': {
+        const card = CARD_BY_ID[e.card];
+        say(`Catch-up: the first pick was rarer, so ${possessive(name(e.team))} ${card.name} goes up from ${RARITY_BY_ID[e.from].name} to ${RARITY_BY_ID[e.to].name}.`, e.team, 'big');
+        out.detail = `Catch-up: ${card.name} goes up to ${RARITY_BY_ID[e.to].name}. Kick-off!`;
+        break;
+      }
+
       case 'cardPlayed': {
         const card = CARD_BY_ID[e.card];
-        const line = CARD_LINES[e.what] || 'play their card';
+        const line = cardLine(e);
         say(`${card.name}! ${name(e.team)} ${line}.`, e.team, 'big');
         head(card.name, `${name(e.team)} ${line}.`);
-        out.moments.push({ kind: 'cardplay', team: e.team, card: e.card, title: card.name, sub: cap(line) });
+        out.moments.push({ kind: 'cardplay', team: e.team, card: e.card, rarity: e.rarity, title: card.name, sub: cap(line) });
         break;
       }
 

@@ -1361,12 +1361,17 @@ dialog.sheet::backdrop { background: rgb(5 12 8 / 0.55); backdrop-filter: blur(2
   --card-paper: #fbf7ec;
   --card-ink: #1e1a12;
   --card-muted: #5b5446;
+  --r-common: #737a80;
+  --r-rare: #1f6fd1;
+  --r-epic: #7b3fd0;
+  --r-mythic: #e0461c;
+  --r-mythic-2: #f2b01e;
 }
 .tcard {
   position: relative;
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr);
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   column-gap: 14px;
   min-height: 104px;
   margin: 0;
@@ -1395,7 +1400,65 @@ dialog.sheet::backdrop { background: rgb(5 12 8 / 0.55); backdrop-filter: blur(2
 }
 .tc-icon { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tc-tag { font: 700 9.5px/1.1 var(--font-label); letter-spacing: 0.08em; text-transform: uppercase; text-align: center; }
-.tc-name { padding-top: 12px; font: 900 22px/1 var(--font-display); letter-spacing: 0.01em; text-transform: uppercase; }
+.tc-name { padding-top: 4px; font: 900 22px/1 var(--font-display); letter-spacing: 0.01em; text-transform: uppercase; }
+
+/* Rarity: a gem and a name on every card, a coloured frame from Rare up, a
+   glow for Epic and a moving foil for Mythic. */
+.r-common { --rarity: var(--r-common); }
+.r-rare { --rarity: var(--r-rare); }
+.r-epic { --rarity: var(--r-epic); }
+.r-mythic { --rarity: var(--r-mythic); }
+.tc-rarity {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 5px;
+  margin-top: 10px;
+  font: 800 10px/1 var(--font-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rarity);
+}
+.tc-gem {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 1.5px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--rarity) 55%, #fff), var(--rarity) 60%, color-mix(in srgb, var(--rarity) 70%, #000));
+  transform: rotate(45deg);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.5);
+}
+.r-mythic .tc-gem { background: conic-gradient(from 30deg, var(--r-mythic), var(--r-mythic-2), #fff3c4, var(--r-mythic-2), var(--r-mythic)); }
+.tcard.r-rare, .tcard.r-epic, .tcard.r-mythic {
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.04), 0 8px 22px rgb(10 20 14 / 0.16), inset 0 0 0 2px var(--rarity);
+}
+.tcard.r-epic {
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.04), 0 8px 26px color-mix(in srgb, var(--r-epic) 34%, transparent), inset 0 0 0 2px var(--rarity);
+}
+.tcard.r-mythic {
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--r-mythic-2) 22%, transparent), transparent 60%),
+    var(--card-paper);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.04), 0 10px 30px color-mix(in srgb, var(--r-mythic) 40%, transparent), inset 0 0 0 2px var(--r-mythic), inset 0 0 0 4px color-mix(in srgb, var(--r-mythic-2) 70%, transparent);
+}
+.tc-foil {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 0.55) 45%, rgb(255 214 120 / 0.35) 50%, transparent 62%);
+  background-size: 260% 100%;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+  animation: foil 3.2s ease-in-out infinite;
+}
+@keyframes foil { 0% { background-position: 130% 0; } 55%, 100% { background-position: -40% 0; } }
+@media (prefers-reduced-motion: reduce) { .tc-foil { animation: none; background-position: 40% 0; } }
+.tc-up { margin-left: 4px; padding: 2px 5px; border-radius: 4px; background: color-mix(in srgb, var(--rarity) 14%, transparent); font-size: 9px; letter-spacing: 0.08em; }
+.tcard.caught-up .tc-rarity { animation: pop 420ms cubic-bezier(.2,1.6,.4,1) both; }
+.tc-chip .tc-gem { width: 7px; height: 7px; margin-left: 1px; }
+.tc-chip.r-rare, .tc-chip.r-epic, .tc-chip.r-mythic { box-shadow: 0 0 0 1.5px var(--rarity); }
+.tc-chip.r-mythic { box-shadow: 0 0 0 1.5px var(--r-mythic), 0 0 10px color-mix(in srgb, var(--r-mythic-2) 60%, transparent); }
 .tc-text { padding: 5px 0 12px; font: 500 14px/1.32 var(--font-body); color: var(--card-muted); }
 .tc-uses { grid-column: 2; padding-bottom: 12px; margin-top: -4px; font: 700 12px/1.2 var(--font-label); letter-spacing: 0.06em; text-transform: uppercase; color: var(--tag); }
 .tc-uses.spent { color: var(--card-muted); }
@@ -1427,12 +1490,13 @@ button.tcard:disabled { cursor: default; }
 /* Tall cards: side by side, band on top. */
 .tcard.tall, .ds-col .tcard, .cp-card {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto 1fr auto;
+  grid-template-rows: auto auto auto 1fr auto;
   padding: 0;
   text-align: center;
 }
 .tcard.tall .tc-band, .ds-col .tc-band, .cp-card .tc-band { grid-row: auto; grid-auto-flow: column; padding: 10px 8px; gap: 8px; }
-.tcard.tall .tc-name, .ds-col .tc-name, .cp-card .tc-name { padding: 12px 12px 0; }
+.tcard.tall .tc-name, .ds-col .tc-name, .cp-card .tc-name { padding: 4px 12px 0; }
+.tcard.tall .tc-rarity, .ds-col .tc-rarity, .cp-card .tc-rarity { justify-self: center; }
 .tcard.tall .tc-text, .ds-col .tc-text, .cp-card .tc-text { padding: 6px 12px 14px; }
 .tcard.tall .tc-uses { grid-column: 1; padding: 0 12px 12px; }
 
@@ -1471,11 +1535,31 @@ button.tcard:disabled { cursor: default; }
 .side[data-team="1"] .side-card { justify-self: end; }
 .side-card.spent .tc-chip { opacity: 0.55; }
 .card-detail { margin-bottom: 18px; }
+.rarity-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 12px; }
+.rarity-tab {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 6px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  touch-action: manipulation;
+}
+.rarity-tab span { font: 800 13px/1 var(--font-label); letter-spacing: 0.06em; text-transform: uppercase; }
+.rarity-tab small { grid-column: 2; font: 600 11px/1.2 var(--font-body); color: var(--muted); }
+.rarity-tab .tc-gem { grid-row: 1 / 3; }
+.rarity-tab[aria-pressed="true"] { border-color: var(--rarity); box-shadow: inset 0 0 0 1px var(--rarity); background: color-mix(in srgb, var(--rarity) 10%, var(--surface)); }
 .rules-cards { display: grid; gap: 8px; margin-top: 10px; }
 .rules-cards .tcard { grid-template-columns: 48px minmax(0, 1fr); column-gap: 12px; min-height: 0; }
 .rules-cards .tc-icon { width: 24px; height: 24px; }
 .rules-cards .tc-tag { font-size: 8.5px; }
-.rules-cards .tc-name { padding-top: 10px; font-size: 18px; }
+.rules-cards .tc-name { padding-top: 3px; font-size: 18px; }
+.rules-cards .tc-rarity { margin-top: 9px; }
 .rules-cards .tc-text { padding-bottom: 10px; font-size: 13.5px; }
 
 /* ---------- Draft ---------- */
@@ -1510,9 +1594,10 @@ button.tcard:disabled { cursor: default; }
 .draft-status .kit { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent); }
 @media (min-width: 560px) {
   .draft-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
-  .draft-cards .tcard { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto 1fr; padding: 0; text-align: center; }
+  .draft-cards .tcard { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; padding: 0; text-align: center; }
   .draft-cards .tc-band { grid-row: auto; grid-auto-flow: column; padding: 12px 8px; gap: 8px; }
-  .draft-cards .tc-name { padding: 14px 12px 0; }
+  .draft-cards .tc-rarity { justify-self: center; }
+  .draft-cards .tc-name { padding: 5px 12px 0; }
   .draft-cards .tcard .tc-text { padding: 6px 12px 14px; }
   .draft-cards .tcard.taken .tc-name, .draft-cards .tcard.taken .tc-text { padding-right: 12px; }
   .draft-cards .tc-taken { top: auto; bottom: 14px; right: -36px; }
@@ -2004,6 +2089,32 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 .cp-card { position: relative; width: min(78vw, 300px); animation: card-flip 560ms cubic-bezier(.2,1.25,.4,1) both; }
 @keyframes card-flip { from { transform: perspective(800px) rotateY(-100deg) scale(0.6); opacity: 0; } }
 .cp-line { position: relative; text-shadow: 0 2px 12px rgb(0 0 0 / 0.7); animation: rise 360ms 260ms ease both; }
+.mythic-scene { gap: 16px; width: 100%; height: 100%; }
+.mythic-rays { background: repeating-conic-gradient(from 0deg, rgb(242 176 30 / 0.22) 0 10deg, transparent 10deg 20deg); }
+.my-kicker {
+  position: relative;
+  font: 900 clamp(34px, 11vw, 72px)/0.95 var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: linear-gradient(100deg, #f2b01e, #fff3c4 45%, #e0461c 70%, #f2b01e);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 18px rgb(224 70 28 / 0.55));
+  animation: pop 420ms cubic-bezier(.2,1.6,.4,1) both, foil-text 1.8s 300ms linear infinite;
+}
+@keyframes foil-text { to { background-position: -200% 0; } }
+.my-row { position: relative; display: flex; justify-content: center; gap: 12px; width: min(94vw, 640px); }
+.my-card { width: min(78vw, 300px); animation: card-flip 640ms cubic-bezier(.2,1.25,.4,1) both; }
+.my-row .my-card:only-child { width: min(80vw, 320px); }
+.my-row:has(.my-card + .my-card) .my-card { width: min(45vw, 280px); }
+.my-card.tcard { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; padding: 0; text-align: center; }
+.my-card .tc-band { grid-row: auto; grid-auto-flow: column; padding: 10px 8px; gap: 8px; }
+.my-card .tc-rarity { justify-self: center; }
+.my-card .tc-name { padding: 4px 12px 0; }
+.my-card .tc-text { padding: 6px 12px 14px; }
+@media (prefers-reduced-motion: reduce) { .my-kicker { animation: none; } }
 .potm-scene { gap: 18px; width: 100%; height: 100%; }
 .spot { position: absolute; inset: -20%; background: radial-gradient(ellipse at 50% 42%, rgb(255 244 205 / 0.28), transparent 42%); animation: cine-in 700ms ease both; }
 .pm-card { position: relative; display: grid; gap: 6px; padding: 18px 26px 20px; max-width: 92vw; background: var(--kit); color: var(--kit-ink); transform: skewY(-4deg); box-shadow: 0 30px 70px rgb(0 0 0 / 0.5); animation: slab-in 480ms cubic-bezier(.2,1.3,.4,1) both; }

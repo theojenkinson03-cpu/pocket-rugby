@@ -1,12 +1,12 @@
 // Screen controller: menus, the match loop, animation and persistence.
 
-import { act, controllerOf, kickBonus, kickChance, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds } from './engine.js';
+import { act, controllerOf, draftRarity, kickBonus, kickChance, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds } from './engine.js';
 import { cpuChoiceAsync, LEVELS, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
-import { CARD_BY_ID, CARDS } from './cards.js';
+import { CARD_BY_ID, CARDS, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
 import { metres, narrate, scoreLine } from './commentary.js';
 import { playerOfTheMatch, possessive, randomRoster, statLine, surname } from './players.js';
-import { winProbability } from './winprob.js';
+import { winMeter } from './winprob.js';
 import { ACHIEVEMENT_BY_ID, newCareer, newTracker, recordMatch, track } from './career.js';
 import { tipFor, tipText } from './coach.js';
 import { advance, clash, createCup, createLeague, LEAGUES, matchOptions, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
@@ -26,7 +26,7 @@ import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
 // anything that changes a match's outcome changes.
-const BUILD = 'pr-2.0';
+const BUILD = 'pr-3.0';
 
 const KITS = [
   { name: 'Navy', color: '#1d3577' },
@@ -527,7 +527,7 @@ function recordHistory(events) {
   const m = ui.match;
   if (m.attacker === null && m.step.type !== 'fulltime') return;
   if (!ui.history.length) ui.history.push({ p: 0.5, h: 1 });
-  const entry = { p: Math.round(winProbability(m, 0) * 1000) / 1000, h: m.half };
+  const entry = { p: Math.round(winMeter(m, 0) * 1000) / 1000, h: m.half };
   const score = events.find(e => e.type === 'score');
   if (score) Object.assign(entry, { k: score.kind, t: score.team, s: score.score });
   ui.history.push(entry);
@@ -590,7 +590,7 @@ function tournamentNote(t, f, won) {
 const FOCUS = { kick: 'kick', penalty: 'card', try: 'result', ruck: 'result' };
 
 // Which big moments get a full cinematic scene at each setting.
-const SHORT_SCENES = new Set(['kickoff', 'try', 'kickcam', 'card', 'turnover', 'whistle', 'linebreak', 'bighit', 'notry', 'cardplay', 'trophy', 'achievement']);
+const SHORT_SCENES = new Set(['kickoff', 'try', 'kickcam', 'card', 'turnover', 'whistle', 'linebreak', 'bighit', 'notry', 'cardplay', 'mythic', 'trophy', 'achievement']);
 const cinemaLevel = () => (reducedMotion.matches ? 'off' : ui.prefs.cinema);
 const wantsScene = kind => cinemaLevel() === 'full' || (cinemaLevel() === 'short' && SHORT_SCENES.has(kind));
 const cinemaSpeed = () => (ui.prefs.cinema === 'short' ? 0.7 : 1) * (ui.prefs.fast ? 0.7 : 1);
@@ -610,7 +610,8 @@ function sceneFor(moment, after, events) {
     case 'tmo': return ['tmo', {}];
     case 'notry': return ['notry', { team, heldUp: moment.heldUp }];
     case 'quicktap': return ['quicktap', { team }];
-    case 'cardplay': return ['cardplay', { team, card: moment.card, line: moment.sub }];
+    case 'cardplay': return ['cardplay', { team, card: moment.card, rarity: moment.rarity, line: moment.sub }];
+    case 'mythic': return ['mythic', { cards: moment.cards, team }];
     case 'halftime': return ['whistle', { full: false, teams: after.teams }];
     case 'fulltime': return ['whistle', { full: true, teams: after.teams, winner: after.winner }];
     // Shown by the draft panel and the team-cards scene.
@@ -624,7 +625,7 @@ function sceneFor(moment, after, events) {
 
 // A card changes the dice before anything else happens; big hits read
 // better before the injury they cause.
-const MOMENT_ORDER = ['cardplay', 'bighit', 'injury', 'break', 'try', 'notry', 'tmo', 'turnover', 'penalty', 'yellow', 'red', 'quicktap', 'goal', 'conversion', 'draft', 'halftime', 'fulltime'];
+const MOMENT_ORDER = ['mythic', 'cardplay', 'bighit', 'injury', 'break', 'try', 'notry', 'tmo', 'turnover', 'penalty', 'yellow', 'red', 'quicktap', 'goal', 'conversion', 'draft', 'halftime', 'fulltime'];
 
 function stageLabel() {
   const c = ui.context;
@@ -924,10 +925,10 @@ function renderBoard(m) {
     const cardBtn = side.querySelector('.side-card');
     if (t.card) {
       cardBtn.hidden = false;
-      cardBtn.replaceChildren(cardChip(t.card, 'tc-chip on-board'));
+      cardBtn.replaceChildren(cardChip(t.card, 'tc-chip on-board', t.cardRarity));
       const uses = cardUses(m, team);
       cardBtn.classList.toggle('spent', !!uses && !uses.left);
-      cardBtn.setAttribute('aria-label', `${possessive(t.name)} team card: ${CARD_BY_ID[t.card].name}. Show what it does.`);
+      cardBtn.setAttribute('aria-label', `${possessive(t.name)} team card: ${RARITY_BY_ID[t.cardRarity || 'common'].name} ${CARD_BY_ID[t.card].name}. Show what it does.`);
       cardBtn.onclick = () => openCardDialog(team);
     } else {
       cardBtn.hidden = true;
@@ -954,7 +955,7 @@ function renderMeter(m) {
   const on = ui.prefs.meter && m.attacker !== null;
   meter.hidden = !on;
   if (!on) return;
-  const p = winProbability(m, 0);
+  const p = winMeter(m, 0);
   $('#meter-0').textContent = pct(p);
   $('#meter-1').textContent = pct(1 - p);
   meter.style.setProperty('--kit-a', m.teams[0].color);
@@ -978,7 +979,7 @@ function renderSituation(m) {
   if (m.attacker === null || step.type !== 'roll' && step.type !== 'choose') return;
   const open = ['attack', 'tackle', 'ruck', 'try', 'pass'].includes(step.purpose);
   if (open) host.append(chip(`Phase ${m.phase}`));
-  if (m.quickTap > 0 && open) host.append(chip(`${m.quickTap === 1 && m.teams[m.attacker].card === 'set-piece-kings' ? 'Advantage' : 'Quick tap'} +1 · ${m.quickTap} left`, null, 'tap'));
+  if (m.quickTap > 0 && open) host.append(chip(`${m.quickTapFrom === 'card' ? 'Advantage' : 'Quick tap'} +1 · ${m.quickTap} left`, null, 'tap'));
   if (step.purpose === 'setpiece') host.append(chip(step.piece === 'scrum' ? 'Scrum' : 'Lineout'));
   if (step.purpose === 'kick' || step.purpose === 'drop' || (step.type === 'choose' && step.purpose === 'penalty')) {
     host.append(chip(`${metres(step.range)} out`));
@@ -1034,15 +1035,22 @@ function renderDraft(m, picked = null) {
   const picker = drafting ? m.teams[step.team] : null;
   const who = drafting ? controllerOf(m) : null;
   $('#draft-title').textContent = drafting ? `${picker.name} to pick` : 'Cards picked';
+  const catching = drafting && !step.first && step.options.some(id => draftRarity(m, id) !== m.dealRarity[id]);
   $('#draft-sub').textContent = drafting && !step.first
-    ? `${loser.name} picked first. ${picker.name} take one of the other two.`
+    ? `${loser.name} picked first. ${picker.name} take one of the other two.${catching ? ' Their pick was rarer, so yours goes up a rarity.' : ''}`
     : `${winner.name} won the toss and receive the kick-off, so ${loser.name} pick first.`;
 
   const host = $('#draft-cards');
   host.innerHTML = '';
   for (const id of m.deal) {
     const takenBy = m.teams.findIndex(t => t.card === id);
-    const node = cardArt(id, { taken: takenBy >= 0 ? m.teams[takenBy] : null, tag: 'button' });
+    const dealt = m.dealRarity?.[id] || 'common';
+    const rarity = takenBy >= 0 ? m.teams[takenBy].cardRarity || dealt : draftRarity(m, id);
+    const node = cardArt(id, { rarity, taken: takenBy >= 0 ? m.teams[takenBy] : null, tag: 'button' });
+    if (rarity !== dealt) {
+      node.classList.add('caught-up');
+      node.querySelector('.tc-rarity').append(el('small', 'tc-up', `↑ from ${RARITY_BY_ID[dealt].name}`));
+    }
     node.type = 'button';
     const pickable = drafting && takenBy < 0 && who === 'human' && !ui.busy;
     node.disabled = !pickable;
@@ -1050,8 +1058,8 @@ function renderDraft(m, picked = null) {
       node.dataset.choice = '';
       node.addEventListener('click', () => humanAct({ type: 'choose', value: id }));
     }
-    const card = CARD_BY_ID[id];
-    node.setAttribute('aria-label', `${card.name}, ${card.tag}. ${card.text}${takenBy >= 0 ? ` Picked by ${m.teams[takenBy].name}.` : ''}`);
+    const card = cardTier(id, rarity);
+    node.setAttribute('aria-label', `${card.name}, ${RARITY_BY_ID[rarity].name} ${card.tag}. ${card.text}${takenBy >= 0 ? ` Picked by ${m.teams[takenBy].name}.` : ''}`);
     if (picked === id) node.classList.add('just-picked');
     host.append(node);
   }
@@ -1382,7 +1390,7 @@ function openBreak() {
     kitVars(kit, t);
     name.append(kit, el('span', null, t.name));
     cell.append(name, el('span', 'bs-num', t.score));
-    if (t.card) cell.append(cardChip(t.card, 'tc-chip on-board'));
+    if (t.card) cell.append(cardChip(t.card, 'tc-chip on-board', t.cardRarity || 'common'));
     cell.dataset.team = team;
     return cell;
   };
@@ -1475,7 +1483,7 @@ function openCardDialog(team) {
   if (!t.card) return;
   $('#card-team').textContent = 'Team card';
   $('#card-title').textContent = `${possessive(t.name)} card`;
-  $('#card-detail').replaceChildren(cardArt(t.card, { uses: cardUses(m, team) }));
+  $('#card-detail').replaceChildren(cardArt(t.card, { rarity: t.cardRarity || 'common', uses: cardUses(m, team) }));
   openDialog('dlg-card');
 }
 
@@ -2003,7 +2011,21 @@ function buildDiceReference() {
     row.append(h, faces);
     host.append(row);
   }
-  $('#rules-cards').replaceChildren(...CARDS.map(c => cardArt(c.id)));
+  showRulesCards('common');
+}
+
+// The twelve cards at one rarity, with a picker for the rarity.
+function showRulesCards(rarity) {
+  const tabs = $('#rules-rarity');
+  tabs.replaceChildren(...RARITIES.map(r => {
+    const tab = el('button', `rarity-tab r-${r.id}`);
+    tab.type = 'button';
+    tab.setAttribute('aria-pressed', String(r.id === rarity));
+    tab.append(el('i', 'tc-gem'), el('span', null, r.name), el('small', null, `${Math.round(r.odds * 100)}%`));
+    tab.addEventListener('click', () => showRulesCards(r.id));
+    return tab;
+  }));
+  $('#rules-cards').replaceChildren(...CARDS.map(c => cardArt(c.id, { rarity })));
 }
 
 // ---------- Keyboard ----------

@@ -3,6 +3,7 @@
 // at full time the record is updated and achievements are checked.
 
 import { POSITIONS } from './dice.js';
+import { RARITY_IDS } from './cards.js';
 
 export function newCareer() {
   return {
@@ -22,6 +23,8 @@ export function newCareer() {
     leagues: 0,
     biggestWin: null,
     cardsWon: [],
+    // The rarest version of each card you've won with.
+    cardRarity: {},
     achievements: {},
   };
 }
@@ -100,6 +103,7 @@ export const ACHIEVEMENTS = [
   { id: 'marathon', name: 'Marathon', text: 'Win a Marathon match.', check: (m, me) => m.winner === me && m.length === 'long' },
   { id: 'on-a-roll', name: 'On a Roll', text: 'Win five matches in a row against the CPU.', check: (m, me, t, c, career) => career.streak >= 5 },
   { id: 'card-sharp', name: 'Card Sharp', text: 'Win with six different team cards.', check: (m, me, t, c, career) => career.cardsWon.length >= 6 },
+  { id: 'mythic', name: 'Mythic', text: 'Win a match with a Mythic team card.', check: (m, me) => m.winner === me && m.teams[me].cardRarity === 'mythic' },
   { id: 'cup-winners', name: 'Nations Cup Winners', text: 'Win the Nations Cup.', check: (m, me, t, c) => c.tournament?.kind === 'cup' && c.tournament.champion },
   { id: 'champions', name: 'League Champions', text: 'Win a league: Super Rugby, the Prem, the URC or the Top 14.', check: (m, me, t, c) => c.tournament?.kind === 'league' && c.tournament.champion },
   { id: 'invincibles', name: 'Invincibles', text: 'Win a tournament without losing a match.', check: (m, me, t, c) => !!c.tournament?.champion && c.tournament.lost === 0 },
@@ -141,6 +145,11 @@ export function recordMatch(career, match, tracker, context) {
     const margin = mine.score - theirs.score;
     if (!c.biggestWin || margin > c.biggestWin.margin) c.biggestWin = { margin, score: `${mine.score}–${theirs.score}`, against: theirs.name };
     if (mine.card && !c.cardsWon.includes(mine.card)) c.cardsWon.push(mine.card);
+    if (mine.card) {
+      const rarity = mine.cardRarity || 'common';
+      c.cardRarity ??= {};
+      if (RARITY_IDS.indexOf(rarity) > RARITY_IDS.indexOf(c.cardRarity[mine.card] ?? '')) c.cardRarity[mine.card] = rarity;
+    }
   }
   if (context.tournament?.champion) {
     if (context.tournament.kind === 'cup') c.cups++;

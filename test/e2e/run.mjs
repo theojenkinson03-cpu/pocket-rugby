@@ -59,7 +59,7 @@ async function snapshot(page) {
       };
     });
     const drafting = !document.querySelector('#draft').hidden;
-    const buttons = [...document.querySelectorAll(drafting ? '#draft-cards button' : '#actions button')].map(b => ({ text: b.textContent.trim(), disabled: b.disabled, waiting: b.classList.contains('waiting'), choice: b.hasAttribute('data-choice'), card: b.dataset.card || null }));
+    const buttons = [...document.querySelectorAll(drafting ? '#draft-cards button' : '#actions button')].map(b => ({ text: b.textContent.trim(), disabled: b.disabled, waiting: b.classList.contains('waiting'), choice: b.hasAttribute('data-choice'), card: b.dataset.card || null, rarity: b.dataset.rarity || null }));
     const carrier = document.querySelector('.tok.carrier');
     return {
       match: saved?.match || null,
@@ -76,6 +76,7 @@ async function snapshot(page) {
       coach: !document.querySelector('#coach').hidden,
       meter: !document.querySelector('#meter').hidden ? [document.querySelector('#meter-0').textContent, document.querySelector('#meter-1').textContent] : null,
       boardCards: [0, 1].map(t => { const b = document.querySelector(`.side[data-team="${t}"] .side-card`); return b.hidden ? null : b.textContent; }),
+      boardRarity: [0, 1].map(t => [...(document.querySelector(`.side[data-team="${t}"] .side-card .tc-chip`)?.classList || [])].find(c => c.startsWith('r-'))?.slice(2) || null),
     };
   });
 }
@@ -131,9 +132,19 @@ function verify(snap, label) {
   if (step.purpose === 'draft') {
     check(snap.buttons.length === 3, `${label}: three cards dealt`);
     for (const id of step.options) check(snap.buttons.some(b => b.card === id && b.choice), `${label}: ${id} can be picked`);
+    // Cards show their rarity: a picked card its holder's, the rest as the picker would get them (caught up on the second pick).
+    const RANK = ['common', 'rare', 'epic', 'mythic'];
+    const firstPick = step.first ? null : m.teams[1 - step.team].cardRarity;
+    for (const b of snap.buttons) {
+      const holder = m.teams.find(t => t.card === b.card);
+      const dealt = m.dealRarity[b.card];
+      const want = holder ? holder.cardRarity : firstPick && RANK.indexOf(firstPick) > RANK.indexOf(dealt) ? RANK[RANK.indexOf(dealt) + 1] : dealt;
+      check(b.rarity === want, `${label}: ${b.card} shown ${b.rarity}, want ${want}`);
+    }
     for (const t of m.teams) if (t.card) check(snap.buttons.some(b => b.card === t.card && !b.choice && b.text.includes(t.name)), `${label}: ${t.card} stamped for ${t.name}`);
   }
   m.teams.forEach((t, i) => check(!!snap.boardCards[i] === !!t.card, `${label}: team ${i} card on the board`));
+  m.teams.forEach((t, i) => check(snap.boardRarity[i] === (t.card ? t.cardRarity : null), `${label}: team ${i} card's rarity on the board`));
   if (m.attacker !== null && snap.meter) {
     const [a, b] = snap.meter.map(x => Number(x.replace('%', '')));
     check(Math.abs(a + b - 100) <= 1, `${label}: win meter adds up (${snap.meter})`);
@@ -375,7 +386,7 @@ const SCENARIOS = {
     await page.click('#btn-career');
     const got = await page.$$eval('.ach.got', li => li.map(x => x.textContent));
     check(got.some(t => t.includes('Graduate')), 'career screen shows Graduate');
-    check((await page.$$('.ach')).length === 28, 'all 28 achievements listed');
+    check((await page.$$('.ach')).length === 29, 'all 29 achievements listed');
     return { errors, ...result, actions: result.actions + tips };
   },
   async 'nations-cup'(browser, base) {
@@ -404,6 +415,31 @@ const SCENARIOS = {
     check((await page.textContent('#tournament-label')).includes('Continue the Nations Cup'), 'home offers to continue');
     await page.click('#btn-tournament');
     check((await page.textContent('.next-card .nc-kicker')).includes('Round 2 of 3'), 'next is round 2');
+    return { errors, ...result };
+  },
+  async 'mythic-deal'(browser, base) {
+    const { page, errors } = await newPage(browser, { prefs: { cinema: 'short', fast: true } });
+    await page.goto(base);
+    await setUp(page, { mode: '2p', length: 'quick', cards: true });
+    await page.waitForSelector('#actions button');
+    // The toss, then the deal: Golden Boot (Mythic), Jackal (Epic), Sure Hands (Rare).
+    await page.evaluate(() => {
+      const script = [0.1, 4 / 12 + 0.01, 0.99, 6 / 11 + 0.01, 0.9, 2 / 10 + 0.01, 0.6];
+      const real = Math.random;
+      Math.random = () => (script.length ? script.shift() : real());
+    });
+    await page.click('#actions button >> nth=0');
+    await page.waitForSelector('.mythic-scene', { timeout: 10000 });
+    check((await page.textContent('.my-kicker')) === 'Mythic card!', 'the Mythic reveal');
+    check((await page.$$eval('.my-card', x => x.map(n => n.dataset.card))).join() === 'golden-boot', 'the Mythic card in the reveal');
+    await page.click('#cinema', { force: true });
+    await page.waitForSelector('#draft:not([hidden]) #draft-cards button[data-choice]');
+    const dealt = await page.$$eval('#draft-cards .tcard', x => x.map(n => `${n.dataset.card}:${n.dataset.rarity}:${n.querySelector('.tc-rarity').textContent}`));
+    check(dealt.join() === 'golden-boot:mythic:Mythic,jackal:epic:Epic,sure-hands:rare:Rare', `the deal at its rarities: ${dealt}`);
+    check(await page.isVisible('#draft-cards .tcard.r-mythic .tc-foil'), 'the Mythic card shines');
+    check((await page.textContent('#draft-cards .tcard.r-mythic .tc-text')).startsWith('Every kick is +40 m and never misses'), 'the Mythic text');
+    await page.click('#draft-cards button[data-card="golden-boot"]');
+    const result = await playOn(page, { label: 'mythic' });
     return { errors, ...result };
   },
   async 'league-season'(browser, base) {
@@ -435,13 +471,16 @@ const SCENARIOS = {
     await page.click('#break-actions .btn-primary');
     check(await page.isVisible('#view-tournament'), 'back to the hub');
 
-    // A Top 14 season over, the user top: straight into the semi-finals while the barrages are played.
+    // A Top 14 season over, the user top by a distance: straight into the semi-finals while the barrages are played.
     await page.evaluate(async () => {
       const T = await import('./js/tournament.js');
-      const t = T.createLeague({ league: 'top14', userTeam: 'toulouse', season: 'short' });
+      const E = await import('./js/engine.js');
+      const t = T.createLeague({ league: 'top14', userTeam: 'toulouse', season: 'short', rng: E.seededRng(7) });
       for (const f of t.fixtures) {
-        const homeWins = f.home === 'toulouse' || (f.away !== 'toulouse' && f.home < f.away);
-        f.result = { score: homeWins ? [24, 17] : [12, 22], tries: homeWins ? [4, 2] : [1, 3], winner: homeWins ? 'home' : 'away' };
+        const user = f.home === 'toulouse' ? 'home' : f.away === 'toulouse' ? 'away' : null;
+        const winner = user || (f.home < f.away ? 'home' : 'away');
+        const big = user ? [40, 0] : [24, 17];
+        f.result = { score: winner === 'home' ? big : [big[1], big[0]], tries: winner === 'home' ? [6, 1] : [1, 6], winner };
       }
       T.advance(t);
       localStorage.setItem('pocket-rugby:tournament', JSON.stringify(t));

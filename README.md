@@ -27,22 +27,26 @@ The better seed is at home in every knockout tie, the final included (in the rea
 
 ## Team cards
 
-Three of twelve cards are dealt after the coin toss. The side that **lost** the toss picks first, from all three; the toss winner, who receives the kick-off, picks from the two left. Each card bends one rule for the whole match: Sure Hands (the Outside Backs never lose it), Jackal (wins rucks on the video ref), Golden Boot (+20 m on place kicks), Fortress (the other side's big moves are 2 lower) and so on. The draft screen shows all three cards; the scoreboard shows each side's card, and tapping it shows what it does. When a card changes a roll, a short scene says so.
+Three of twelve cards are dealt after the coin toss. Each card bends one rule for the whole match: Sure Hands (the Outside Backs never lose it), Jackal (wins rucks on the video ref), Golden Boot (+20 m on place kicks), Fortress (the other side's big moves are 2 lower) and so on. The draft screen shows all three cards; the scoreboard shows each side's card, and tapping it shows what it does. When a card changes a roll, a short scene says so.
 
-Every card was balanced over 5,000 simulated matches against a side with no card: each lifts the win rate by 6.8 to 9.7 points, inside the simulation's noise of each other. Over 10,000 full drafts the side picking first won 49.9%, so losing the toss and picking first evens out receiving the kick-off. Cards can be turned off on the team sheet. [RULES.md](RULES.md) lists every card's exact effect.
+**Rarities.** Every card is dealt at a rarity: **Common** (55% of cards), **Rare** (28%), **Epic** (13%) or **Mythic** (4%), so about one deal in nine has a Mythic, and it gets a reveal of its own. The rarer the card, the stronger it is: each rarity keeps everything below it and adds more. Sure Hands, for example: Common, the Outside Backs never lose it; Rare, their Hit Ups are +1 too; Epic, +2 and Into the Corner 10; Mythic, the Fly Half never finds touch either. Cards show their rarity with a coloured gem and frame (grey, blue, purple, and a shining orange-gold for Mythic), and the rules sheet shows all twelve at each rarity.
+
+**The draft.** The side that **lost** the toss picks first, from all three; the toss winner, who receives the kick-off, picks from the two left. **Catch-up:** if the first pick is rarer than the card the second side takes, that card goes up one rarity.
+
+**Balance.** Every card at every rarity was measured over 10,000 simulated matches against a side with no card. Common cards lift the win rate by 6.7 to 9.6 points, Rare 10.3 to 13.6, Epic 14.6 to 19.9 and Mythic 21.5 to 27.3: every card of a rarity beats every card of the rarity below. Over 40,000 full drafts the side picking first won 52.6%: losing the toss gives you the better choice, and the catch-up keeps it close. Cards can be turned off on the team sheet. [RULES.md](RULES.md) lists every card's exact effect at every rarity.
 
 ## Players, stats and your record
 
 - **Named players.** Every side has five named players (edit them, or shuffle new ones, on the team sheet). Commentary uses their names: "TRY! Webb (Outside Back) dots it down!"
 - **Player of the Match** after every match, with a spotlight scene, and a table of every player's tries, carries, line breaks, tackles, turnovers, kicking points and errors.
-- **Win meter.** A live bar under the scoreboard shows each side's chance of winning, from a model of how possessions end (it agrees with simulated matches to within a few points). The full-time report charts it through the match as a momentum graph, with every score marked.
-- **Career.** Your record against each CPU level and online, streaks, points, tries, biggest win, trophies, and the team cards you've won with.
-- **28 achievements**, from Hat-trick and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
+- **Win meter.** A live bar under the scoreboard shows each side's chance of winning, from a model of how possessions end (it agrees with simulated matches to within a few points), with each side's team card counted as an edge worth its measured lift. The full-time report charts it through the match as a momentum graph, with every score marked.
+- **Career.** Your record against each CPU level and online, streaks, points, tries, biggest win, trophies, and the team cards you've won with, each at the rarest you've had.
+- **29 achievements**, from Hat-trick and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert), Mythic (win with a Mythic card) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
 
 ## Presentation
 
 - **3D dice** that tumble onto the result, with the face that matters highlighted. Rolls that decide a try, kick, card or ruck spin longer, to a heartbeat.
-- **Cinematic moments**: kick-off and second-half title cards, the team-card face-off, line breaks in slow motion, tries, video-ref reviews, big hits, injuries, cards, turnovers, penalties, quick taps, half time, full time, Player of the Match, achievements and the trophy lift. Every kick at goal plays on a kick cam with a distance gauge. Tap to skip any scene; set them to Full, Short or Off. They switch off when your phone asks for reduced motion.
+- **Cinematic moments**: kick-off and second-half title cards, the Mythic card reveal, the team-card face-off, line breaks in slow motion, tries, video-ref reviews, big hits, injuries, cards, turnovers, penalties, quick taps, half time, full time, Player of the Match, achievements and the trophy lift. Every kick at goal plays on a kick cam with a distance gauge. Tap to skip any scene; set them to Full, Short or Off. They switch off when your phone asks for reduced motion.
 - **Live pitch** with a camera that follows the runner, and a stadium scoreboard whose digits flip.
 - **Clear decisions.** Each pass, drop-goal and penalty choice shows its odds (break chance, error chance, kick chance, with team cards included) and a tip.
 - Commentary, a full match log, half-time and full-time reports.
@@ -92,9 +96,9 @@ npm run build        # writes dist/pocket-rugby.html
 The rules engine is checked from several directions. [RULES.md](RULES.md) maps every rule on the sheet, and every team card, to its code and its tests.
 
 ```sh
-npm test               # 150+ tests: rules, cards, players, tournaments, career, coach, online, win model, CPU, fuzzing, odds, static checks
+npm test               # 175+ tests: rules, cards at every rarity, players, tournaments, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 95 bugs; every one must be caught
+npm run test:mutation  # plants 116 bugs; every one must be caught
 npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match
 npm run check          # all of the above
 ```
@@ -127,7 +131,7 @@ A standard match averages about 5 tries and 2 drop goals, and the kick-off recei
 | --- | --- |
 | `js/dice.js` | The eight dice and their faces |
 | `js/engine.js` | Rules engine: a pure state machine (`newMatch`, `act`), team-card hooks and odds helpers |
-| `js/cards.js` | The twelve team cards, as data the engine reads |
+| `js/cards.js` | The twelve team cards at four rarities, as data the engine reads, and the rarity odds |
 | `js/ai.js` | CPU levels and styles, including Expert's look-ahead |
 | `js/winprob.js` | Win model for the meter, the momentum chart and Expert |
 | `js/players.js` | Player names, ratings and Player of the Match |

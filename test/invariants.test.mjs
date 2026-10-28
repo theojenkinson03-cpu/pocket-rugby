@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import { act, controllerOf, defenceModifier, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
-import { CARD_BY_ID, CARD_IDS } from '../js/cards.js';
+import { CARD_BY_ID, CARD_IDS, catchUp, RARITY_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
 import { DICE, POSITIONS } from '../js/dice.js';
 import { BROKEN_TEXT, RULES } from './helpers.mjs';
@@ -39,8 +39,8 @@ function pickAction(m, rng, style) {
   return { type: 'choose', value: cpuChoice({ ...m, cpuLevel: style }, rng) };
 }
 
-// A side's card effects, read straight from the card list.
-const fx = (m, team) => CARD_BY_ID[m.teams[team].card]?.effects || {};
+// A side's card effects at its rarity, read straight from the card list.
+const fx = (m, team) => CARD_BY_ID[m.teams[team].card]?.tiers[m.teams[team].cardRarity || 'common'].effects || {};
 const PLAYER_SUMS = [['tries', 'tries'], ['carries', 'runs'], ['lineBreaks', 'lineBreaks'], ['tackles', 'tackles'], ['bigHits', 'bigHits'], ['turnovers', 'turnoversWon'], ['errors', 'errors']];
 
 function checkCards(m, label) {
@@ -53,7 +53,15 @@ function checkCards(m, label) {
     assert.ok(drafted.every(id => CARD_IDS.includes(id)), `${label}: both sides have a card once play starts`);
     assert.notEqual(drafted[0], drafted[1], `${label}: different cards`);
     assert.ok(drafted.every(id => m.deal.includes(id)), `${label}: cards come from the deal`);
+    // The first pick keeps its dealt rarity; the second goes up one if the first was rarer.
+    const first = 1 - m.firstReceiver;
+    const rank = r => RARITY_IDS.indexOf(r);
+    const [dealt1, dealt2] = [m.dealRarity[m.teams[first].card], m.dealRarity[m.teams[1 - first].card]];
+    assert.equal(m.teams[first].cardRarity, dealt1, `${label}: the first pick at its dealt rarity`);
+    assert.equal(rank(m.teams[1 - first].cardRarity), rank(dealt2) + (rank(dealt1) > rank(dealt2) ? 1 : 0), `${label}: the second pick catches up`);
   }
+  assert.ok(Object.values(m.dealRarity).every(r => RARITY_IDS.includes(r)), `${label}: rarities`);
+  m.teams.forEach((t, i) => assert.equal(t.cardRarity === null, t.card === null, `${label}: team ${i} rarity with its card`));
   m.teams.forEach((t, i) => {
     for (const [key, used] of Object.entries(t.cardUses)) {
       const limit = fx(m, i).uses?.[key];
@@ -87,6 +95,7 @@ function checkState(m, label) {
 
   assert.ok(POSITIONS.includes(m.carrier), `${label}: carrier`);
   assert.ok(m.quickTap >= 0 && m.quickTap <= QUICK_TAP_RUNS, `${label}: quick tap ${m.quickTap}`);
+  if (m.quickTap > 0) assert.ok(['tap', 'card'].includes(m.quickTapFrom), `${label}: where the +1 runs came from`);
   assert.ok(m.half === 1 || m.half === 2, `${label}: half`);
 
   const { half: halfAt, full } = m.target;
@@ -171,13 +180,15 @@ function checkEvents(before, after, events, label) {
     const card = fx(before, def);
     const special = !!before.step.special;
     const ruckMax = card.ruckMax || 4;
-    assert.equal(before.step.ruck, !special && before.step.intensity <= ruckMax, `${label}: who can contest the ruck`);
+    assert.equal(before.step.ruck, special ? !!card.ruckOnSpecial : before.step.intensity <= ruckMax, `${label}: who can contest the ruck`);
+    const dice = (special ? card.tackleBonus?.special : card.tackleBonus?.hitUp) || 0;
     const want = RULES.tackle(a, b, before.step.intensity, {
       perDie: defenceModifier(before, def),
       plainHitUp: !special,
-      firstBonus: (special ? card.tackleBonus?.special : card.tackleBonus?.hitUp) || 0,
+      bonus: [dice >= 1 ? 1 : 0, dice >= 2 ? 1 : 0],
       ruckMax,
       ruckOnSecond: !!card.ruckOnSecond,
+      onSpecial: !!card.ruckOnSpecial,
     });
     const brokeThrough = events.some(e => e.type === 'lineBreak');
     assert.equal(brokeThrough, want.result === 'break', `${label}: tackle outcome`);
@@ -190,7 +201,8 @@ function checkEvents(before, after, events, label) {
     assert.equal(e.value, face.value, `${label}: the die's value`);
     const bonus = fx(before, e.team).runBonus?.[e.pos];
     assert.equal(e.card, bonus ? (face.special ? bonus.special : bonus.hitUp) : 0, `${label}: card bonus`);
-    assert.equal(e.fortress, face.special ? fx(before, 1 - e.team).specialDefence || 0 : 0, `${label}: Fortress`);
+    const fort = fx(before, 1 - e.team);
+    assert.equal(e.fortress, (face.special ? fort.specialDefence : face.value >= (fort.hitUpDefenceFrom || 0) ? fort.hitUpDefence : 0) || 0, `${label}: Fortress`);
     assert.equal(e.quickTap, before.attacker === e.team && before.quickTap > 0 ? 1 : 0, `${label}: quick tap`);
     assert.equal(e.injury, before.teams[e.team].injuries[e.pos], `${label}: injury`);
     assert.equal(e.intensity, Math.max(1, e.value + e.quickTap + e.card - e.fortress - e.injury), `${label}: intensity`);
@@ -201,6 +213,7 @@ function checkEvents(before, after, events, label) {
   for (const e of events.filter(x => x.type === 'cardPlayed')) {
     assert.ok(before.cards, `${label}: a card played with cards off`);
     assert.equal(e.card, after.teams[e.team].card, `${label}: ${e.card} played by the side that holds it`);
+    assert.equal(e.rarity, after.teams[e.team].cardRarity, `${label}: ${e.card} played at its rarity`);
   }
 }
 
@@ -257,7 +270,7 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
   // The fuzzing really did reach every corner of the game.
   const everyEvent = ['toss', 'possession', 'run', 'pass', 'passChoice', 'dropChance', 'error', 'intercept', 'tackle', 'lineBreak',
     'injury', 'ruck', 'videoRef', 'try', 'noTry', 'range', 'dropAttempt', 'dropDeclined', 'penaltyAttempt', 'kick', 'setPiece',
-    'penalty', 'card', 'noCard', 'quickTap', 'advantageOver', 'score', 'halftime', 'secondHalf', 'fulltime', 'deal', 'draft',
+    'penalty', 'card', 'noCard', 'quickTap', 'advantageOver', 'score', 'halftime', 'secondHalf', 'fulltime', 'deal', 'draft', 'catchUp',
     ...['knockon', 'touch', 'intercept', 'dropChance', 'ruck', 'heldUp', 'noTry', 'penalty', 'reset', 'notstraight', 'advantage'].map(w => `cardPlayed:${w}`)];
   for (const e of everyEvent) assert.ok(totals.events.has(e), `event ${e} was reached`);
   for (const s of ['roll:attack', 'roll:tackle', 'roll:ruck', 'roll:try', 'roll:range', 'roll:penalty', 'roll:kick', 'roll:setpiece',
@@ -266,6 +279,61 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
   }
   assert.ok(totals.winners[0] > MATCHES * 0.35 && totals.winners[1] > MATCHES * 0.35, `both sides win (${totals.winners})`);
   assert.ok(totals.replayed > MATCHES * 10, 'replays were checked');
+});
+
+// Every card at every rarity, held by one side against a random card at a
+// random rarity, through whole matches with every check after every action.
+// The new things each rarity adds must happen somewhere.
+test('every card at every rarity plays whole matches within the rules', () => {
+  const GAMES = 8;
+  const played = {};
+  for (const [c, id] of CARD_IDS.entries()) {
+    for (const [r, rarity] of RARITY_IDS.entries()) {
+      const seen = (played[`${id}:${rarity}`] = new Set());
+      for (let g = 0; g < GAMES; g++) {
+        const rng = seededRng(50000 + c * 100 + r * 10 + g);
+        let m = newMatch({ mode: '2p', length: 'standard', cards: true });
+        const label0 = `${id} ${rarity} match ${g}`;
+        // Play the toss and the draft, then swap in the cards under test: the
+        // card under test as the first pick, the other side's caught up as the draft would.
+        while (m.attacker === null) m = act(m, pickAction(m, rng, 'pro'), rng).state;
+        const holder = 1 - m.firstReceiver;
+        const other = CARD_IDS[(c + 1 + Math.floor(rng() * 11)) % 12];
+        const otherDealt = RARITY_IDS[Math.floor(rng() * 4)];
+        const otherRarity = catchUp(rarity, otherDealt);
+        m.deal = [id, other];
+        m.dealRarity = { [id]: rarity, [other]: otherDealt };
+        m.teams[holder].card = id;
+        m.teams[holder].cardRarity = rarity;
+        m.teams[1 - holder].card = other;
+        m.teams[1 - holder].cardRarity = otherRarity;
+        checkState(m, `${label0} start`);
+        for (let n = 0; m.step.type !== 'fulltime'; n++) {
+          const label = `${label0} action ${n}`;
+          const { state, events } = act(m, pickAction(m, rng, n % 3 ? 'pro' : 'random'), rng);
+          checkEvents(m, state, events, label);
+          checkState(state, label);
+          for (const e of events) if (e.type === 'cardPlayed' && e.team === holder) seen.add(e.what === 'ruck' ? `ruck:${e.result}` : e.what);
+          m = state;
+          assert.ok(n < 3000, `${label0} did not finish`);
+        }
+      }
+    }
+  }
+  // Set pieces come only from errors, so a few matches see few of them: look across the rarities that share an effect.
+  const has = (id, rarities, what) => assert.ok(rarities.some(r => played[`${id}:${r}`].has(what)), `${id} (${rarities}) played ${what}`);
+  has('set-piece-kings', ['rare', 'epic', 'mythic'], 'ownFeed');
+  has('set-piece-kings', ['epic', 'mythic'], 'steal');
+  has('jackal', ['mythic'], 'ruck:try');
+  has('jackal', ['rare', 'epic', 'mythic'], 'ruck:notry');
+  has('jackal', RARITY_IDS, 'ruck:video');
+  has('big-pack', ['epic', 'mythic'], 'knockon');
+  has('sure-hands', ['epic', 'mythic'], 'touch');
+  has('drop-artist', ['epic', 'mythic'], 'dropChance');
+  has('golden-boot', ['mythic'], 'dropChance');
+  has('midfield-maestro', ['mythic'], 'dropChance');
+  has('clinical', ['epic', 'mythic'], 'noTry');
+  has('squeaky-clean', ['rare', 'epic', 'mythic'], 'penalty');
 });
 
 test('a red card is reachable and sticks for the rest of the match', () => {

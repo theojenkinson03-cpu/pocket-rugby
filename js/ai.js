@@ -2,8 +2,8 @@
 // Expert plays out many matches from the current position for each option
 // and picks the one that wins most often. Personalities flavour the choices.
 
-import { act, actInPlace, kickBonus, kickChance, receiverOdds, seededRng, tryChance } from './engine.js';
-import { CARD_BY_ID } from './cards.js';
+import { act, actInPlace, draftRarity, kickBonus, kickChance, receiverOdds, seededRng, tryChance } from './engine.js';
+import { cardTier, RARITY_IDS } from './cards.js';
 import { winFromPossession, winProbability } from './winprob.js';
 
 export const LEVELS = {
@@ -64,12 +64,14 @@ function goesForGoal(match, team, kick, range, threshold) {
   return chance >= threshold - 1e-9;
 }
 
-export function cardValue(id, personality = PERSONALITIES.balanced) {
-  return (CARD_BY_ID[id].value || 0) + (personality.cards[id] || 0);
+// A dealt card's worth: its measured value at its rarity, plus the style's liking.
+export function cardValue(id, personality = PERSONALITIES.balanced, rarity = 'common') {
+  return (cardTier(id, rarity).value || 0) + (personality.cards[id] || 0);
 }
 
-function bestCard(options, personality) {
-  return [...options].sort((a, b) => cardValue(b, personality) - cardValue(a, personality))[0];
+function bestCard(match, personality) {
+  const worth = id => cardValue(id, personality, draftRarity(match, id));
+  return [...match.step.options].sort((a, b) => worth(b) - worth(a))[0];
 }
 
 function proChoice(match, personality) {
@@ -78,7 +80,7 @@ function proChoice(match, personality) {
     case 'pass': return bestReceiver(match, step.team, step.options, personality);
     case 'drop': return goesForGoal(match, step.team, 'drop', step.range, personality.dropAt) ? 'kick' : 'pass';
     case 'penalty': return goesForGoal(match, step.team, 'penalty', step.range, personality.penaltyAt) ? 'kick' : 'tap';
-    case 'draft': return bestCard(step.options, personality);
+    case 'draft': return bestCard(match, personality);
   }
   return step.options[0];
 }
@@ -90,6 +92,13 @@ function rookieChoice(match, rng, personality) {
     case 'pass': return rng() < 0.5 ? pick() : bestReceiver(match, step.team, step.options, personality);
     case 'drop': return kickChance(step.range, kickBonus(match, step.team, 'drop')) >= 0.5 && rng() < 0.7 ? 'kick' : 'pass';
     case 'penalty': return rng() < 0.6 ? 'kick' : 'tap';
+    case 'draft': {
+      // Instinct: grab the rarest card on the table, any of them if they tie.
+      const rank = id => RARITY_IDS.indexOf(draftRarity(match, id));
+      const best = Math.max(...step.options.map(rank));
+      const rarest = step.options.filter(id => rank(id) === best);
+      return rarest[Math.floor(rng() * rarest.length)];
+    }
     default: return pick();
   }
 }
@@ -143,7 +152,7 @@ function pickFromWinChances(match, chances, personality) {
 }
 
 // Team cards matter over a whole match, so the draft goes on measured value.
-const expertDraft = match => bestCard(match.step.options, PERSONALITIES.balanced);
+const expertDraft = match => bestCard(match, PERSONALITIES.balanced);
 
 export function expertChoice(match, { rollouts = 200, seed = match.seq + 1 } = {}) {
   const step = match.step;

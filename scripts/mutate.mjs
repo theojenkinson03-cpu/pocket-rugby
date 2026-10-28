@@ -14,9 +14,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 // [rule broken, file, original text, replacement]
 const MUTANTS = [
   // The rules.
-  ['Ruck steal against a Hit Up of 5', 'js/engine.js', 'ruckEligible(face, parts.intensity, cardEffects(m, def).ruckMax || 4)', 'ruckEligible(face, parts.intensity, cardEffects(m, def).ruckMax || 5)'],
-  ['Ruck steal against big moves too', 'js/engine.js', "return face.kind === 'run' && !face.special && intensity <= max;", "return face.kind === 'run' && intensity <= max;"],
-  ['Card penalty on one die only', 'js/engine.js', 'second.value + modifier]', 'second.value]'],
+  ['Ruck steal against a Hit Up of 5', 'js/engine.js', 'return ruckEligible(face, intensity, fx.ruckMax || 4, !!fx.ruckOnSpecial);', 'return ruckEligible(face, intensity, fx.ruckMax || 5, !!fx.ruckOnSpecial);'],
+  ['Ruck steal against big moves too', 'js/engine.js', "return face.kind === 'run' && (face.special ? onSpecial : intensity <= max);", "return face.kind === 'run' && intensity <= max;"],
+  ['Card penalty on one die only', 'js/engine.js', 'second.value + modifier + b2]', 'second.value + b2]'],
   ['Second-die Big Hit does not complete the tackle', 'js/engine.js', "else if (secondHit) outcome = 'bighit';", ''],
   ['Tackle must beat the intensity, not equal it', 'js/engine.js', 'total >= intensity', 'total > intensity'],
   ['Injury from a single Big Hit', 'js/engine.js', 'injury: firstHit && secondHit', 'injury: firstHit || secondHit'],
@@ -52,26 +52,28 @@ const MUTANTS = [
   // Team cards and the draft.
   ['Card run bonus ignored', 'js/engine.js', 'const card = bonus ? (face.special ? bonus.special : bonus.hitUp) : 0;', 'const card = 0;'],
   ['Big Pack: no bonus on the big move', 'js/cards.js', 'runBonus: { F: { hitUp: 1, special: 2 } }', 'runBonus: { F: { hitUp: 1, special: 0 } }'],
-  ['Fortress protects the attackers', 'js/engine.js', 'cardEffects(match, other(team)).specialDefence', 'cardEffects(match, team).specialDefence'],
-  ['Fortress against Hit Ups too', 'js/engine.js', 'const fortress = face?.special ?', 'const fortress = face ?'],
+  ['Fortress protects the attackers', 'js/engine.js', 'const defence = face ? cardEffects(match, other(team)) : NO_EFFECTS;', 'const defence = face ? cardEffects(match, team) : NO_EFFECTS;'],
+  ['Fortress against Hit Ups too', 'js/engine.js', 'const fortress = (face?.special ? defence.specialDefence :', 'const fortress = (face ? defence.specialDefence :'],
+  ['Fortress (Mythic) cuts every Hit Up', 'js/engine.js', 'value >= (defence.hitUpDefenceFrom || 0)', 'value >= 0'],
   ['Card face swaps ignored', 'js/engine.js', "if (lost && cardEffects(m, team).faceSwap?.[pos]?.[lost] === 'pass') {", 'if (false) {'],
   ["Sure Hands for every player", 'js/engine.js', "cardEffects(m, team).faceSwap?.[pos]?.[lost] === 'pass'", "cardEffects(m, team).faceSwap?.W?.[lost] === 'pass'"],
   ['Drop-Goal Artist: every open pass a drop chance', 'js/engine.js', '(cardEffects(m, team).passToDrop || []).includes(pos)', '(cardEffects(m, team).passToDrop || []).length'],
   ['Kick bonus left off the kick', 'js/engine.js', 'const distance = rolled + bonus;', 'const distance = rolled;'],
   ['Kick bonus left out of the shown chance', 'js/engine.js', "ev.push({ type: 'range', team, kick, range, bonus, chance: kickChance(range, bonus) });", "ev.push({ type: 'range', team, kick, range, bonus, chance: kickChance(range) });"],
   ['Golden Boot helps drop goals too', 'js/cards.js', 'kickBonus: { conversion: 2, penalty: 2 }', 'kickBonus: { conversion: 2, penalty: 2, drop: 2 }'],
-  ['Rush Defence on both dice', 'js/engine.js', 'const values = [first.value + modifier + firstBonus, second.value + modifier];', 'const values = [first.value + modifier + firstBonus, second.value + modifier + firstBonus];'],
-  ['Rush Defence against big moves', 'js/engine.js', 'return special ? bonus.special || 0 : bonus.hitUp || 0;', 'return bonus.hitUp || 0;'],
+  ['Rush Defence on both dice', 'js/engine.js', 'return [n >= 1 ? 1 : 0, n >= 2 ? 1 : 0];', 'return [n >= 1 ? 1 : 0, n >= 1 ? 1 : 0];'],
+  ['Rush Defence (Rare) still on one die', 'js/engine.js', 'return [n >= 1 ? 1 : 0, n >= 2 ? 1 : 0];', 'return [n >= 1 ? 1 : 0, 0];'],
+  ['Rush Defence against big moves', 'js/engine.js', 'const n = (special ? cardEffects(m, def).tackleBonus?.special : cardEffects(m, def).tackleBonus?.hitUp) || 0;', 'const n = cardEffects(m, def).tackleBonus?.hitUp || 0;'],
   ['Second-die ruck for everyone', 'js/engine.js', "else if (secondHit && canRuck && ruckOnSecond) outcome = 'ruck';", "else if (secondHit && canRuck) outcome = 'ruck';"],
   ['Jackal: video ref does not win the ruck', 'js/engine.js', 'const byCard = (cardEffects(m, def).ruckAlsoWins || []).includes(result);', 'const byCard = false;'],
   ['Limited cards never run out', 'js/engine.js', 'if ((used[key] || 0) >= limit.n) return false;', 'if ((used[key] || 0) > 99) return false;'],
   ['Once-a-match cards refreshed at half time', 'js/engine.js', "if (limits[key]?.per !== 'match') used[key] = 0;", 'used[key] = 0;'],
   ['Set-Piece Kings ignored at resets', 'js/engine.js', 'const kings = [0, 1].find(t => cardEffects(m, t).setPieceTies);', 'const kings = undefined;'],
-  ['Set-piece advantage for three runs', 'js/cards.js', 'setPieceTies: true, setPieceAdvantage: 1', 'setPieceTies: true, setPieceAdvantage: 3'],
+  ['Set-piece advantage for three runs', 'js/cards.js', 'setPieceTies: true, setPieceAdvantage: 1 } }', 'setPieceTies: true, setPieceAdvantage: 3 } }'],
   ['Squeaky Clean on the other side\'s feed', 'js/engine.js', "useCharge(m, team, 'ownFeedPenalty')", "useCharge(m, other(team), 'ownFeedPenalty')"],
   ['Toss winner picks first', 'js/engine.js', 'const first = other(m.firstReceiver);', 'const first = m.firstReceiver;'],
   ['Second pick may take the same card', 'js/engine.js', 'const rest = step.options.filter(id => id !== value);', 'const rest = step.options;'],
-  ['A deal can repeat a card', 'js/engine.js', 'deal.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);', 'deal.push(pool[Math.floor(rng() * pool.length)]);'],
+  ['A deal can repeat a card', 'js/engine.js', 'const id = pool.splice(Math.floor(rng() * pool.length), 1)[0];', 'const id = pool[Math.floor(rng() * pool.length)];'],
   ['After the draft the toss loser receives', 'js/engine.js', "startPossession(m, ev, m.firstReceiver, 'kickoff');", "startPossession(m, ev, other(m.firstReceiver), 'kickoff');"],
 
   // Players.
@@ -83,7 +85,8 @@ const MUTANTS = [
   // The CPU.
   ['Pro CPU kicks at long odds', 'js/ai.js', 'return chance >= threshold - 1e-9;', 'return chance >= 0.3;'],
   ['Boot it no keener to kick', 'js/ai.js', 'dropAt: 1 / 3,\n    penaltyAt: 1 / 3,', 'dropAt: 0.5,\n    penaltyAt: 0.5,'],
-  ['Draft ignores the CPU style', 'js/ai.js', 'return (CARD_BY_ID[id].value || 0) + (personality.cards[id] || 0);', 'return CARD_BY_ID[id].value || 0;'],
+  ['Draft ignores the CPU style', 'js/ai.js', 'return (cardTier(id, rarity).value || 0) + (personality.cards[id] || 0);', 'return cardTier(id, rarity).value || 0;'],
+  ['CPU drafts as if every card were Common', 'js/ai.js', 'const worth = id => cardValue(id, personality, draftRarity(match, id));', 'const worth = id => cardValue(id, personality);'],
   ['Win model forgets the second-half kick-off', 'js/winprob.js', 'const shr = match.firstReceiver === null ? 0 : (1 - match.firstReceiver === team ? 0 : 1);', 'const shr = 0;'],
 
   // Tournaments.
@@ -105,6 +108,26 @@ const MUTANTS = [
   ['Away side never changes kit', 'js/tournament.js', '{ name: away.name, color: stripAgainst(away, home.color), roster: away.roster }', '{ name: away.name, color: away.color, roster: away.roster }'],
   ['No plain kit when both strips clash', 'js/tournament.js', '[team.color, team.alt, ...NEUTRALS]', '[team.color, team.alt]'],
   ['User plays as the CPU side', 'js/tournament.js', "return { mode: '1p', teams: [mine, theirs]", "return { mode: '1p', teams: [theirs, mine]"],
+
+  // Card rarities and the catch-up.
+  ['Every card dealt Common', 'js/engine.js', 'rarity[id] = rollRarity(rng);', "rarity[id] = 'common';"],
+  ['Mythic as common as Epic', 'js/cards.js', "{ id: 'mythic', name: 'Mythic', odds: 0.04 }", "{ id: 'mythic', name: 'Mythic', odds: 0.13 }"],
+  ['Rarity ignored: every card plays as Common', 'js/cards.js', 'return TIERS[id]?.[rarity] || TIERS[id]?.common || null;', 'return TIERS[id]?.common || null;'],
+  ['A drafted card loses its rarity', 'js/engine.js', 'm.teams[step.team].cardRarity = rarity;', "m.teams[step.team].cardRarity = 'common';"],
+  ['No catch-up for the second pick', 'js/engine.js', 'return catchUp(match.teams[other(step.team)].cardRarity, dealt);', 'return dealt;'],
+  ['Catch-up all the way to the first pick', 'js/cards.js', 'return first > mine ? RARITY_IDS[mine + 1] : rarity;', 'return first > mine ? firstRarity : rarity;'],
+  ['Catch-up for the first pick too', 'js/engine.js', "if (step.purpose !== 'draft' || step.first) return dealt;", "if (step.purpose !== 'draft') return dealt;"],
+  ['Rerolls on every try attempt never run out', 'js/engine.js', "if (limit.per === 'try') return (m.step.rerolled || 0) < limit.n;", "if (limit.per === 'try') return true;"],
+  ["'Always' uses run out", 'js/engine.js', "  if (limit.per === 'always') return true;\n", ''],
+  ['Jackal (Epic) never contests big moves', 'js/engine.js', 'return ruckEligible(face, intensity, fx.ruckMax || 4, !!fx.ruckOnSpecial);', 'return ruckEligible(face, intensity, fx.ruckMax || 4, false);'],
+  ['Set-Piece Kings never steal a feed', 'js/engine.js', "(cardEffects(m, other(team)).stealFeed || []).includes(piece)", 'false'],
+  ['Set-Piece Kings steal every feed', 'js/engine.js', "(cardEffects(m, other(team)).stealFeed || []).includes(piece)", '(cardEffects(m, other(team)).stealFeed || []).length'],
+  ['Set-Piece Kings lose their own feed anyway', 'js/engine.js', "if (outcome === 'lose' && cardEffects(m, team).ownFeedWins) {", 'if (false) {'],
+  ['Squeaky Clean never turns their feed', 'js/engine.js', "} else if (outcome === 'penaltyWon' && useCharge(m, other(team), 'theirFeedPenalty')) {", '} else if (false) {'],
+  ['Win meter ignores the cards', 'js/winprob.js', 'const diff = value(team) - value(1 - team);', 'const diff = 0;'],
+  ['Win meter edge never fades', 'js/winprob.js', 'Math.log(p / (1 - p)) + 4 * diff * left', 'Math.log(p / (1 - p)) + 4 * diff'],
+  ['Career keeps the first rarity it saw', 'js/career.js', "if (RARITY_IDS.indexOf(rarity) > RARITY_IDS.indexOf(c.cardRarity[mine.card] ?? '')) c.cardRarity[mine.card] = rarity;", 'c.cardRarity[mine.card] ??= rarity;'],
+  ['Mythic achievement for any card', 'js/career.js', "m.winner === me && m.teams[me].cardRarity === 'mythic'", 'm.winner === me && !!m.teams[me].card'],
 
   // Career, achievements and the coach.
   ['Two-player matches count in the record', 'js/career.js', "if (context.mode === '2p') {", "if (context.mode === 'never') {"],

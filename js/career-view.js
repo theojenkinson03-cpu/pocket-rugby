@@ -72,11 +72,11 @@ export function careerPage(career, { onReset }) {
   cards.append(el('h3', 'page-h', 'Team cards won with'));
   const grid = el('div', 'chip-grid');
   for (const card of CARDS) {
-    const chip = cardChip(card.id);
+    const chip = cardChip(card.id, 'tc-chip', c.cardRarity?.[card.id] || 'common');
     if (!c.cardsWon.includes(card.id)) chip.classList.add('dim');
     grid.append(chip);
   }
-  cards.append(grid, el('p', 'table-note', `${c.cardsWon.length} of ${CARDS.length}. Win with six for Card Sharp.`));
+  cards.append(grid, el('p', 'table-note', `${c.cardsWon.length} of ${CARDS.length}, each at the rarest you've won with. Win with six for Card Sharp.`));
   page.append(cards);
 
   const got = ACHIEVEMENTS.filter(a => c.achievements[a.id]).length;

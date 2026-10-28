@@ -74,21 +74,42 @@ Team cards aren't on the printed sheet. They're an optional extra, on by default
 
 | Card | Effect | Code | Tested by |
 | --- | --- | --- | --- |
-| The draft | Three different cards are dealt after the toss. The toss **loser** picks first from all three; the toss winner, who also receives the kick-off, picks from the other two. Measured over 10,000 simulated drafts, the side picking first wins 49.9% | `dealCards`, `onChoose` (draft) | `cards`: 3,000 deals; mutations "Toss winner picks first", "Second pick may take the same card", "A deal can repeat a card" |
+| The draft | Three different cards are dealt after the toss, each at a rarity rolled on its own (Common 55%, Rare 28%, Epic 13%, Mythic 4%). The toss **loser** picks first from all three; the toss winner, who also receives the kick-off, picks from the other two. **Catch-up:** if the first pick is rarer than the card the second side takes, that card goes up one rarity. Measured over 40,000 simulated drafts, the side picking first wins 52.6% | `dealCards`, `rollRarity`, `draftRarity`, `catchUp`, `onChoose` (draft) | `cards`: 3,000 deals, every catch-up, 200,000 rarity rolls; `invariants`: every drafted card at its dealt or caught-up rarity; mutations "Toss winner picks first", "Second pick may take the same card", "A deal can repeat a card", "Every card dealt Common", "Mythic as common as Epic", "A drafted card loses its rarity", "No catch-up for the second pick", "Catch-up all the way to the first pick", "Catch-up for the first pick too" |
 | Big Pack | Forwards' Hit Ups +1; Line Break 8 | `intensityParts` (`runBonus`) | `cards`; mutations "Card run bonus ignored", "Big Pack: no bonus on the big move" |
 | Up and Under | Fly Half's High Ball 8, Fly Half Hit Ups +1, the Fly Half's Into Touch becomes a pass | `intensityParts`, `onAttack` (`faceSwap`) | `cards` |
 | Midfield Maestro | The Centres' Intercepted face becomes a free pass | `onAttack` (`faceSwap`) | `cards`; mutation "Card face swaps ignored" |
 | Sure Hands | The Outside Backs' Knock On and Into Touch become passes | `onAttack` (`faceSwap`) | `cards`; mutation "Sure Hands for every player" |
 | Golden Boot | +2 (20 m) on conversion and penalty kicks | `onKick`, `kickBonus` | `cards`: every range and kick face; mutations "Kick bonus left off the kick", "Golden Boot helps drop goals too" |
 | Drop-Goal Artist | +2 on drop goals, and the Outside Backs' open Pass face is a drop-goal chance | `onKick`, `onAttack` (`passToDrop`) | `cards`; mutation "Drop-Goal Artist: every open pass a drop chance" |
-| Rush Defence | +1 on the first brown die against Hit Ups (not big moves) | `resolveTackle` (`firstBonus`) | `cards`: all 36 dice pairs; mutations "Rush Defence on both dice", "Rush Defence against big moves" |
-| Jackal | A Big Hit on either die contests the ruck against Hit Ups up to 5; VIDEO REF also wins the ruck | `ruckEligible`, `resolveTackle`, `onRuck` | `cards`; mutations "Second-die ruck for everyone", "Jackal: video ref does not win the ruck" |
+| Rush Defence | +1 on the first brown die against Hit Ups (not big moves) | `tackleBonusFor`, `resolveTackle` (`bonus`) | `cards`: all 36 dice pairs at every rarity; mutations "Rush Defence on both dice", "Rush Defence against big moves" |
+| Jackal | A Big Hit on either die contests the ruck against Hit Ups up to 5; VIDEO REF also wins the ruck | `ruckFor`, `ruckEligible`, `resolveTackle`, `onRuck` | `cards`; mutations "Second-die ruck for everyone", "Jackal: video ref does not win the ruck" |
 | Fortress | The other side's big moves are 2 lower against you (never below 1) | `intensityParts` (`specialDefence`) | `cards`; mutations "Fortress protects the attackers", "Fortress against Hit Ups too" |
 | Clinical Finisher | Once a match, a NO TRY or held-up roll is rolled again | `onTry`, `useCharge` | `cards`; mutations "Limited cards never run out", "Once-a-match cards refreshed at half time" |
 | Set-Piece Kings | Reset scrums and crooked lineouts go to them; +1 on their first run after a set piece they win | `onSetPiece` | `cards`: every feeder and piece; mutations "Set-Piece Kings ignored at resets", "Set-piece advantage for three runs" |
 | Squeaky Clean | Once a match, PENALTY AGAINST on their own feed becomes PENALTY WON | `onSetPiece`, `useCharge` | `cards`; mutation "Squeaky Clean on the other side's feed" |
 
-**Balance.** `scripts/balance-cards.mjs` plays 5,000 CPU matches for each card against a side with no card. Every card lifts the win rate by between 6.8 and 9.7 points, inside the simulation's ±1.4% noise of each other, so no pick is a trap. The odds the game shows before a pass (break and error chances) include both sides' cards; `cards` checks them against a count of every face and every pair of tackle dice for all 24 card-and-side combinations.
+### Rarities
+
+The table above is each card at **Common**, as it always was. Every rarity above keeps everything below it and adds to it (`cards`: "each rarity keeps everything the one below has, and adds to it" checks this for every card, effect by effect). The game shows each rarity's full text.
+
+| Card | Rare adds | Epic adds | Mythic adds |
+| --- | --- | --- | --- |
+| Big Pack | Forwards' Hit Ups +2 | They never knock on | Hit Ups +3, Line Break 10, Scrum Half's Hit Up +2 |
+| Midfield Maestro | Centres' Hit Ups +1 | Thru the Gap 9, drop goals +20 m | Hit Ups +2, the Centres' ‹Pass› face is a drop-goal chance |
+| Sure Hands | Outside Backs' Hit Ups +1 | Hit Ups +2, Into the Corner 10 | The Fly Half's Into Touch becomes a pass too |
+| Up and Under | Conversions and penalties +10 m | High Ball 9, Fly Half Hit Ups +2, drop goals +10 m | High Ball 10, every kick +20 m |
+| Golden Boot | Place kicks +30 m, drop goals +10 m | Place kicks +40 m (never miss), drop goals +30 m | Every kick +40 m; the Fly Half's and Centres' ‹Pass› faces are drop-goal chances |
+| Drop-Goal Artist | Drop goals +30 m | Drop goals +40 m (never miss); the Fly Half's ‹Pass› face is a drop-goal chance too | Every ‹Pass› face is a drop-goal chance |
+| Rush Defence | +1 on both brown dice against Hit Ups | A Big Hit on either die contests the ruck | +1 on the first brown die against big moves too |
+| Jackal | NO TRY also wins the ruck | Big moves can be contested too | Every ruck roll wins |
+| Fortress | Big moves −3 | Big moves −4 | Hit Ups of 5 −1 too |
+| Clinical Finisher | Once a half instead of once a match | One reroll on every try attempt | Up to two rerolls on every try attempt |
+| Set-Piece Kings | They never lose their own scrum or lineout | They steal the other side's lineouts; the advantage lasts two runs | They steal the other side's scrums too; three runs |
+| Squeaky Clean | Every time, not once a match | Once a match, PENALTY WON on the other side's feed goes to them | Every time, on both feeds: they never give away a set-piece penalty |
+
+New effects behind the higher rarities: `tackleBonus` on both dice (`tackleBonusFor`), `ruckOnSpecial` (`ruckFor`), `hitUpDefence` from a Hit Up of 5 (`intensityParts`), `ownFeedWins` and `stealFeed` (`onSetPiece`), Squeaky Clean's `theirFeedPenalty`, and uses `per: 'try'` and `per: 'always'` (`useCharge`). `cards` plays each with exact dice; `invariants` plays whole matches with every card at every rarity, checking the tackle against the rules reading with the new effects in it; the mutation tests plant a bug in each.
+
+**Balance.** `scripts/balance-cards.mjs` plays 10,000 CPU matches for each card at each rarity against a side with no card. Common cards lift the win rate by 6.7 to 9.6 points, Rare 10.3 to 13.6, Epic 14.6 to 19.9 and Mythic 21.5 to 27.3 (±1.0 at 95%). Every card of a rarity beats every card of the rarity below, and each card gets stronger with each rarity; `cards` checks the recorded values. The win meter adds each side's card to the model as an edge worth its measured lift at the kick-off, fading as the points run out (`winMeter`); the Expert CPU's look-ahead already plays the cards, so it judges by the model alone. The odds the game shows before a pass (break and error chances) include both sides' cards at their rarities; `cards` checks them against a count of every face and every pair of tackle dice for all 96 card, rarity and side combinations.
 
 ## How the checking works
 
@@ -96,5 +117,5 @@ Team cards aren't on the printed sheet. They're an optional extra, on by default
 - **`test/exhaustive.test.mjs`** plays every combination rather than a sample: every face of every die, all 36 tackle dice pairs at every intensity and card state, every kick, every set piece, and every score threshold.
 - **`test/invariants.test.mjs`** plays 1,500 full matches (`npm run test:fuzz` plays 20,000) with random, Rookie and Pro decisions in every CPU style, two thirds of them with team cards. After every action it checks more than 40 invariants: scores add up, conversions follow tries, possession only changes for a reason, each run's intensity is the die plus quick tap and cards minus injuries, every tackle agrees with the rules reading (cards included), every player's numbers add up to the team's, the state survives save and reload, the commentary never says "undefined", and more. It also confirms every card effect actually happened somewhere.
 - **`test/odds.test.mjs`** checks that the dice are fair (chi-square) and that the odds shown to players match tens of thousands of real rolls.
-- **`scripts/mutate.mjs`** (`npm run test:mutation`) plants 95 bugs, one at a time (in the rules, the cards, the draft, player stats, the CPU, tournaments and each league's play-offs, achievements, the coach and online play), and confirms the tests catch each one.
-- **`test/e2e/run.mjs`** (`npm run test:e2e`) plays complete matches in a real browser: against Pro and Expert, two players, keyboard only, the guided match, a Nations Cup round, a league season through its play-offs and a two-phone online match. Every time the game waits for a tap, it checks that the scoreboard, possession marker, team cards, win meter, injuries, prompt, buttons and draft match the saved match exactly.
+- **`scripts/mutate.mjs`** (`npm run test:mutation`) plants 116 bugs, one at a time (in the rules, the cards and their rarities, the draft and its catch-up, player stats, the CPU, tournaments and each league's play-offs, achievements, the coach and online play), and confirms the tests catch each one.
+- **`test/e2e/run.mjs`** (`npm run test:e2e`) plays complete matches in a real browser: against Pro and Expert, two players, keyboard only, the guided match, a Nations Cup round, a league season through its play-offs, a scripted Mythic deal with its catch-up, and a two-phone online match. Every time the game waits for a tap, it checks that the scoreboard, possession marker, team cards and their rarities, win meter, injuries, prompt, buttons and draft match the saved match exactly.

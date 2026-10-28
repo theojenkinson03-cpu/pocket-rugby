@@ -86,17 +86,18 @@ export const RULES = {
   // "Rolling consecutive BIG HITS ... causes an injury".
   // Sin bin: "-1 on all Defensive dice rolls"; second yellow "-2".
   //
-  // Team cards change three numbers here, read from the card's own wording:
-  // a bonus on the first die (Rush Defence), a higher Hit Up limit for the
-  // ruck and a Big Hit on either die contesting it (Jackal).
-  tackle(firstFace, secondFace, intensity, { perDie = 0, plainHitUp = true, firstBonus = 0, ruckMax = 4, ruckOnSecond = false } = {}) {
+  // Team cards change a few numbers here, read from the card's own wording:
+  // +1 on the first die or both (Rush Defence), a higher Hit Up limit for the
+  // ruck, a Big Hit on either die contesting it, and contests against big
+  // moves too (Jackal).
+  tackle(firstFace, secondFace, intensity, { perDie = 0, plainHitUp = true, bonus = [0, 0], ruckMax = 4, ruckOnSecond = false, onSpecial = false } = {}) {
     const [a, b] = [DICE.D.faces[firstFace], DICE.D.faces[secondFace]];
     const isBigHit = f => f.label === 'Big Hit';
     const injury = isBigHit(a) && isBigHit(b);
-    const contest = plainHitUp && intensity <= ruckMax;
+    const contest = plainHitUp ? intensity <= ruckMax : onSpecial;
     if (contest && (isBigHit(a) || (ruckOnSecond && isBigHit(b)))) return { result: 'ruck', injury };
     if (isBigHit(b)) return { result: 'tackle', injury };
-    const sum = a.value + perDie + firstBonus + (b.value + perDie);
+    const sum = a.value + perDie + bonus[0] + (b.value + perDie + bonus[1]);
     return { result: sum >= intensity ? 'tackle' : 'break', injury };
   },
 

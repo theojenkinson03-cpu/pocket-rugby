@@ -5,6 +5,7 @@
 // the Expert CPU's judge at the end of each look-ahead.
 
 import { kickBonus, kickChance, tryChance } from './engine.js';
+import { teamCard } from './cards.js';
 
 // How a possession ends: points the attackers scored, and who has the next one.
 export const POSSESSION = {
@@ -107,4 +108,19 @@ export function winProbability(match, team) {
     return p * at(points, att) + (1 - p) * miss;
   }
   return winFromPossession(match, team);
+}
+
+// The live meter: the model above, plus the team cards. Each card's measured
+// lift (its value: the win rate it adds from the kick-off) becomes an edge
+// for its side that fades as the points run out. Four times the difference on
+// the log-odds matches the lift at the kick-off. The Expert CPU judges by the
+// model alone, since both sides' cards are already in its look-ahead.
+export function winMeter(match, team) {
+  const p = winProbability(match, team);
+  if (p <= 0 || p >= 1) return p;
+  const value = i => teamCard(match, i)?.value || 0;
+  const diff = value(team) - value(1 - team);
+  if (!diff) return p;
+  const left = Math.max(0, 1 - Math.max(...match.teams.map(t => t.score)) / match.target.full);
+  return 1 / (1 + Math.exp(-(Math.log(p / (1 - p)) + 4 * diff * left)));
 }

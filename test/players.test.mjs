@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, emptyPlayer, migrate, newMatch, seededRng } from '../js/engine.js';
+import { act, emptyPlayer, migrate, newMatch, seededRng, VERSION } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { POSITIONS } from '../js/dice.js';
 import { fullName, playerOfTheMatch, playerRatings, possessive, randomRoster, rating, statLine, surname, SURNAMES, who } from '../js/players.js';
@@ -105,10 +105,10 @@ test('a match saved before players and cards existed still loads and plays', () 
   for (const key of ['cards', 'deal', 'cpuPersonality']) delete old[key];
   for (const t of old.teams) for (const key of ['roster', 'card', 'cardUses', 'players']) delete t[key];
   const m = migrate(old);
-  assert.equal(m.version, 2);
+  assert.equal(m.version, VERSION);
   assert.equal(m.cards, false);
   assert.deepEqual(m.teams[0].players.S, emptyPlayer());
-  assert.deepEqual(m.teams[1].cardUses, { tryRerolls: 0, ownFeedPenalty: 0 });
+  assert.deepEqual(m.teams[1].cardUses, { tryRerolls: 0, ownFeedPenalty: 0, theirFeedPenalty: 0 });
   assert.equal(m.cpuPersonality, 'balanced');
   assert.equal(migrate(m), m, 'up-to-date saves are left alone');
   let state = m;

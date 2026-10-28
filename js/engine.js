@@ -2,9 +2,9 @@
 // and a list of events describing what happened, for the UI to narrate.
 
 import { DICE, POSITIONS } from './dice.js';
-import { CARD_IDS, cardEffects, DEAL_SIZE } from './cards.js';
+import { CARD_IDS, cardEffects, catchUp, DEAL_SIZE, rollRarity } from './cards.js';
 
-export const VERSION = 2;
+export const VERSION = 3;
 
 export const MATCH_LENGTHS = {
   quick: { half: 10, full: 20, label: 'Quick' },
@@ -46,13 +46,17 @@ export function emptyPlayer() {
   return { carries: 0, lineBreaks: 0, tries: 0, tackles: 0, bigHits: 0, turnovers: 0, points: 0, errors: 0 };
 }
 
+const NO_EFFECTS = Object.freeze({});
 const emptyPlayers = () => Object.fromEntries(POSITIONS.map(p => [p, emptyPlayer()]));
-const freshUses = () => ({ tryRerolls: 0, ownFeedPenalty: 0 });
+const freshUses = () => ({ tryRerolls: 0, ownFeedPenalty: 0, theirFeedPenalty: 0 });
 
 // Spends one of a card's limited uses (e.g. "once a half"), if one is left.
+// Uses 'per try' count the rerolls on this try attempt; 'always' never run out.
 function useCharge(m, team, key) {
   const limit = cardEffects(m, team).uses?.[key];
   if (!limit) return false;
+  if (limit.per === 'always') return true;
+  if (limit.per === 'try') return (m.step.rerolled || 0) < limit.n;
   const used = m.teams[team].cardUses;
   if ((used[key] || 0) >= limit.n) return false;
   used[key] = (used[key] || 0) + 1;
@@ -66,11 +70,11 @@ function refreshUses(m, team) {
   for (const key of Object.keys(used)) if (limits[key]?.per !== 'match') used[key] = 0;
 }
 
-// Rush Defence and the like: extra on the first tackle die, by kind of run.
+// Rush Defence and the like: +1 on one or both tackle dice, by kind of run.
+// The card gives how many dice: 1 is the first, 2 is both.
 function tackleBonusFor(m, def, special) {
-  const bonus = cardEffects(m, def).tackleBonus;
-  if (!bonus) return 0;
-  return special ? bonus.special || 0 : bonus.hitUp || 0;
+  const n = (special ? cardEffects(m, def).tackleBonus?.special : cardEffects(m, def).tackleBonus?.hitUp) || 0;
+  return [n >= 1 ? 1 : 0, n >= 2 ? 1 : 0];
 }
 
 export function newMatch({
@@ -95,6 +99,7 @@ export function newMatch({
     cpuPersonality,
     cards,
     deal: [],
+    dealRarity: {},
     target: { ...MATCH_LENGTHS[length] },
     controllers: controllers || (mode === '1p' ? ['human', 'cpu'] : ['human', 'human']),
     teams: kits.map(kit => ({
@@ -106,6 +111,7 @@ export function newMatch({
       yellows: 0,
       sinBin: false,
       card: null,
+      cardRarity: null,
       cardUses: freshUses(),
       stats: emptyStats(),
       players: emptyPlayers(),
@@ -116,6 +122,8 @@ export function newMatch({
     carrier: 'S',
     phase: 0,
     quickTap: 0,
+    // Where the +1 runs came from: a quick tap ('tap') or a team card ('card').
+    quickTapFrom: null,
     step: { type: 'choose', purpose: 'toss', team: tossCaller, options: ['heads', 'tails'] },
     roll: null,
     toss: null,
@@ -130,11 +138,15 @@ export function migrate(match) {
   const m = structuredClone(match);
   m.cards ??= false;
   m.deal ??= [];
+  // Cards from before rarities were Common.
+  m.dealRarity ??= Object.fromEntries(m.deal.map(id => [id, 'common']));
   m.cpuPersonality ??= 'balanced';
+  m.quickTapFrom ??= m.quickTap ? 'tap' : null;
   for (const t of m.teams) {
     t.roster ??= null;
     t.card ??= null;
-    t.cardUses ??= freshUses();
+    t.cardRarity ??= t.card ? 'common' : null;
+    t.cardUses = { ...freshUses(), ...t.cardUses };
     t.players ??= emptyPlayers();
   }
   m.version = VERSION;
@@ -157,7 +169,8 @@ export function intensityParts(match, team, pos, value, face = null) {
   const quickTap = match.attacker === team && match.quickTap > 0 ? 1 : 0;
   const bonus = face ? cardEffects(match, team).runBonus?.[pos] : null;
   const card = bonus ? (face.special ? bonus.special : bonus.hitUp) : 0;
-  const fortress = face?.special ? cardEffects(match, other(team)).specialDefence || 0 : 0;
+  const defence = face ? cardEffects(match, other(team)) : NO_EFFECTS;
+  const fortress = (face?.special ? defence.specialDefence : value >= (defence.hitUpDefenceFrom || 0) ? defence.hitUpDefence : 0) || 0;
   const injury = match.teams[team].injuries[pos];
   return { value, quickTap, card, fortress, injury, intensity: Math.max(1, value + quickTap + card - fortress - injury) };
 }
@@ -167,18 +180,26 @@ export function runIntensity(match, team, pos, value, face = null) {
 }
 
 // Rules: a Big Hit on the first die against a Hit Up of 3 or 4 sets up a
-// ruck contest. Only plain Hit Ups qualify, never a player's big move.
-export function ruckEligible(face, intensity, max = 4) {
-  return face.kind === 'run' && !face.special && intensity <= max;
+// ruck contest. Only plain Hit Ups qualify, never a player's big move
+// (unless a card says so).
+export function ruckEligible(face, intensity, max = 4, onSpecial = false) {
+  return face.kind === 'run' && (face.special ? onSpecial : intensity <= max);
+}
+
+// The ruck limits a defending side's card sets.
+export function ruckFor(match, def, face, intensity) {
+  const fx = cardEffects(match, def);
+  return ruckEligible(face, intensity, fx.ruckMax || 4, !!fx.ruckOnSpecial);
 }
 
 // Resolve a pair of defence dice against an intensity. `modifier` applies to
-// each die and `firstBonus` to the first. Shared by the engine and the odds
-// helpers so they never disagree.
-export function resolveTackle(firstFace, secondFace, intensity, modifier = 0, canRuck = intensity <= 4, firstBonus = 0, ruckOnSecond = false) {
+// each die and `bonus` ([first, second], or a number for the first) is a
+// card's extra. Shared by the engine and the odds helpers so they never disagree.
+export function resolveTackle(firstFace, secondFace, intensity, modifier = 0, canRuck = intensity <= 4, bonus = 0, ruckOnSecond = false) {
   const first = DICE.D.faces[firstFace];
   const second = DICE.D.faces[secondFace];
-  const values = [first.value + modifier + firstBonus, second.value + modifier];
+  const [b1, b2] = Array.isArray(bonus) ? bonus : [bonus, 0];
+  const values = [first.value + modifier + b1, second.value + modifier + b2];
   const total = values[0] + values[1];
   const firstHit = first.kind === 'bighit';
   const secondHit = second.kind === 'bighit';
@@ -193,11 +214,11 @@ export function resolveTackle(firstFace, secondFace, intensity, modifier = 0, ca
 
 // ---- Odds ------------------------------------------------------------------
 
-export function breakChance(intensity, modifier = 0, canRuck = intensity <= 4, firstBonus = 0) {
+export function breakChance(intensity, modifier = 0, canRuck = intensity <= 4, bonus = 0) {
   let breaks = 0;
   for (let a = 0; a < 6; a++) {
     for (let b = 0; b < 6; b++) {
-      if (resolveTackle(a, b, intensity, modifier, canRuck, firstBonus).outcome === 'break') breaks++;
+      if (resolveTackle(a, b, intensity, modifier, canRuck, bonus).outcome === 'break') breaks++;
     }
   }
   return breaks / 36;
@@ -221,14 +242,13 @@ export function kickBonus(match, team, kick) {
 export function receiverOdds(match, team, pos) {
   const def = other(team);
   const modifier = defenceModifier(match, def);
-  const defence = cardEffects(match, def);
   let lineBreak = 0;
   let error = 0;
   const swaps = cardEffects(match, team).faceSwap?.[pos] || {};
   for (const face of DICE[pos].faces) {
     if (face.kind === 'run') {
       const intensity = runIntensity(match, team, pos, face.value, face);
-      const canRuck = ruckEligible(face, intensity, defence.ruckMax || 4);
+      const canRuck = ruckFor(match, def, face, intensity);
       lineBreak += breakChance(intensity, modifier, canRuck, tackleBonusFor(match, def, !!face.special)) / 6;
     }
     if ((face.kind === 'error' || face.kind === 'intercept') && !swaps[face.error || face.kind]) error += 1 / 6;
@@ -310,7 +330,7 @@ function nextPhase(m) {
   m.step = attackStep(m.attacker, 'S');
 }
 
-const cardPlayed = (ev, m, team, what) => ev.push({ type: 'cardPlayed', team, card: m.teams[team].card, what });
+const cardPlayed = (ev, m, team, what, extra = {}) => ev.push({ type: 'cardPlayed', team, card: m.teams[team].card, rarity: m.teams[team].cardRarity, what, ...extra });
 
 // ---- Step handlers ----------------------------------------------------------
 
@@ -342,7 +362,7 @@ function onAttack(m, ev, rng) {
       T.stats.runs++;
       player(m, team, pos).carries++;
       const parts = intensityParts(m, team, pos, face.value, face);
-      const ruck = ruckEligible(face, parts.intensity, cardEffects(m, def).ruckMax || 4);
+      const ruck = ruckFor(m, def, face, parts.intensity);
       ev.push({ type: 'run', team, pos, label: face.label, ...parts, special: !!face.special, ruck });
       m.step = { type: 'roll', purpose: 'tackle', dice: ['D', 'D'], team: def, intensity: parts.intensity, carrier: pos, ruck, special: !!face.special };
       break;
@@ -439,7 +459,7 @@ function onRuck(m, ev, rng) {
   m.roll = { dice: ['K'], faces: [faceIndex], purpose: 'ruck', team: def };
   const byCard = (cardEffects(m, def).ruckAlsoWins || []).includes(result);
   if (result === 'ruck' || byCard) {
-    if (byCard) cardPlayed(ev, m, def, 'ruck');
+    if (byCard) cardPlayed(ev, m, def, 'ruck', { result });
     m.teams[def].stats.turnoversWon++;
     player(m, def, 'F').turnovers++;
     ev.push({ type: 'ruck', team: def, won: true });
@@ -559,17 +579,30 @@ function onSetPiece(m, ev, rng) {
   if (face.penalty) {
     let awarded = face.penalty === 'won' ? team : other(team);
     let outcome = face.penalty === 'won' ? 'penaltyWon' : 'penaltyAgainst';
-    // Squeaky Clean: the referee never pings them on their own feed.
+    // Squeaky Clean: the referee never pings them on their own feed (and,
+    // Mythic, not on the other side's either).
     if (outcome === 'penaltyAgainst' && useCharge(m, team, 'ownFeedPenalty')) {
       cardPlayed(ev, m, team, 'penalty');
       awarded = team;
       outcome = 'penaltyWon';
+    } else if (outcome === 'penaltyWon' && useCharge(m, other(team), 'theirFeedPenalty')) {
+      cardPlayed(ev, m, other(team), 'penalty');
+      awarded = other(team);
+      outcome = 'penaltyAgainst';
     }
     ev.push({ type: 'setPiece', team, piece, outcome, awarded });
     awardPenalty(m, ev, awarded);
     return;
   }
-  const outcome = face[piece];
+  let outcome = face[piece];
+  // Set-Piece Kings: higher rarities never lose their own feed, and steal the other side's.
+  if (outcome === 'lose' && cardEffects(m, team).ownFeedWins) {
+    cardPlayed(ev, m, team, 'ownFeed');
+    outcome = 'win';
+  } else if (outcome === 'win' && (cardEffects(m, other(team)).stealFeed || []).includes(piece)) {
+    cardPlayed(ev, m, other(team), 'steal');
+    outcome = 'lose';
+  }
   ev.push({ type: 'setPiece', team, piece, outcome });
   if (outcome === 'win' || outcome === 'lose') {
     const winner = outcome === 'win' ? team : other(team);
@@ -577,8 +610,9 @@ function onSetPiece(m, ev, rng) {
     // Set-Piece Kings carry the shove on: +1 on their next run.
     const boost = cardEffects(m, winner).setPieceAdvantage || 0;
     if (boost) {
-      cardPlayed(ev, m, winner, 'advantage');
+      cardPlayed(ev, m, winner, 'advantage', { runs: boost });
       m.quickTap = boost;
+      m.quickTapFrom = 'card';
     }
     return;
   }
@@ -588,6 +622,7 @@ function onSetPiece(m, ev, rng) {
     cardPlayed(ev, m, kings, outcome);
     startPossession(m, ev, kings, piece);
     m.quickTap = cardEffects(m, kings).setPieceAdvantage || 0;
+    m.quickTapFrom = 'card';
     return;
   }
   if (outcome === 'notstraight') m.step = { ...m.step, team: other(team) };
@@ -619,11 +654,16 @@ function onChoose(m, ev, value) {
         ev.push({ type: 'quickTap', team: step.team });
         startPossession(m, ev, step.team, 'quickTap');
         m.quickTap = QUICK_TAP_RUNS;
+        m.quickTapFrom = 'tap';
       }
       break;
     case 'draft': {
+      const dealt = m.dealRarity?.[value] || 'common';
+      const rarity = draftRarity(m, value);
       m.teams[step.team].card = value;
-      ev.push({ type: 'draft', team: step.team, card: value, first: step.first });
+      m.teams[step.team].cardRarity = rarity;
+      ev.push({ type: 'draft', team: step.team, card: value, rarity, dealt, first: step.first });
+      if (rarity !== dealt) ev.push({ type: 'catchUp', team: step.team, card: value, from: dealt, to: rarity });
       const rest = step.options.filter(id => id !== value);
       if (step.first) {
         m.step = { type: 'choose', purpose: 'draft', team: other(step.team), options: rest, first: false };
@@ -635,15 +675,32 @@ function onChoose(m, ev, value) {
   }
 }
 
-// Deal DEAL_SIZE different cards. The toss loser drafts first, from all of
-// them; the winner, who also receives the kick-off, takes one of the rest.
+// The rarity a dealt card has for the side picking it now: as dealt, or one
+// up for the second pick when the first pick was rarer.
+export function draftRarity(match, id) {
+  const step = match.step;
+  const dealt = match.dealRarity?.[id] || 'common';
+  if (step.purpose !== 'draft' || step.first) return dealt;
+  return catchUp(match.teams[other(step.team)].cardRarity, dealt);
+}
+
+// Deal DEAL_SIZE different cards, each at a rarity of its own. The toss
+// loser drafts first, from all of them; the winner, who also receives the
+// kick-off, takes one of the rest, catching up a rarity if the first pick
+// was rarer.
 function dealCards(m, ev, rng) {
   const pool = [...CARD_IDS];
   const deal = [];
-  while (deal.length < DEAL_SIZE) deal.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
+  const rarity = {};
+  while (deal.length < DEAL_SIZE) {
+    const id = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+    deal.push(id);
+    rarity[id] = rollRarity(rng);
+  }
   m.deal = deal;
+  m.dealRarity = rarity;
   const first = other(m.firstReceiver);
-  ev.push({ type: 'deal', cards: deal, first });
+  ev.push({ type: 'deal', cards: deal, rarity, first });
   m.step = { type: 'choose', purpose: 'draft', team: first, options: [...deal], first: true };
 }
 
