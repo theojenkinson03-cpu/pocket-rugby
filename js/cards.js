@@ -52,7 +52,7 @@ export const CARDS = [
       { value: 0.070, text: "The Forwards' Hit Ups are +1, and Line Break is 8.", effects: { runBonus: { F: { hitUp: 1, special: 2 } } } },
       { value: 0.111, text: "The Forwards' Hit Ups are +2, and Line Break is 8.", effects: { runBonus: { F: { hitUp: 2, special: 2 } } } },
       { value: 0.177, text: "The Forwards' Hit Ups are +2, Line Break is 8, and they never knock on.", effects: { runBonus: { F: { hitUp: 2, special: 2 } }, faceSwap: { F: { knockon: 'pass' } } } },
-      { value: 0.220, text: "The Forwards' Hit Ups are +3, Line Break is 10, they never knock on, and the Scrum Half's Hit Up is +2 behind them.", effects: { runBonus: { F: { hitUp: 3, special: 4 }, S: { hitUp: 2, special: 0 } }, faceSwap: { F: { knockon: 'pass' } } } },
+      { value: 0.224, text: "The Forwards' Hit Ups are +3, Line Break is 10, they never knock on, and the Scrum Half's Hit Up is +2 behind them.", effects: { runBonus: { F: { hitUp: 3, special: 4 }, S: { hitUp: 2, special: 0 } }, faceSwap: { F: { knockon: 'pass' } } } },
     ),
   },
   {
@@ -73,7 +73,7 @@ export const CARDS = [
     tiers: tiers(
       { value: 0.096, text: 'Your Outside Backs never lose it: Knock On and Into Touch become passes.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } } } },
       { value: 0.111, text: 'Your Outside Backs never lose it, and their Hit Ups are +1.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } }, runBonus: { W: { hitUp: 1, special: 0 } } } },
-      { value: 0.146, text: 'Your Outside Backs never lose it, their Hit Ups are +2, and Into the Corner is 10.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } }, runBonus: { W: { hitUp: 2, special: 2 } } } },
+      { value: 0.147, text: 'Your Outside Backs never lose it, their Hit Ups are +2, and Into the Corner is 10.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } }, runBonus: { W: { hitUp: 2, special: 2 } } } },
       { value: 0.215, text: 'Your Outside Backs never lose it, their Hit Ups are +2, Into the Corner is 10, and the Fly Half never finds touch either.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' }, B: { touch: 'pass' } }, runBonus: { W: { hitUp: 2, special: 2 } } } },
     ),
   },

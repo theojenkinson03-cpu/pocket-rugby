@@ -33,7 +33,7 @@ Three of twelve cards are dealt after the coin toss. Each card bends one rule fo
 
 **The draft.** The side that **lost** the toss picks first, from all three; the toss winner, who receives the kick-off, picks from the two left. **Catch-up:** if the first pick is rarer than the card the second side takes, that card goes up one rarity.
 
-**Balance.** Every card at every rarity was measured over 10,000 simulated matches against a side with no card. Common cards lift the win rate by 6.7 to 9.6 points, Rare 10.3 to 13.6, Epic 14.6 to 19.9 and Mythic 21.5 to 27.3: every card of a rarity beats every card of the rarity below. Over 40,000 full drafts the side picking first won 52.6%: losing the toss gives you the better choice, and the catch-up keeps it close. Cards can be turned off on the team sheet. [RULES.md](RULES.md) lists every card's exact effect at every rarity.
+**Balance.** Every card at every rarity was measured over 10,000 simulated matches against a side with no card. Common cards lift the win rate by 6.7 to 9.6 points, Rare 10.3 to 13.6, Epic 14.7 to 19.9 and Mythic 21.5 to 27.3: every card of a rarity beats every card of the rarity below. Over 40,000 full drafts the side picking first won 51.9%: losing the toss gives you the better choice, and the catch-up keeps it close. Cards can be turned off on the team sheet. [RULES.md](RULES.md) lists every card's exact effect at every rarity.
 
 ## Players, stats and your record
 
