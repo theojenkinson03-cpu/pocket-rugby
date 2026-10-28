@@ -495,14 +495,18 @@ function reachedFullTime(m, ev, team) {
 // side that keeps the ball after scoring runs away with too many games:
 // handing it back made the median margin 11 instead of 15 and lead changes
 // 40% more common, and makes kicking at goal a real choice.)
-function afterScore(m, ev, team) {
+// After a score the other side restart with the ball, unless a kicking card
+// wins it back after its own kind of goal (`keepBall`).
+function afterScore(m, ev, team, kind = null) {
   if (reachedFullTime(m, ev, team)) return;
   if (m.format === 'points' && m.half === 1 && m.teams.some(t => t.score >= m.target.half)) {
     m.step = { type: 'halftime' };
     ev.push({ type: 'halftime' });
     return;
   }
-  startPossession(m, ev, other(team), 'restart');
+  const keep = kind !== null && (cardEffects(m, team).keepBall || []).includes(kind);
+  if (keep) cardPlayed(ev, m, team, 'keepBall', fx => (fx.keepBall || []).includes(kind), { kick: kind });
+  startPossession(m, ev, keep ? team : other(team), 'restart');
 }
 
 // A completed tackle uses up one run of any quick-tap advantage.
@@ -791,7 +795,7 @@ function onKick(m, ev, rng) {
     S[tally[0]]++;
     player(m, team, kicker).points += tally[2];
     addPoints(m, ev, team, tally[2], kick);
-    afterScore(m, ev, team);
+    afterScore(m, ev, team, kick);
   } else if (kick === 'conversion') {
     afterScore(m, ev, team);
   } else {

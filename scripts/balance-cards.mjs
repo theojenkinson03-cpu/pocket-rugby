@@ -12,7 +12,7 @@ const GAMES = Number(process.argv[2] || 10000);
 const LENGTH = process.argv[3] || 'standard';
 const FORMAT = process.argv[4] || 'points';
 
-async function work({ jobs }) {
+async function work({ jobs, length, format }) {
   const { act, newMatch, seededRng } = await import('../js/engine.js');
   const { cpuChoice } = await import('../js/ai.js');
   const play = (m, rng) => {
@@ -31,7 +31,7 @@ async function work({ jobs }) {
       const rng = seededRng(job.seed + g);
       if (job.kind === 'card') {
         const holder = g % 2;
-        const m = newMatch({ mode: '2p', length: LENGTH, format: FORMAT });
+        const m = newMatch({ mode: '2p', length, format });
         m.teams[holder].cards = [{ id: job.card, rarity: job.rarity }];
         const end = play(m, rng);
         // A draw (on the clock) counts as half a win.
@@ -39,7 +39,7 @@ async function work({ jobs }) {
         else if (end.winner === null) wins += 0.5;
         points += end.teams[holder].score - end.teams[1 - holder].score;
       } else {
-        const m = newMatch({ mode: '2p', length: LENGTH, format: FORMAT, cards: true });
+        const m = newMatch({ mode: '2p', length, format, cards: true });
         const end = play(m, rng);
         const firstPicker = 1 - end.firstReceiver;
         if (end.winner === firstPicker) firstPickWins++;
@@ -70,14 +70,15 @@ if (!isMainThread) {
   jobs.forEach((job, i) => buckets[i % threads].push(job));
   const file = fileURLToPath(import.meta.url);
   const out = (await Promise.all(buckets.map(b => new Promise((resolve, reject) => {
-    const w = new Worker(file, { workerData: { jobs: b } });
+    // Workers don't see the command line: the length and format go with the jobs.
+    const w = new Worker(file, { workerData: { jobs: b, length: LENGTH, format: FORMAT } });
     w.on('message', resolve);
     w.on('error', reject);
   })))).flat();
 
   // value: the holder's win rate above 50%, as in js/cards.js.
   const se = n => Math.sqrt(0.25 / n) * 100;
-  console.log(`${GAMES} ${LENGTH} matches per card and rarity (win rate ±${(1.96 * se(GAMES)).toFixed(1)}%, value ±${(1.96 * se(GAMES) / 100).toFixed(3)} at 95%)`);
+  console.log(`${GAMES} ${LENGTH} ${FORMAT === 'rolls' ? 'clock' : 'race'} matches per card and rarity (win rate ±${(1.96 * se(GAMES)).toFixed(1)}%, value ±${(1.96 * se(GAMES) / 100).toFixed(3)} at 95%)`);
   for (const rarity of rarities) {
     console.log(`\n${rarity}`);
     for (const r of out.filter(r => r.kind === 'card' && r.rarity === rarity).sort((a, b) => b.wins - a.wins)) {

@@ -49,6 +49,7 @@ const CARD_LINES = {
   advantage: e => `carry the shove on: +1 on the next ${e.runs > 1 ? `${e.runs} runs` : 'run'}`,
   ownFeed: 'hold on to their own ball at the set piece',
   steal: "steal the other side's ball at the set piece",
+  keepBall: e => `win the restart back after their ${e.kick === 'drop' ? 'drop goal' : 'penalty goal'}`,
 };
 const RUCK_ROLLS = { video: 'the video ref', notry: 'a NO TRY', try: 'a TRY roll' };
 const cardLine = e => {
