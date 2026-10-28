@@ -137,6 +137,27 @@ export const NEUTRAL_GROUNDS = {
   top14: { semi: 'Stade Atlantique, Bordeaux', final: 'Stade de France' },
 };
 
+// The 2026-27 Champions Cup: 24 clubs from the Prem, the URC and the Top 14
+// in four pools of six, two from each league. A club plays the four in its
+// pool from the other leagues, two at home and two away. The top three in
+// each pool go through to the round of 16 with the four best-placed of the
+// rest; the final is at OL Stadium, Lyon.
+export const CHAMPIONS_CUP = {
+  name: 'Champions Cup',
+  short: 'Champions Cup',
+  season: '2026–27 season',
+  pools: {
+    1: ['leinster', 'glasgow', 'pau', 'sale', 'leicester', 'clermont'],
+    2: ['toulouse', 'lions', 'saracens', 'larochelle', 'exeter', 'connacht'],
+    3: ['bordeaux', 'stormers', 'racing', 'munster', 'bristol', 'gloucester'],
+    4: ['northampton', 'bath', 'cardiff', 'montpellier', 'stadefrancais', 'bulls'],
+  },
+  neutral: { final: 'OL Stadium, Lyon' },
+  poolRounds: 4,
+  through: 3,
+  bestOthers: 4,
+};
+
 // How many teams each play-off format takes.
 export const QUALIFY = { top4: 4, top6: 6, top8: 8, super6: 6 };
 export const SHORT_SEASON = 6;
@@ -231,10 +252,84 @@ export function createLeague({ league = 'prem', userTeam, length = 'quick', card
   };
 }
 
+// A pool's four rounds: three matches a round, nobody meeting a club from
+// their own league, everyone at home twice. `ids` lists the pool's clubs.
+export function championsPoolRounds(ids, rng = Math.random) {
+  const byLeague = {};
+  for (const id of ids) (byLeague[LEAGUE_OF[id]] ||= []).push(id);
+  const [[a1, a2], [b1, b2], [c1, c2]] = shuffle(Object.values(byLeague), rng).map(pair => shuffle(pair, rng));
+  // The six-club pool, two from each league, is the octahedron: these four
+  // rounds cover its twelve cross-league pairs once each.
+  const rounds = shuffle([
+    [[a1, b1], [a2, c1], [b2, c2]],
+    [[a1, b2], [a2, c2], [b1, c1]],
+    [[a1, c1], [a2, b2], [b1, c2]],
+    [[a1, c2], [a2, b1], [b2, c1]],
+  ], rng);
+  // Home and away: the first way round, from a random start, that gives
+  // every club two of each.
+  const pairs = rounds.flat();
+  const start = Math.floor(rng() * 4096);
+  for (let n = 0; n < 4096; n++) {
+    const mask = (start + n) % 4096;
+    const homes = new Map();
+    pairs.forEach(([x, y], i) => {
+      const home = mask & (1 << i) ? y : x;
+      homes.set(home, (homes.get(home) || 0) + 1);
+    });
+    if (ids.every(id => homes.get(id) === 2)) {
+      let i = 0;
+      return rounds.map(round => round.map(([x, y]) => (mask & (1 << i++) ? [y, x] : [x, y])));
+    }
+  }
+  throw new Error('no fair home and away');
+}
+
+export function createChampions({ userTeam, length = 'quick', cards = true, rng = Math.random }) {
+  const C = CHAMPIONS_CUP;
+  const pools = Object.fromEntries(Object.entries(C.pools).map(([group, ids]) => [group, [...ids]]));
+  const fixtures = [];
+  for (const [group, ids] of Object.entries(pools)) {
+    championsPoolRounds(ids, rng).forEach((pairs, round) => pairs.forEach(([home, away]) => {
+      fixtures.push(fixture(`P${group}${round}${home}`, 'pool', round, home, away, group));
+    }));
+  }
+  const field = Object.values(pools).flat().map(id => ({ ...TEAM_BY_ID[id], league: LEAGUE_OF[id] }));
+  return {
+    kind: 'champions',
+    name: C.name,
+    short: C.short,
+    length,
+    cards,
+    userTeam,
+    teams: makeTeams(field, rng),
+    pools,
+    poolRounds: C.poolRounds,
+    neutral: { ...C.neutral },
+    fixtures,
+    stage: 'pool',
+    champion: null,
+    byes: [],
+  };
+}
+
+// The 16 for the round of 16, seeded: pool winners 1-4, runners-up 5-8,
+// thirds 9-12, each in table order, then the four best of the rest.
+export function championsSeeding(t) {
+  const C = CHAMPIONS_CUP;
+  const tables = Object.keys(t.pools).map(group => standings(t, group));
+  const order = rows => [...rows].sort((a, b) => b.points - a.points || (b.for - b.against) - (a.for - a.against) || b.triesFor - a.triesFor || a.id.localeCompare(b.id));
+  const seeds = [];
+  for (let place = 0; place < C.through; place++) seeds.push(...order(tables.map(rows => rows[place])).map(r => r.id));
+  seeds.push(...order(tables.flatMap(rows => rows.slice(C.through))).slice(0, C.bestOthers).map(r => r.id));
+  return seeds;
+}
+
 export const teamOf = (t, id) => t.teams.find(team => team.id === id);
 
-// Every nation and club as listed above, by id.
+// Every nation and club as listed above, by id, and each club's league.
 export const TEAM_BY_ID = Object.fromEntries([...NATIONS, ...Object.values(LEAGUES).flatMap(l => l.teams)].map(x => [x.id, x]));
+export const LEAGUE_OF = Object.fromEntries(Object.entries(LEAGUES).flatMap(([league, L]) => L.teams.map(x => [x.id, league])));
 
 // Brings a tournament saved by an older version up to date: grounds and
 // kits for its sides.
@@ -461,7 +556,20 @@ function startSemis(t) {
 // Moves to the next stage once every fixture in this one is played.
 export function advance(t) {
   if (currentRound(t) !== null || t.stage === 'done') return t;
-  if (t.stage === 'pool') {
+  if (t.stage === 'pool' && t.kind === 'champions') {
+    const seeds = championsSeeding(t);
+    t.seeds = Object.fromEntries(seeds.map((id, i) => [id, i + 1]));
+    // 1 v 16, 2 v 15 ... 8 v 9, the better seed at home.
+    for (let i = 0; i < 8; i++) t.fixtures.push(tie(t, `R${i + 1}`, 'r16', seeds[i], seeds[15 - i]));
+    t.stage = 'r16';
+  } else if (t.stage === 'r16') {
+    // A fixed bracket: the 1/16 winner meets the 8/9 winner, and so on;
+    // from the quarter-finals on it runs like the URC's.
+    const w = n => winnerOf(byId(t, `R${n}`));
+    t.fixtures.push(tie(t, 'QF1', 'qf', w(1), w(8)), tie(t, 'QF2', 'qf', w(4), w(5)), tie(t, 'QF3', 'qf', w(2), w(7)), tie(t, 'QF4', 'qf', w(3), w(6)));
+    t.playoff = 'top8';
+    t.stage = 'qf';
+  } else if (t.stage === 'pool') {
     const [a, b] = [standings(t, 'A'), standings(t, 'B')];
     t.fixtures.push(fixture('SF1', 'semi', 0, a[0].id, b[1].id), fixture('SF2', 'semi', 0, b[0].id, a[1].id));
     t.stage = 'semi';
@@ -501,11 +609,11 @@ export function userRecord(t) {
   return { won, lost };
 }
 
-export const STAGE_NAMES = { pool: 'Pool stage', league: 'Regular season', qf: 'Quarter-finals', semi: 'Semi-finals', final: 'Final', done: 'Finished' };
+export const STAGE_NAMES = { pool: 'Pool stage', league: 'Regular season', r16: 'Round of 16', qf: 'Quarter-finals', semi: 'Semi-finals', final: 'Final', done: 'Finished' };
 
 // A knockout round's name in this competition: one tie, or the round.
 // Barrages in the Top 14, qualifying finals in Super Rugby, and so on.
-const ROUND_NAMES = { qf: ['Quarter-final', 'Quarter-finals'], semi: ['Semi-final', 'Semi-finals'], final: ['Final', 'Final'] };
+const ROUND_NAMES = { r16: ['Round of 16', 'Round of 16'], qf: ['Quarter-final', 'Quarter-finals'], semi: ['Semi-final', 'Semi-finals'], final: ['Final', 'Final'] };
 export function roundName(t, stage, many = false) {
   const names = LEAGUES[t.league]?.rounds?.[stage] || ROUND_NAMES[stage];
   return names ? names[many ? 1 : 0] : STAGE_NAMES[stage];

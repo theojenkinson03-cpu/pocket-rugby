@@ -57,7 +57,9 @@ export function careerPage(career, { onReset }) {
   fact('Points', c.played ? `${c.pointsFor} for, ${c.pointsAgainst} against` : '–');
   fact('Metres made', c.metres ? `${c.metres.toLocaleString('en-GB')} m, ${Math.round(c.metres / Math.max(1, c.played))} a match` : '–');
   fact('Biggest win', c.biggestWin ? `${c.biggestWin.score} v ${c.biggestWin.against}` : '–');
-  fact('Trophies', c.cups + c.leagues ? [c.cups && `${c.cups} Nations Cup${c.cups > 1 ? 's' : ''}`, c.leagues && `${c.leagues} League title${c.leagues > 1 ? 's' : ''}`].filter(Boolean).join(', ') : 'None yet');
+  const europe = c.europe || 0;
+  const won = [c.cups && `${c.cups} Nations Cup${c.cups > 1 ? 's' : ''}`, europe && `${europe} Champions Cup${europe > 1 ? 's' : ''}`, c.leagues && `${c.leagues} League title${c.leagues > 1 ? 's' : ''}`].filter(Boolean);
+  fact('Trophies', won.length ? won.join(', ') : 'None yet');
   page.append(facts);
 
   const levels = el('section', 'records');

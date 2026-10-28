@@ -22,6 +22,7 @@ export function newCareer() {
     online: { played: 0, won: 0 },
     cups: 0,
     leagues: 0,
+    europe: 0,
     biggestWin: null,
     cardsWon: [],
     // The rarest version of each card you've won with.
@@ -109,6 +110,7 @@ export const ACHIEVEMENTS = [
   { id: 'mythic', name: 'Mythic', text: 'Win a match with a Mythic team card.', check: (m, me) => m.winner === me && m.teams[me].cardRarity === 'mythic' },
   { id: 'cup-winners', name: 'Nations Cup Winners', text: 'Win the Nations Cup.', check: (m, me, t, c) => c.tournament?.kind === 'cup' && c.tournament.champion },
   { id: 'champions', name: 'League Champions', text: 'Win a league: Super Rugby, the Prem, the URC or the Top 14.', check: (m, me, t, c) => c.tournament?.kind === 'league' && c.tournament.champion },
+  { id: 'european-champions', name: 'Champions of Europe', text: 'Win the Champions Cup.', check: (m, me, t, c) => c.tournament?.kind === 'champions' && c.tournament.champion },
   { id: 'invincibles', name: 'Invincibles', text: 'Win a tournament without losing a match.', check: (m, me, t, c) => !!c.tournament?.champion && c.tournament.lost === 0 },
   { id: 'online-win', name: 'Long-Distance Win', text: 'Win an online match.', check: (m, me, t, c) => c.mode === 'online' && m.winner === me },
   { id: 'graduate', name: 'Graduate', text: 'Finish the guided first match.', check: (m, me, t, c) => c.mode === 'learn' },
@@ -157,6 +159,7 @@ export function recordMatch(career, match, tracker, context) {
   }
   if (context.tournament?.champion) {
     if (context.tournament.kind === 'cup') c.cups++;
+    else if (context.tournament.kind === 'champions') c.europe = (c.europe || 0) + 1;
     else c.leagues++;
   }
   const unlocked = [];

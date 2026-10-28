@@ -1,7 +1,7 @@
 // Tournament screens: picking a competition and team, then the hub with the
 // next match, the tables, the knockout bracket and every result.
 
-import { currentRound, isUserFixture, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, teamOf, userAlive, userFixture, userRecord, venue } from './tournament.js';
+import { CHAMPIONS_CUP, currentRound, isUserFixture, LEAGUE_OF, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, TEAM_BY_ID, teamOf, userAlive, userFixture, userRecord, venue } from './tournament.js';
 import { LEVELS, PERSONALITIES } from './ai.js';
 import { leaders, LEADER_STATS, playerOfTheSeason, seasonPlayers, teamOfTheSeason } from './season.js';
 import { statLine } from './players.js';
@@ -41,6 +41,8 @@ function seg(legend, name, options, value, onChange) {
 
 // ---- Setup ---------------------------------------------------------------------
 
+export const CHAMPIONS_TEXT = 'The top three in each pool go through to the round of 16, with the four best-placed of the rest.';
+
 // What each play-off format means, in a sentence.
 export const PLAYOFF_TEXT = {
   top4: 'The top four go to the semi-finals.',
@@ -51,6 +53,7 @@ export const PLAYOFF_TEXT = {
 
 const COMPETITIONS = [
   { id: 'cup', name: 'Nations Cup', note: '8 nations · two pools, then knockouts' },
+  { id: 'champions', name: CHAMPIONS_CUP.name, note: '24 clubs from the Prem, URC and Top 14 · four pools of six, then knockouts', season: CHAMPIONS_CUP.season },
   { id: 'super', name: LEAGUES.super.name, note: `${LEAGUES.super.teams.length} teams · top six to the finals`, season: LEAGUES.super.season },
   { id: 'prem', name: LEAGUES.prem.name, note: `${LEAGUES.prem.teams.length} clubs · top four to the semi-finals`, season: LEAGUES.prem.season },
   { id: 'urc', name: LEAGUES.urc.name, note: `${LEAGUES.urc.teams.length} teams · top eight to the quarter-finals`, season: LEAGUES.urc.season },
@@ -81,26 +84,37 @@ export function tournamentSetup(state, { onChange, onStart }) {
   page.append(comps);
 
   const league = LEAGUES[state.comp];
-  const roster = league ? league.teams : NATIONS;
+  const europe = state.comp === 'champions';
+  // The Champions Cup's clubs come pool by pool, as drawn.
+  const groups = europe
+    ? Object.entries(CHAMPIONS_CUP.pools).map(([group, ids]) => [`Pool ${group}`, ids.map(id => TEAM_BY_ID[id])])
+    : [[null, league ? league.teams : NATIONS]];
+  const roster = groups.flatMap(([, teams]) => teams);
   const team = state.team && roster.some(r => r.id === state.team) ? state.team : roster[0].id;
   const pick = el('div', 'pick');
   pick.append(el('h3', 'page-h', 'Pick your team'));
-  const grid = el('div', 'team-grid');
-  grid.setAttribute('role', 'radiogroup');
-  grid.setAttribute('aria-label', 'Your team');
-  for (const r of roster) {
-    const tile = el('button', 'team-tile');
-    tile.type = 'button';
-    tile.setAttribute('role', 'radio');
-    tile.setAttribute('aria-checked', String(r.id === team));
-    kitVars(tile, r);
-    tile.style.setProperty('--alt', r.alt);
-    const [label, stars] = STRENGTH[r.level];
-    tile.append(el('span', 'tt-kit'), el('b', 'tt-short', r.short), el('span', 'tt-name', r.name), el('small', 'tt-strength', `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} ${label}`));
-    tile.addEventListener('click', () => onChange({ team: r.id }));
-    grid.append(tile);
+  for (const [title, teams] of groups) {
+    if (title) pick.append(el('p', 'br-title pool-title', title));
+    const grid = el('div', 'team-grid');
+    grid.setAttribute('role', 'radiogroup');
+    grid.setAttribute('aria-label', title ? `Your team: ${title}` : 'Your team');
+    for (const r of teams) {
+      const tile = el('button', 'team-tile');
+      tile.type = 'button';
+      tile.setAttribute('role', 'radio');
+      tile.setAttribute('aria-checked', String(r.id === team));
+      kitVars(tile, r);
+      tile.style.setProperty('--alt', r.alt);
+      const [label, stars] = STRENGTH[r.level];
+      // In the Champions Cup the stars sit beside the club's league.
+      const note = europe ? LEAGUES[LEAGUE_OF[r.id]].short : label;
+      tile.append(el('span', 'tt-kit'), el('b', 'tt-short', r.short), el('span', 'tt-name', r.name), el('small', 'tt-strength', `${'★'.repeat(stars)}${'☆'.repeat(3 - stars)} ${note}`));
+      tile.title = `${r.name}: ${label}`;
+      tile.addEventListener('click', () => onChange({ team: r.id }));
+      grid.append(tile);
+    }
+    pick.append(grid);
   }
-  pick.append(grid);
   page.append(pick);
 
   const full = league ? fullRounds(league.teams.length) : 0;
@@ -123,18 +137,20 @@ export function tournamentSetup(state, { onChange, onStart }) {
   const rounds = league ? (state.season === 'full' ? full : SHORT_SEASON) : 3;
   const what = league
     ? `${rounds} rounds${league.teams.length % 2 ? ' (one side sits out each round)' : ''}. ${PLAYOFF_TEXT[league.playoff]}`
-    : 'Up to 5 matches: 3 in your pool, then a semi-final and the final.';
+    : europe
+      ? `Up to 8 matches: 4 in your pool, against the clubs from the other two leagues, then a round of 16, quarter-finals, semi-finals and the final in Lyon. ${CHAMPIONS_TEXT}`
+      : 'Up to 5 matches: 3 in your pool, then a semi-final and the final.';
   page.append(el('p', 'page-note', `${what} A win is worth 4 points, with a bonus point for 4 tries and one for losing by ${POINTS.losingBonusWithin} or fewer.`));
-  const name = league ? league.short : 'Nations Cup';
+  const name = league ? league.short : europe ? CHAMPIONS_CUP.short : 'Nations Cup';
   page.append(button(`Start the ${name}`, () => onStart({ ...state, team }), 'btn btn-primary btn-wide', { primary: true }));
-  if (league) page.append(el('p', 'fineprint', 'Real team names, made-up players. Not affiliated with or endorsed by any league, union or club.'));
+  if (league || europe) page.append(el('p', 'fineprint', 'Real team names, made-up players. Not affiliated with or endorsed by any league, union or club.'));
   return page;
 }
 
 // ---- Hub -----------------------------------------------------------------------
 
 export function fixtureLabel(t, f) {
-  if (f.stage === 'pool') return `Pool ${f.group} · Round ${f.round + 1} of 3`;
+  if (f.stage === 'pool') return `Pool ${f.group} · Round ${f.round + 1} of ${t.poolRounds || 3}`;
   if (f.stage === 'league') return `Round ${f.round + 1} of ${t.rounds || 7}`;
   return roundName(t, f.stage);
 }
@@ -205,7 +221,8 @@ function nextMatchCard(t, handlers) {
 
 function table(t, group) {
   const rows = standings(t, group);
-  const qualify = group === 'L' ? QUALIFY[t.playoff || 'top4'] : 2;
+  const europe = t.kind === 'champions';
+  const qualify = group === 'L' ? QUALIFY[t.playoff || 'top4'] : europe ? CHAMPIONS_CUP.through : 2;
   const wrap = el('section', 'standings');
   wrap.append(el('h3', 'page-h', group === 'L' ? `${tName(t)} table` : `Pool ${group}`));
   const tbl = el('table', 'table');
@@ -229,7 +246,7 @@ function table(t, group) {
   });
   tbl.append(thead, body);
   wrap.append(tbl);
-  wrap.append(el('p', 'table-note', group === 'L' ? PLAYOFF_TEXT[t.playoff || 'top4'] : 'The top two go through to the semi-finals.'));
+  wrap.append(el('p', 'table-note', group === 'L' ? PLAYOFF_TEXT[t.playoff || 'top4'] : europe ? CHAMPIONS_TEXT : 'The top two go through to the semi-finals.'));
   return wrap;
 }
 
@@ -267,9 +284,11 @@ function bracket(t) {
     return c;
   };
   const stage = name => t.fixtures.filter(f => f.stage === name);
+  const r16 = stage('r16');
+  if (r16.length) wrap.append(col(roundName(t, 'r16', true), r16));
   const qf = stage('qf');
   if (qf.length) {
-    const byes = t.playoff === 'top6' && t.seeds ? Object.entries(t.seeds).filter(([, n]) => n <= 2).map(([id]) => teamOf(t, id).name) : [];
+    const byes = t.playoff === 'top6' && t.seeds && !r16.length ? Object.entries(t.seeds).filter(([, n]) => n <= 2).map(([id]) => teamOf(t, id).name) : [];
     const note = byes.length ? `${byes.join(' and ')} go straight into the semi-finals.` : t.playoff === 'super6' ? 'The best-placed loser also goes through.' : null;
     wrap.append(col(roundName(t, 'qf', true), qf, note));
   }

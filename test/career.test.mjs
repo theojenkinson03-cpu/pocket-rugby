@@ -26,9 +26,9 @@ function finished({ scores = [30, 10], winner = scores[0] > scores[1] ? 0 : 1, l
 const ctx = (over = {}) => ({ mode: '1p', level: 'pro', tournament: null, ...over });
 const unlocks = (match, tracker = newTracker(0), context = ctx(), career = newCareer()) => recordMatch(career, match, tracker, context);
 
-test('31 achievements, each with a name and a description', () => {
-  assert.equal(ACHIEVEMENTS.length, 31);
-  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 31);
+test('32 achievements, each with a name and a description', () => {
+  assert.equal(ACHIEVEMENTS.length, 32);
+  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 32);
   for (const a of ACHIEVEMENTS) assert.ok(a.name && a.text.endsWith('.') && typeof a.check === 'function', a.id);
   assert.equal(ACHIEVEMENT_BY_ID['first-win'].name, 'First Win');
 });
@@ -111,10 +111,13 @@ test('context achievements: Expert, tournaments, online, the guided match', () =
   assert.ok(won.includes('cup-winners') && !won.includes('champions') && !won.includes('invincibles'));
   const league = unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 0 } }));
   assert.ok(league.includes('champions') && league.includes('invincibles'));
+  const europe = unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'champions', champion: true, lost: 1 } }));
+  assert.ok(europe.includes('european-champions') && !europe.includes('champions') && !europe.includes('cup-winners'));
   const c = newCareer();
   recordMatch(c, finished(), newTracker(0), ctx({ tournament: cup }));
   recordMatch(c, finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 2 } }));
-  assert.deepEqual([c.cups, c.leagues], [1, 1]);
+  recordMatch(c, finished(), newTracker(0), ctx({ tournament: { kind: 'champions', champion: true, lost: 0 } }));
+  assert.deepEqual([c.cups, c.leagues, c.europe], [1, 1, 1]);
   assert.ok(unlocks(finished({ scores: [3, 30] }), newTracker(0), ctx({ mode: 'learn' })).includes('graduate'), 'win or lose');
   assert.ok(!unlocks(finished({ scores: [3, 30] }), newTracker(0), ctx({ mode: 'online' })).includes('online-win'), 'an online defeat');
   assert.ok(unlocks(finished({ scores: [3, 30] }), newTracker(1), ctx({ mode: 'online' })).includes('online-win'), 'the guest won');

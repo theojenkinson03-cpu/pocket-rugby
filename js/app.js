@@ -9,7 +9,7 @@ import { playerOfTheMatch, possessive, randomRoster, statLine, surname } from '.
 import { winMeter } from './winprob.js';
 import { ACHIEVEMENT_BY_ID, newCareer, newTracker, recordMatch, track } from './career.js';
 import { tipFor, tipText } from './coach.js';
-import { advance, clash, createCup, createLeague, LEAGUES, matchOptions, migrateTournament, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
+import { advance, clash, createChampions, createCup, createLeague, LEAGUES, matchOptions, migrateTournament, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
 import { applyRemote, encodeAction, hashState, makeCode, normaliseCode, OnlineSession, pendingEntries, recordingRng, startingMatch, strongRandom, validCode } from './online.js';
 import { $, button, el } from './dom.js';
 import { createDie, dieChip, faceTile, rollTo, setFace, wait } from './dice-view.js';
@@ -137,7 +137,7 @@ function renderHome() {
     $('#tournament-detail').textContent = `${teamOf(t, t.userTeam).name} · ${stageName(t)}`;
   } else {
     $('#tournament-label').textContent = 'Cups & leagues';
-    $('#tournament-detail').textContent = 'Nations Cup, Super Rugby, Prem, URC, Top 14';
+    $('#tournament-detail').textContent = 'Nations Cup, Champions Cup, Super Rugby, Prem, URC, Top 14';
   }
 }
 
@@ -571,7 +571,7 @@ function finishMatch() {
       advance(t);
       outcome.note = tournamentNote(t, f, m.winner === 0);
       if (t.stage === 'done' && t.champion === t.userTeam) {
-        outcome.champion = { title: t.kind === 'cup' ? `${t.name} winners` : `${t.short || t.name} champions` };
+        outcome.champion = { title: t.kind === 'league' ? `${t.short || t.name} champions` : `${t.name} winners` };
         cup = { kind: t.kind, champion: true, lost: userRecord(t).lost };
       }
       save('tournament', t);
@@ -590,6 +590,7 @@ function tournamentNote(t, f, won) {
   const name = t.short || t.name;
   if (f.stage === 'final') return won ? `${me} win the ${name}!` : `${me} are runners-up. ${teamOf(t, t.champion).name} win the ${name}.`;
   if (f.stage === 'semi') return won ? `${me} are through to the ${roundName(t, 'final').toLowerCase()}!` : `${me} are out in the ${roundName(t, 'semi', true).toLowerCase()}.`;
+  if (f.stage === 'r16') return won ? `${me} are through to the quarter-finals!` : `${me} are out in the round of 16.`;
   if (f.stage === 'qf') {
     if (won) return `${me} are through to the semi-finals!`;
     // Super Rugby: the best-placed losing side goes through too.
@@ -601,6 +602,8 @@ function tournamentNote(t, f, won) {
   if (t.stage !== f.stage) {
     if (!userAlive(t)) return `${me} finish ${place} ${where}. That’s the end of the road.`;
     if ((t.byes || []).includes(t.userTeam)) return `${me} finish ${place} ${where} and go straight into the semi-finals!`;
+    // Champions Cup: fourth or lower and still in it is one of the best of the rest.
+    if (t.kind === 'champions' && rows.findIndex(r => r.id === t.userTeam) >= 3) return `${me} finish ${place} ${where} and go through to the round of 16 as one of the best of the rest!`;
     return `${me} finish ${place} ${where} and go through to the ${stageName(t).toLowerCase()}!`;
   }
   return `${me} are ${place} ${where}.`;
@@ -1589,7 +1592,9 @@ function renderTournament() {
 function startTournament(state) {
   unlockAudio();
   const options = { userTeam: state.team, length: state.length, cards: state.cards };
-  ui.tournament = LEAGUES[state.comp] ? createLeague({ ...options, league: state.comp, season: state.season }) : createCup(options);
+  ui.tournament = LEAGUES[state.comp]
+    ? createLeague({ ...options, league: state.comp, season: state.season })
+    : state.comp === 'champions' ? createChampions(options) : createCup(options);
   ui.tsetup = { ...state };
   save('tournament', ui.tournament);
   renderTournament();

@@ -2242,3 +2242,5 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
 }
+.pool-title { margin: 14px 0 6px; }
+.pick > .pool-title:first-of-type { margin-top: 0; }
