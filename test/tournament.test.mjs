@@ -392,6 +392,12 @@ test('kits for a match: the first choice keeps its pattern, a change strip is pl
   assert.deepEqual(home.kit, TEAM_BY_ID.gloucester.kit);
   assert.equal(away.kit, null);
   assert.notEqual(away.color, TEAM_BY_ID.munster.color);
+  // Gloucester's cherry and white hoops away at red Munster: a plain change strip.
+  const [, visitors] = kits(comp, { home: 'munster', away: 'gloucester', stage: 'league' });
+  assert.equal(visitors.kit, null, 'the change strip drops the hoops');
+  assert.equal(visitors.color, TEAM_BY_ID.gloucester.alt);
+  const user = matchOptions({ ...comp, userTeam: 'munster' }, { home: 'gloucester', away: 'munster', stage: 'league' });
+  assert.equal(user.teams[1].kit, null, 'and so does a CPU side that changes against the user');
   const opts = matchOptions(comp, { home: 'gloucester', away: 'harlequins', stage: 'league' });
   assert.deepEqual(opts.teams[0].kit, TEAM_BY_ID.harlequins.kit, 'the user wears their own pattern');
   assert.deepEqual(opts.venue, { name: 'Kingsholm', neutral: false });

@@ -1,6 +1,6 @@
 // The daily challenge: the same rigged situation for everyone each day,
-// built from the date; seeded dice; a fair-but-uphill difficulty; ranking
-// and the shareable result.
+// built from the date; a fair-but-uphill difficulty; ranking and the
+// shareable result.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { act, MATCH_LENGTHS, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { POSITIONS } from '../js/dice.js';
-import { dailyDice, dailyMatch, dailyResult, dailyScenario, dayKey, dayNumber, daySeed, DIFFICULTY, FIRST_DAY, scenarioTitle, scoreParts, shareText, SITUATIONS } from '../js/daily.js';
+import { dailyMatch, dailyResult, dailyScenario, dayKey, dayNumber, daySeed, DIFFICULTY, FIRST_DAY, scenarioTitle, scoreParts, shareText, SITUATIONS } from '../js/daily.js';
 import { LEAGUES } from '../js/tournament.js';
 import { winMeter } from '../js/winprob.js';
 
@@ -107,37 +107,6 @@ test('the starting match: second half, scores that add up, the situation and twi
     if (s.twist === 'theirSinBin') assert.ok(m.teams[1].sinBin);
     assert.ok(Math.abs(winMeter(m, 0) - s.chance) < 0.001, 'the recorded chance is the model\'s');
   }
-});
-
-// Plays a daily to the end with Pro decisions for both sides on the day's dice.
-function playDaily(s, choose = m => cpuChoice({ ...m, cpuLevel: 'pro' })) {
-  const rng = dailyDice(s);
-  let m = dailyMatch(s);
-  for (let guard = 0; m.step.type !== 'fulltime'; guard++) {
-    assert.ok(guard < 3000);
-    const st = m.step;
-    const a = st.type === 'roll' ? { type: 'roll' } : st.type === 'halftime' ? { type: 'continue' } : { type: 'choose', value: choose(m) };
-    m = act(m, a, rng).state;
-  }
-  return { m, used: rng.used() };
-}
-
-test('the dice are the same for everyone: the same choices meet the same rolls', () => {
-  for (const key of days(10)) {
-    const s = dailyScenario(key);
-    const a = playDaily(s);
-    const b = playDaily(s);
-    assert.deepEqual(a.m.teams.map(t => t.score), b.m.teams.map(t => t.score), key);
-    assert.equal(a.used, b.used);
-  }
-  // A saved attempt picks the stream up where it left off.
-  const s = dailyScenario(FIRST_DAY);
-  const whole = dailyDice(s);
-  const first = Array.from({ length: 7 }, () => whole());
-  const resumed = dailyDice(s, 7);
-  assert.equal(resumed.used(), 7);
-  assert.deepEqual(Array.from({ length: 5 }, () => resumed()), Array.from({ length: 5 }, () => whole()));
-  assert.equal(first.length, 7);
 });
 
 test('uphill but winnable: Pro against Pro from the day\'s position wins sometimes, not usually', () => {

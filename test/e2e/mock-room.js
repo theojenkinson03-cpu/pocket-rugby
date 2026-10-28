@@ -98,5 +98,7 @@
     connected: () => true,
   });
 
-  window.claude = freeze({ use: name => Promise.resolve(name === 'room' ? namespace : null) });
+  // Capabilities by name; the db stand-in adds its own.
+  window.__mocks = { ...(window.__mocks || {}), room: namespace };
+  window.claude = freeze({ use: name => Promise.resolve(window.__mocks[name] || null) });
 })();

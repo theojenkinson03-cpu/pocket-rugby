@@ -23,6 +23,8 @@ const FILES = [
   'js/dice.js',
   'js/dom.js',
   'js/engine.js',
+  'js/friends-view.js',
+  'js/friends.js',
   'js/online-view.js',
   'js/online.js',
   'js/pitch.js',

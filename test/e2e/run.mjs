@@ -11,6 +11,10 @@ import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { seededRng } from '../../js/engine.js';
+import { hashText, rebuild } from '../../js/friends.js';
+import { createLeague, simulateFixture } from '../../js/tournament.js';
+import { dayKey } from '../../js/daily.js';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
@@ -77,6 +81,8 @@ async function snapshot(page) {
       meter: !document.querySelector('#meter').hidden ? [document.querySelector('#meter-0').textContent, document.querySelector('#meter-1').textContent] : null,
       boardCards: [0, 1].map(t => { const b = document.querySelector(`.side[data-team="${t}"] .side-card`); return b.hidden ? null : b.textContent; }),
       boardRarity: [0, 1].map(t => [...(document.querySelector(`.side[data-team="${t}"] .side-card .tc-chip`)?.classList || [])].find(c => c.startsWith('r-'))?.slice(2) || null),
+      rain: !document.querySelector('#rain').hidden,
+      wind: document.querySelector('#conditions .wind')?.textContent || null,
     };
   });
 }
@@ -143,6 +149,16 @@ function verify(snap, label) {
     }
     for (const t of m.teams) if (t.card) check(snap.buttons.some(b => b.card === t.card && !b.choice && b.text.includes(t.name)), `${label}: ${t.card} stamped for ${t.name}`);
   }
+  // Weather on the pitch: rain, and an arrow towards the end the wind blows to.
+  check(snap.rain === !!m.weather?.rain, `${label}: rain shown ${snap.rain}`);
+  const wind = m.weather?.wind ?? null;
+  const windNow = wind === null ? null : m.half === 1 ? wind : 1 - wind;
+  check(snap.wind === (windNow === null ? null : windNow === 0 ? 'Wind →' : '← Wind'), `${label}: wind "${snap.wind}" for ${windNow}`);
+  if (step.purpose === 'bench') {
+    const choices = snap.buttons.filter(b => b.choice);
+    check(choices.some(c => /Play on/.test(c.text)), `${label}: the bench offers to play on`);
+    for (const p of step.options.filter(o => o !== 'stay')) check(choices.some(c => c.text.startsWith(p === 'S' ? 'SH' : p === 'F' ? 'FW' : p === 'C' ? 'C' : p === 'W' ? 'OB' : 'FH')), `${label}: replace ${p}`);
+  }
   m.teams.forEach((t, i) => check(!!snap.boardCards[i] === !!t.card, `${label}: team ${i} card on the board`));
   m.teams.forEach((t, i) => check(snap.boardRarity[i] === (t.card ? t.cardRarity : null), `${label}: team ${i} card's rarity on the board`));
   if (m.attacker !== null && snap.meter) {
@@ -162,17 +178,18 @@ const tapAny = page => page.evaluate(() => {
   buttons[Math.floor(Math.random() * buttons.length)]?.click();
 });
 
-async function setUp(page, { mode = '1p', length = 'quick', cpu = null, style = null, cards = null }) {
+async function setUp(page, { mode = '1p', length = 'quick', cpu = null, style = null, cards = null, weather = null }) {
   await page.click(`[data-start="${mode}"]`);
   await page.click(`#len-${length}`, { force: true });
   if (cpu) await page.click(`#cpu-${cpu}`, { force: true });
   if (style) await page.click(`#style-${style}`, { force: true });
   if (cards !== null && (await page.isChecked('#setup-cards')) !== cards) await page.click('#setup-cards', { force: true });
+  if (weather !== null && (await page.isChecked('#setup-weather')) !== weather) await page.click('#setup-weather', { force: true });
   await page.click('#setup-form button[type=submit]');
 }
 
-async function playMatch(page, { label, mode = '1p', length = 'quick', tapStyle = 'random', skipScenes = true, budgetMs = 420000, setup = true, cpu, style, cards }) {
-  if (setup) await setUp(page, { mode, length, cpu, style, cards });
+async function playMatch(page, { label, mode = '1p', length = 'quick', tapStyle = 'random', skipScenes = true, budgetMs = 420000, setup = true, cpu, style, cards, weather }) {
+  if (setup) await setUp(page, { mode, length, cpu, style, cards, weather });
   return playOn(page, { label, tapStyle, skipScenes, budgetMs });
 }
 
@@ -235,8 +252,60 @@ async function playOn(page, { label, tapStyle = 'random', skipScenes = true, bud
 // The stand-in for the claude.ai room: every page that joins a relay hears
 // what the others send, as two phones would.
 const MOCK_ROOM = readFileSync(join(root, 'test/e2e/mock-room.js'), 'utf8');
+const MOCK_DB = readFileSync(join(root, 'test/e2e/mock-db.js'), 'utf8');
 
-async function newPage(browser, { prefs = {}, device = 'iPhone 13', colorScheme = 'light', reducedMotion = 'no-preference', relay = null } = {}) {
+// The shared data behind the db stand-in: one per scenario, shared by its pages.
+class MockStore {
+  constructor(names = {}) {
+    this.docs = new Map();
+    this.leases = new Map();
+    this.names = names;
+  }
+
+  static merge(into, patch) {
+    for (const [k, v] of Object.entries(patch)) {
+      if (v && typeof v === 'object' && !Array.isArray(v) && into[k] && typeof into[k] === 'object' && !Array.isArray(into[k])) MockStore.merge(into[k], v);
+      else into[k] = v;
+    }
+    return into;
+  }
+
+  handle(req) {
+    const copy = v => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
+    switch (req.op) {
+      case 'get': return { value: copy(this.docs.get(req.path) ?? null) };
+      case 'set': this.docs.set(req.path, copy(req.data)); return { value: null };
+      case 'update':
+        if (!this.docs.has(req.path)) return { error: 'invalid_argument' };
+        MockStore.merge(this.docs.get(req.path), copy(req.data));
+        return { value: null };
+      case 'delete': this.docs.delete(req.path); return { value: null };
+      case 'acquire': {
+        const now = Date.now();
+        const lease = this.leases.get(req.path);
+        if (lease && lease.until > now && lease.holder !== req.holder) return { value: { acquired: false, expiresAt: new Date(lease.until).toISOString() } };
+        this.leases.set(req.path, { holder: req.holder, until: now + req.ttlMs });
+        return { value: { acquired: true, version: 1, holder: req.holder } };
+      }
+      case 'query': {
+        const depth = req.path.split('/').length + 1;
+        let rows = [...this.docs.entries()].filter(([p]) => p.startsWith(`${req.path}/`) && p.split('/').length === depth).map(([path, data]) => ({ path, data: copy(data) }));
+        const ops = { '==': (a, b) => a === b, '!=': (a, b) => a !== b, '<': (a, b) => a < b, '<=': (a, b) => a <= b, '>': (a, b) => a > b, '>=': (a, b) => a >= b, in: (a, b) => b.includes(a) };
+        for (const [field, op, value] of req.spec.where) rows = rows.filter(r => ops[op](r.data[field], value));
+        if (req.spec.orderBy) {
+          const [field, dir] = req.spec.orderBy;
+          rows.sort((a, b) => (a.data[field] < b.data[field] ? -1 : a.data[field] > b.data[field] ? 1 : 0) * (dir === 'desc' ? -1 : 1));
+        } else rows.sort((a, b) => a.path.localeCompare(b.path));
+        if (req.spec.limit) rows = rows.slice(0, req.spec.limit);
+        return { value: rows };
+      }
+      case 'names': return { value: Object.fromEntries(req.ids.map(id => [id, this.names[id] || ''])) };
+    }
+    return { error: 'invalid_argument' };
+  }
+}
+
+async function newPage(browser, { prefs = {}, device = 'iPhone 13', colorScheme = 'light', reducedMotion = 'no-preference', relay = null, store = null, user = null } = {}) {
   const context = await browser.newContext({ ...devices[device], colorScheme, reducedMotion });
   const page = await context.newPage();
   const errors = [];
@@ -255,16 +324,186 @@ async function newPage(browser, { prefs = {}, device = 'iPhone 13', colorScheme 
     });
     await page.addInitScript(MOCK_ROOM);
   }
+  if (store) {
+    await page.exposeBinding('__dbCall', (source, text) => JSON.stringify(store.handle(JSON.parse(text))));
+    await page.addInitScript(u => (window.__mockUser = u), user);
+    await page.addInitScript(MOCK_DB);
+  }
   return { page, context, errors };
 }
 
 const saved = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem(`pocket-rugby:${k}`) || 'null'), key);
 
 const SCENARIOS = {
+  async 'daily-challenge'(browser, base) {
+    const store = new MockStore({ u_me: 'Sam', u_x: 'Alex', u_y: 'Kim' });
+    const today = dayKey();
+    // Two friends finished earlier today.
+    store.docs.set('daily/u_x', { day: today, won: true, score: [30, 25], rank: 1005, at: 1 });
+    store.docs.set('daily/u_y', { day: today, won: false, score: [22, 30], rank: 492, at: 2 });
+    store.docs.set('daily/u_z', { day: '2000-01-01', won: true, score: [30, 3], rank: 1027, at: 0 });
+    const { page, errors } = await newPage(browser, { prefs: { cinema: 'short', fast: true }, store, user: { id: 'u_me', name: 'Sam' } });
+    await page.goto(base);
+    check(/^Daily challenge #\d+$/.test(await page.textContent('#daily-label')), 'the title screen names today\'s challenge');
+    await page.click('#btn-daily');
+    await page.waitForSelector('.board-list li');
+    let rows = await page.$$eval('.board-list li', li => li.map(x => x.textContent));
+    check(rows.length === 2 && rows[0].includes('Alex') && rows[1].includes('Kim'), `today's board only, best first: ${rows}`);
+    check(/down, \d+ to play/i.test(await page.textContent('.daily-card .nc-title')), 'the situation in a line');
+    await page.click('#daily-body .btn-play');
+    const result = await playOn(page, { label: 'daily' });
+    const note = await page.textContent('#break-note');
+    check(/^Daily #\d+: (won|lost) \d+–\d+ from \d+–\d+\.$/.test(note), `daily note "${note}"`);
+    await page.click('#break-actions .btn-primary');
+    await page.waitForSelector('.board-list li.mine');
+    rows = await page.$$eval('.board-list li', li => li.map(x => x.textContent));
+    check(rows.length === 3, `three on the board now: ${rows}`);
+    const mine = store.docs.get('daily/u_me');
+    check(mine?.day === today && mine.days[today].rank === mine.rank, 'the result is saved under my id');
+    const at = rows.findIndex(r => r.includes('Sam'));
+    check(at === (mine.won ? (mine.rank > 1005 ? 0 : 1) : mine.rank > 492 ? 1 : 2), `ranked by result: ${rows}`);
+    // The score card and the result line.
+    await page.click('text=Save score card');
+    await page.waitForFunction(() => window.__downloaded.length === 1);
+    const file = await page.evaluate(() => window.__downloaded[0]);
+    check(/^pocket-rugby-daily-\d+\.png$/.test(file.filename) && file.size > 20000, `score card ${JSON.stringify(file)}`);
+    // A second go is practice: it doesn't change the result or the board.
+    await page.click('text=Practice');
+    await page.waitForSelector('#view-match:not([hidden])');
+    check((await page.textContent('#period')).includes('practice'), 'practice is labelled');
+    await page.click('#btn-menu');
+    await page.click('#btn-quit');
+    await page.waitForSelector('#view-daily:not([hidden])');
+    check(JSON.stringify(store.docs.get('daily/u_me')) === JSON.stringify(mine), 'practice leaves the board alone');
+    check(/Your result today: (Won|Lost)/.test(await page.textContent('.daily-status')), 'the day\'s result stands');
+    return { errors, ...result };
+  },
+  async 'champions-cup-and-club-career'(browser, base) {
+    const { page, errors } = await newPage(browser, { prefs: { cinema: 'off', fast: true } });
+    await page.goto(base);
+    await page.click('#btn-tournament');
+    await page.click('.comp:has(input[value="champions"])');
+    await page.click('.team-tile >> text=Munster');
+    await page.click('#tournament-body .btn-primary');
+    check((await page.$$('.standings')).length === 4, 'four pools');
+    check((await page.$$('.standings tbody tr')).length === 24, 'twenty-four clubs');
+    check(/Pool 3 · Round 1 of 4/.test(await page.textContent('.next-card .nc-kicker')), 'Munster are in Pool 3');
+    check((await page.textContent('.next-card .nc-venue')).length > 3, 'the ground is named');
+    await page.click('.next-card .btn-primary');
+    const result = await playOn(page, { label: 'champions cup' });
+    const note = await page.textContent('#break-note');
+    check(/^Munster are \d+(st|nd|rd|th) in Pool 3\.$/.test(note), `pool note "${note}"`);
+    await page.click('#break-actions .btn-primary');
+    // A URC season played out, then on into the Champions Cup and the next season.
+    const playOut = async () => page.evaluate(async () => {
+      const T = await import('/js/tournament.js');
+      const t = JSON.parse(localStorage.getItem('pocket-rugby:tournament'));
+      for (let g = 0; t.stage !== 'done' && g < 80; g++) {
+        const f = T.userFixture(t);
+        if (f) T.recordResult(t, f.id, T.simulateFixture(t, f));
+        T.simulateRound(t);
+        T.advance(t);
+      }
+      localStorage.setItem('pocket-rugby:tournament', JSON.stringify(t));
+      return t.stage;
+    });
+    await page.evaluate(async () => {
+      const T = await import('/js/tournament.js');
+      localStorage.setItem('pocket-rugby:tournament', JSON.stringify(T.createLeague({ league: 'urc', userTeam: 'munster', season: 'short' })));
+    });
+    check((await playOut()) === 'done', 'a URC season played out');
+    await page.reload();
+    await page.click('#btn-tournament');
+    check(/Play the 2026–27 Champions Cup/.test(await page.textContent('.next-card .btn-primary')), 'Munster go on to the Champions Cup');
+    await page.click('.next-card .btn-primary');
+    check((await page.textContent('#tournament-title')) === 'Champions Cup', 'into the Champions Cup');
+    check((await page.$$('section.club')).length === 1, 'the club career has begun');
+    check((await playOut()) === 'done', 'the Champions Cup played out');
+    await page.reload();
+    await page.click('#btn-tournament');
+    check(/Start the 2027–28 season/.test(await page.textContent('.next-card .btn-primary')), 'then the next season');
+    await page.click('.next-card .btn-primary');
+    check(/URC 2027–28/.test(await page.textContent('.hub-head small')), 'season two of the URC');
+    const history = await page.$$eval('.season-row', rows => rows.map(r => r.textContent));
+    check(history.length === 1 && /2026–27/.test(history[0]) && /URC: \d+(st|nd|rd|th) of 16/.test(history[0]) && /Champions Cup:/.test(history[0]), `season one in the history: ${history}`);
+    check((await page.$$('.rb-row')).length >= 5, 'a records book');
+    return { errors, ...result };
+  },
+  async 'friends-league'(browser, base) {
+    const store = new MockStore({ u_a: 'Alex', u_b: 'Sam' });
+    const relay = [];
+    const a = await newPage(browser, { prefs: { cinema: 'off', fast: true }, relay, store, user: { id: 'u_a', name: 'Alex' } });
+    const b = await newPage(browser, { prefs: { cinema: 'off', fast: true }, device: 'Pixel 7', relay, store, user: { id: 'u_b', name: 'Sam' } });
+    await a.page.goto(base);
+    await b.page.goto(base);
+    // Alex starts a Prem league with Bath.
+    await a.page.click('#btn-friends');
+    await a.page.click('.friends-create .team-tile >> text=Bath');
+    await a.page.click('text=Start the league');
+    await a.page.waitForSelector('.ol-code');
+    const code = (await a.page.textContent('.ol-code')).replace(/\s/g, '').toLowerCase();
+    // Sam joins and takes Gloucester.
+    await b.page.click('#btn-friends');
+    await b.page.fill('#friends-code', code);
+    await b.page.click('.ol-join button[type=submit]');
+    await b.page.waitForSelector('.team-tile.taken');
+    check(/Bath/.test(await b.page.textContent('.team-tile.taken')), 'Alex\'s club is shown as taken');
+    await b.page.click('.team-tile:not([disabled]) >> text=Gloucester');
+    await a.page.waitForFunction(() => document.querySelectorAll('.members .member').length === 2);
+    // Pick a seed that puts Bath and Gloucester together in round one.
+    const doc = store.docs.get(`friends/${code}`);
+    for (let seed = 1; ; seed++) {
+      const t = createLeague({ league: 'prem', userTeam: 'bath', season: doc.season, rng: seededRng(seed) });
+      if (t.fixtures.some(f => f.round === 0 && [f.home, f.away].sort().join() === 'bath,gloucester')) {
+        doc.seed = seed;
+        break;
+      }
+    }
+    await a.page.click('text=Start the season');
+    await Promise.all([a, b].map(p => p.page.waitForSelector('.next-card .btn-play')));
+    check(/Play Sam/.test(await a.page.textContent('.next-card .btn-play')), 'Alex plays Sam');
+    check(/Play Alex/.test(await b.page.textContent('.next-card .btn-play')), 'Sam plays Alex');
+    // Round one: friend against friend, phone to phone.
+    await a.page.click('.next-card .btn-play');
+    await b.page.click('.next-card .btn-play');
+    await Promise.all([a, b].map(p => p.page.waitForSelector('#view-match:not([hidden])', { timeout: 120000 })));
+    const played = await Promise.all([playOn(a.page, { label: 'alex', budgetMs: 600000 }), playOn(b.page, { label: 'sam', budgetMs: 600000 })]);
+    const scores = await Promise.all([a, b].map(p => p.page.textContent('#break-score')));
+    check(scores[0] === scores[1], `both phones agree: ${scores}`);
+    for (const p of [a, b]) await p.page.click('#break-actions .btn-primary');
+    await Promise.all([a, b].map(p => p.page.waitForFunction(() => /Round 2/.test(document.querySelector('.next-card .nc-kicker')?.textContent || ''), null, { timeout: 60000 })));
+    const results = [...store.docs.keys()].filter(k => k.startsWith(`friends/${code}/results/`));
+    check(results.length === 1, `one result saved (${results})`);
+    // Round two: each against the CPU, at the same time.
+    for (const p of [a, b]) {
+      check(/^Play$/.test((await p.page.textContent('.next-card .btn-play span')).trim()), 'a CPU match next');
+      await p.page.click('.next-card .btn-play');
+    }
+    const second = await Promise.all([playOn(a.page, { label: 'alex cpu' }), playOn(b.page, { label: 'sam cpu' })]);
+    for (const p of [a, b]) await p.page.click('#break-actions .btn-primary');
+    await Promise.all([a, b].map(p => p.page.waitForFunction(() => /Round 3/.test(document.querySelector('.next-card .nc-kicker')?.textContent || ''), null, { timeout: 60000 })));
+    const tables = await Promise.all([a, b].map(p => p.page.$$eval('.standings tbody tr', rows => rows.map(r => r.textContent))));
+    check(JSON.stringify(tables[0]) === JSON.stringify(tables[1]), 'both phones show the same table');
+    check(tables[0].length === 10, 'ten clubs');
+    // The rest of the season: their results arrive as if played elsewhere.
+    const clubs = { bath: { uid: 'u_a' }, gloucester: { uid: 'u_b' } };
+    for (let guard = 0; guard < 40; guard++) {
+      const shared = Object.fromEntries([...store.docs.entries()].filter(([k]) => k.startsWith(`friends/${code}/results/`)).map(([k, v]) => [k.split('/').pop(), v]));
+      const built = rebuild(store.docs.get(`friends/${code}`), clubs, shared, 'u_a');
+      if (built.t.stage === 'done') break;
+      for (const f of built.pending) store.docs.set(`friends/${code}/results/${f.id}`, simulateFixture(built.t, f, seededRng(hashText(f.id))));
+    }
+    await Promise.all([a, b].map(p => p.page.waitForSelector('.next-card.champions', { timeout: 60000 })));
+    const champs = await Promise.all([a, b].map(p => p.page.textContent('.next-card .nc-title')));
+    check(champs[0].replace('Champions!', '') === champs[1].replace('Champions!', '') || champs.includes('Champions!'), `the same champion: ${champs}`);
+    const finalTables = await Promise.all([a, b].map(p => p.page.$$eval('.standings tbody tr', rows => rows.map(r => r.textContent))));
+    check(JSON.stringify(finalTables[0]) === JSON.stringify(finalTables[1]), 'the same final table');
+    return { errors: [...a.errors, ...b.errors], title: champs.join(' / '), checks: played[0].checks + played[1].checks + second[0].checks + second[1].checks, actions: played[0].actions + played[1].actions + second[0].actions + second[1].actions, seen: played[0].seen };
+  },
   async 'one-player-full-cinematics'(browser, base) {
     const { page, errors } = await newPage(browser, { prefs: { cinema: 'full', fast: true } });
     await page.goto(base);
-    const result = await playMatch(page, { label: '1p full', mode: '1p' });
+    const result = await playMatch(page, { label: '1p full', mode: '1p', weather: true });
     check(result.seen.has('cinema'), 'cinematic scenes played');
     check(/win/i.test(result.title), `full-time title "${result.title}"`);
     return { errors, ...result };
@@ -386,7 +625,7 @@ const SCENARIOS = {
     await page.click('#btn-career');
     const got = await page.$$eval('.ach.got', li => li.map(x => x.textContent));
     check(got.some(t => t.includes('Graduate')), 'career screen shows Graduate');
-    check((await page.$$('.ach')).length === 34, 'all 34 achievements listed');
+    check((await page.$$('.ach')).length === 36, 'all 36 achievements listed');
     return { errors, ...result, actions: result.actions + tips };
   },
   async 'nations-cup'(browser, base) {

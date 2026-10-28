@@ -130,6 +130,22 @@ export function lobbyPage(state, handlers) {
   const net = state.connected ? null : spinner('Reconnecting…');
   if (net) page.append(net);
 
+  // A friends-league match: both phones come straight here from the league.
+  if (state.friendsFixture) {
+    const fx = state.friendsFixture;
+    const card = el('section', 'ol-card ol-vs');
+    card.append(el('p', 'nc-kicker', fx.label));
+    const host = state.role === 'host';
+    const theirs = state.peer?.team || fx.opponent;
+    card.append(...(host ? [teamBadge(state.team, 'You · home'), el('span', 'nc-v', 'v'), teamBadge(theirs, state.peer ? 'Here' : 'On their way')] : [teamBadge(theirs, state.peer ? 'Here' : 'On their way'), el('span', 'nc-v', 'v'), teamBadge(state.team, 'You · away')]));
+    page.append(card);
+    if (state.mismatch) page.append(el('p', 'ol-error', 'You’re on different versions of the game. Both reload the page, then try again.'));
+    else if (!state.peer) page.append(spinner(`Waiting for ${fx.friendName || 'your friend'} to open this match on their phone…`));
+    else page.append(spinner(host ? 'Kicking off…' : `Waiting for ${fx.friendName || 'your friend'} to kick off…`));
+    page.append(button('Back to the league', handlers.onCancel, 'btn btn-quiet btn-wide'));
+    return page;
+  }
+
   if (state.phase === 'hosting') {
     const codeBox = el('section', 'ol-card ol-code-card');
     codeBox.append(el('p', 'nc-kicker', 'Your match code'));

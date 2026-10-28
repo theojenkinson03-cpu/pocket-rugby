@@ -120,7 +120,8 @@ test('qualification: the top eight of the table go into next season\'s Champions
   playOut(cup, rng, false);
   const next = continueClub(cup, rng);
   const club = next.club;
-  assert.deepEqual(club.cupField.prem, table.slice(0, EUROPE_PLACES));
+  assert.equal(EUROPE_PLACES, 8, 'eight from each league');
+  assert.deepEqual(club.cupField.prem, table.slice(0, 8));
   assert.ok(!playsEurope(club));
   assert.equal(club.cupField.urc.length, 8);
   // A season with no Europe goes straight to the next one.
@@ -195,4 +196,19 @@ test('how far a side got, in words', () => {
   assert.ok(words.has('Semi-finals'));
   assert.ok(words.has('Barrages'));
   assert.ok(words.has('Missed the play-offs'));
+});
+
+test('the winning run: the longest unbroken run of wins, reset by a defeat', () => {
+  const t = createLeague({ league: 'prem', userTeam: 'bath', rng: seededRng(8) });
+  const others = ['sale', 'exeter', 'bristol', 'gloucester', 'harlequins', 'leicester'];
+  // Won, won, lost, won, won, won: the record is three in a row, not five.
+  const wins = [true, true, false, true, true, true];
+  t.fixtures = others.map((id, i) => ({ id: `X${i}`, stage: 'league', round: i, group: 'L', home: 'bath', away: id, result: { score: wins[i] ? [20, 10] : [10, 20], tries: [2, 1], winner: wins[i] ? 'home' : 'away' } }));
+  const club = newClub(t);
+  closeCompetition(club, t);
+  assert.equal(club.records.bestRun.wins, 3);
+  assert.equal(club.run, 3, 'the current run carries into next season');
+  assert.equal(club.current.won, 5);
+  assert.equal(club.current.lost, 1);
+  assert.equal(club.records.heaviestDefeat.score, '10–20');
 });

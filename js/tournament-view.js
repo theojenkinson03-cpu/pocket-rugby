@@ -15,14 +15,14 @@ import { kitVars } from './color.js';
 
 const STRENGTH = { expert: ['Favourites', 3], pro: ['Contenders', 2], rookie: ['Outsiders', 1] };
 
-const kitChip = (team, className = 'kit') => {
+export const kitChip = (team, className = 'kit') => {
   const chip = el('span', className);
   kitVars(chip, team);
   chip.style.setProperty('--alt', team.alt || team.color);
   return chip;
 };
 
-function seg(legend, name, options, value, onChange) {
+export function seg(legend, name, options, value, onChange) {
   const box = el('fieldset', `seg${options.length === 3 ? ' seg-3' : ''}`);
   box.append(el('legend', null, legend));
   for (const [v, label, note] of options) {
@@ -225,7 +225,7 @@ function nextMatchCard(t, handlers) {
   return card;
 }
 
-function table(t, group) {
+export function table(t, group) {
   const rows = standings(t, group);
   const europe = t.kind === 'champions';
   const qualify = group === 'L' ? QUALIFY[t.playoff || 'top4'] : europe ? CHAMPIONS_CUP.through : 2;
@@ -272,7 +272,7 @@ function fixtureRow(t, f) {
   return row;
 }
 
-function bracket(t) {
+export function bracket(t) {
   const wrap = el('section', 'bracket');
   wrap.append(el('h3', 'page-h', 'Knockouts'));
   const col = (title, list, note = null) => {
@@ -309,7 +309,7 @@ function bracket(t) {
   return wrap;
 }
 
-function results(t) {
+export function results(t) {
   const played = t.fixtures.filter(f => f.result);
   if (!played.length) return null;
   const wrap = el('section', 'results');

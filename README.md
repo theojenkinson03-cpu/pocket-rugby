@@ -13,6 +13,8 @@ Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly
 - **Four real leagues**, each with its real teams and its own play-offs (see [Leagues](#leagues)). Play a short season of six rounds or a full one where everyone meets once.
 - **Champions Cup**: the real 2026–27 draw, 24 clubs from the Prem, the URC and the Top 14 (see [Champions Cup](#champions-cup)).
 - **Club career**: when a league season ends, carry on into the next with the same club and squad (see [Club career](#club-career)).
+- **Daily challenge**: the same rigged situation for everyone each day, with a shared leaderboard and a score card to share (see [Daily challenge](#daily-challenge)).
+- **Friends league**: several phones each take a club in the same league, and the CPU plays the rest (see [Friends league](#friends-league)).
 - Tables use 4 points for a win and bonus points for 4 tries or losing by 7 or fewer. Other fixtures are played out by the engine, CPU against CPU, with each side's own level and style.
 - **Learn to play**: a guided first match against a Rookie, with a coach who explains each part of the game the first time it comes up. New players see it first on the title screen.
 
@@ -59,6 +61,26 @@ The hub keeps the club's story:
 
 Every match in a competition counts, the ones the engine plays out as well as yours: every fixture keeps each player's numbers and the Player of the Match. The hub lists the top try scorers, top points scorers, most metres and most tackles, and a **Team of the Season**: the best average match rating at each position among the regulars (at least half as many matches as the most at that position), with a Player of the Season named when the competition ends.
 
+## Daily challenge
+
+One situation a day, the same for everyone (it changes at midnight UTC): two real clubs from one league, deep in the second half, with you behind and the other side close to the finish. "7 down, 5 to play" in a first-to-30 race means they need 5 more points to win and you trail by 7. The date also picks who has the ball (your ball, their ball, a penalty, a scrum or a lineout), the team cards, the weather and a twist (an injury, a sin-binned player). The situation is redrawn until the win model gives you an uphill but real chance, between 12% and 42%.
+
+- The dice are your own: the situation is fixed, the rolls aren't (seeding them as well would let a day that starts with the CPU's ball be settled before you made a choice).
+- Your **first attempt counts**. It goes on the day's shared leaderboard (wins first, by the winning margin, then defeats by how close they were), and its result stays on your phone with your past days. An attempt left unfinished counts as no result. Play again as often as you like as practice.
+- **Share it**: save a score card (an image with the day, the situation, the final score and a square for every score after you took over) or copy a result line.
+
+The leaderboard lives in the page's shared data on claude.ai, so it needs the page open there, signed in, and shared with your friends (as Contributors, so their results can be saved). Each player writes only their own entry; names come from claude.ai, not from the game.
+
+## Friends league
+
+Several phones, one league. One friend starts it: pick the league (Prem, URC, Top 14 or Super Rugby), your club, the season and match length, and the team cards, bench and weather. The league gets a six-letter code; friends join with it and pick their own clubs (two friends can't take the same one). When everyone's in, whoever started it kicks off the season, and the CPU takes every club nobody picked.
+
+- Each round, play your match: against a CPU club on your own phone, or against a friend's club online, phone to phone (the home side's phone hosts; both phones just open the match and it kicks off).
+- A round moves on when every friend's match in it is played; the hub shows whose match is still to come. The CPU's matches are played out on every phone with dice seeded by the league and the fixture, so every phone gets the same results without anyone sending them. Only the results of matches people played are stored.
+- The table, play-offs, season stats and Team of the Season work as in any league. A friend who leaves mid-season hands their club to the CPU, so nobody waits for them.
+
+Like the leaderboard, a friends league lives in the page's shared data on claude.ai: everyone opens the page there, signed in, with access to it as a Contributor.
+
 ## Weather and the bench
 
 Two optional rules, switched on or off on the team sheet, in the competition setup and in the online lobby, like the team cards:
@@ -83,7 +105,7 @@ Three of twelve cards are dealt after the coin toss. Each card bends one rule fo
 - **Player of the Match** after every match, with a spotlight scene, and a table of every player's tries, metres, carries, line breaks, tackles, missed tackles, turnovers, kicking points and errors. The team report adds metres per carry and tackle success.
 - **Win meter.** A live bar under the scoreboard shows each side's chance of winning, from a model of how possessions end (it agrees with simulated matches to within a few points), with each side's team card counted as an edge worth its measured lift. The full-time report charts it through the match as a momentum graph, with every score marked.
 - **Career.** Your record against each CPU level and online, streaks, points, tries, biggest win, trophies, and the team cards you've won with, each at the rarest you've had.
-- **34 achievements**, from Hat-trick, Hundred Metres and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert), Mythic (win with a Mythic card), Champions of Europe, The Double (your league and the Champions Cup in one season), Dynasty (three league titles with one club) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
+- **36 achievements**, from Hat-trick, Hundred Metres and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert), Mythic (win with a Mythic card), Champions of Europe, The Double (your league and the Champions Cup in one season), Dynasty (three league titles with one club), Late Show (win a daily challenge), Bragging Rights (win a friends league) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
 
 ## Presentation
 
@@ -140,8 +162,8 @@ The rules engine is checked from several directions. [RULES.md](RULES.md) maps e
 ```sh
 npm test               # 220+ tests: rules, cards at every rarity, weather and the bench, players, tournaments, the Champions Cup, season stats, club careers, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 149 bugs; every one must be caught
-npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match
+npm run test:mutation  # plants 162 bugs; every one must be caught
+npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match, the daily challenge with its leaderboard and a two-phone friends league
 npm run check          # all of the above
 ```
 
@@ -181,6 +203,8 @@ A standard match averages about 5 tries and 2 drop goals, and the kick-off recei
 | `js/season.js` | Season stats: player totals, leaders, Team of the Season |
 | `js/club.js` | Club career: seasons, Champions Cup qualification, records and trophies |
 | `js/color.js` | Kit colours and patterns |
+| `js/daily.js` | The daily challenge: the day's situation, ranking and the result line |
+| `js/friends.js` | Friends league: rebuilding the shared league the same way on every phone |
 | `js/career.js` | Career record and achievements |
 | `js/coach.js` | The coach's tips |
 | `js/online.js` | Online protocol: moves, checks and the room session |
@@ -190,7 +214,7 @@ A standard match averages about 5 tries and 2 drop goals, and the kick-off recei
 | `js/report.js` | Match report: Player of the Match, player stats, momentum chart |
 | `js/*-view.js`, `js/pitch.js` | Tournament, career, online and card screens; 3D dice; the SVG pitch |
 | `js/audio.js` | Synthesised sound effects (no audio files) |
-| `test/` | Unit, exhaustive, fuzz, odds, static and browser tests (with a stand-in for the online room) |
+| `test/` | Unit, exhaustive, fuzz, odds, static and browser tests (with stand-ins for the online room and the shared data) |
 | `scripts/` | Balance and CPU simulations, mutation testing and the single-file build |
 
 No build step and no runtime dependencies. It's plain HTML, CSS and ES modules. Playwright is only needed for the browser tests.

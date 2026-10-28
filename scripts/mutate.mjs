@@ -1,7 +1,8 @@
 // Mutation testing: plants one deliberate rules bug at a time in a copy of
 // the code and checks the test suite catches it. A bug that slips through
 // ("survived") means a rule is not really tested.
-// Usage: node scripts/mutate.mjs   (MUTANT=catch-up node scripts/mutate.mjs for some of them)
+// Usage: node scripts/mutate.mjs   (MUTANT=catch-up node scripts/mutate.mjs for some of
+//        them, MUTANT_SHARD=1/3 for a third of them)
 
 import { spawn } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -93,7 +94,8 @@ const MUTANTS = [
   ['A win is worth 3', 'js/tournament.js', 'row.points += POINTS.win;', 'row.points += 3;'],
   ['Losing bonus only within 6', 'js/tournament.js', '<= POINTS.losingBonusWithin', '< POINTS.losingBonusWithin'],
   ['Try bonus for winners only', 'js/tournament.js', 'if (r.tries[side] >= POINTS.tryBonusAt) {', 'if (won && r.tries[side] >= POINTS.tryBonusAt) {'],
-  ['Table ignores points difference', 'js/tournament.js', ' || (b.for - b.against) - (a.for - a.against)', ''],
+  ['Table ignores points difference', 'js/tournament.js', 'return b.points - a.points || (b.for - b.against) - (a.for - a.against) ||', 'return b.points - a.points ||'],
+  ['Champions Cup seeding ignores the tables', 'js/tournament.js', 'const order = rows => [...rows].sort(tableOrder);', 'const order = rows => [...rows];'],
   ['Pool winners meet in the semis', 'js/tournament.js', "fixture('SF1', 'semi', 0, a[0].id, b[1].id), fixture('SF2', 'semi', 0, b[0].id, a[1].id)", "fixture('SF1', 'semi', 0, a[0].id, b[0].id), fixture('SF2', 'semi', 0, a[1].id, b[1].id)"],
   ['Prem semis 1 v 2 and 3 v 4', 'js/tournament.js', "tie(t, 'SF1', 'semi', at(1), at(4)), tie(t, 'SF2', 'semi', at(2), at(3))", "tie(t, 'SF1', 'semi', at(1), at(2)), tie(t, 'SF2', 'semi', at(3), at(4))"],
   ['URC quarter-finals 1v7 and 2v8', 'js/tournament.js', "tie(t, 'QF1', 'qf', at(1), at(8))", "tie(t, 'QF1', 'qf', at(1), at(7))"],
@@ -159,6 +161,17 @@ const MUTANTS = [
   ['The double never awarded', 'js/club.js', "if (season.league?.stage === 'champion' && season.europe?.stage === 'champion')", 'if (false)'],
   ['Dynasty after two titles', 'js/career.js', '(c.tournament?.leagueTitles || 0) >= 3', '(c.tournament?.leagueTitles || 0) >= 2'],
 
+  // The daily challenge and the friends league.
+  ['A different daily challenge every time', 'js/daily.js', 'const rng = seededRng(daySeed(key));', 'const rng = seededRng(Math.floor(Math.random() * 2 ** 32));'],
+  ['Daily defeats rank above wins', 'js/daily.js', 'rank: won ? 1000 + margin : 500 + margin', 'rank: won ? 500 + margin : 1000 + margin'],
+  ['Daily difficulty never checked', 'js/daily.js', '    if (miss === 0) break;', '    break;'],
+  ['Daily scores that don\'t add up', 'js/daily.js', '    if (rest < 0 || rest % 3) continue;', '    if (rest < 0) continue;'],
+  ['Friends: CPU results differ by phone', 'js/friends.js', 'seededRng(hashText(`${settings.seed}:${settings.code}:${fixtureId}`))', 'seededRng(hashText(`${settings.seed}:${settings.code}:${fixtureId}:${Math.random()}`))'],
+  ['Friends: rounds don\'t wait for people', 'js/friends.js', "      } else pending.push(f);", "      } else f.result = simulateFixture(t, f, fixtureRng(settings, f.id));"],
+  ['Friends: the away side hosts', 'js/friends.js', "if (humanOf(clubs, f.home) === me) return 'host';", "if (humanOf(clubs, f.home) === me) return 'guest';"],
+  ['Friends: one room for every match', 'js/friends.js', 'makeCode(seededRng(hashText(`room:${settings.code}:${fixtureId}`)))', 'makeCode(seededRng(hashText(`room:${settings.code}`)))'],
+  ['Friends: edited squads ignored', 'js/friends.js', '    if (team && club.roster) team.roster = { ...club.roster };', ''],
+
   // Weather and the bench.
   ['Rain makes no difference', 'js/engine.js', 'const wet = !!match.weather?.rain && WET_HANDS', 'const wet = false && WET_HANDS'],
   ['Everyone knocks on in the rain', 'js/engine.js', "export const WET_HANDS = ['F', 'C'];", "export const WET_HANDS = ['F', 'C', 'W', 'B'];"],
@@ -188,7 +201,7 @@ const MUTANTS = [
 
 function run(cwd) {
   return new Promise(resolve => {
-    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions'].map(f => `test/${f}.test.mjs`);
+    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions', 'daily', 'friends'].map(f => `test/${f}.test.mjs`);
     const child = spawn(process.execPath, ['--test', ...files], { cwd, env: { ...process.env, FUZZ_MATCHES: '120' }, stdio: 'ignore' });
     child.on('exit', code => resolve(code));
   });
@@ -210,10 +223,12 @@ async function mutant([name, file, from, to]) {
   }
 }
 
-// MUTANT=catch-up runs only the mutants whose name contains that text.
+// MUTANT=catch-up runs only the mutants whose name contains that text;
+// MUTANT_SHARD=2/3 runs every third one starting from the second, for CI.
 const only = process.env.MUTANT?.toLowerCase();
+const [shard, shards] = (process.env.MUTANT_SHARD || '1/1').split('/').map(Number);
 const results = [];
-const queue = MUTANTS.filter(([name]) => !only || name.toLowerCase().includes(only));
+const queue = MUTANTS.filter(([name], i) => (!only || name.toLowerCase().includes(only)) && i % shards === shard - 1);
 await Promise.all(Array.from({ length: 4 }, async () => {
   while (queue.length) results.push(await mutant(queue.shift()));
 }));

@@ -87,8 +87,10 @@ test('wind and a team card add up on a kick', () => {
 });
 
 test('rain: the Forwards and Centres knock on with their free pass; nobody else does', () => {
+  assert.deepEqual(WET_HANDS, ['F', 'C']);
   const m = stateAt();
   m.weather = { rain: true, wind: null };
+  for (const pos of ['W', 'B']) assert.equal(attackFace(m, 0, pos, freePass(pos)).face.kind, 'pass', `${pos} keeps hold in the rain`);
   for (const pos of POSITIONS) {
     DICE[pos].faces.forEach((f, i) => {
       const { face, wet } = attackFace(m, 0, pos, i);

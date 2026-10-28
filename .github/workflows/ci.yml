@@ -6,29 +6,45 @@ on:
 
 jobs:
   rules:
-    name: Rules, fuzzing and mutation tests
+    name: Rules and fuzzing
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Unit, exhaustive, card, tournament, career, online, odds and static tests
+      - name: Unit, exhaustive, card, weather and bench, tournament, Champions Cup, club, daily, friends league, career, online, odds and static tests
         run: npm test
       - name: Deep fuzz (8,000 matches)
         run: node --test test/invariants.test.mjs
         env:
           FUZZ_MATCHES: 8000
-      - name: Mutation testing (every planted bug must be caught)
-        run: npm run test:mutation
       - name: Balance simulation
         run: node scripts/simulate.mjs 2000
+
+  mutation:
+    name: Mutation tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/3', '2/3', '3/3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Every planted bug must be caught
+        run: npm run test:mutation
+        env:
+          MUTANT_SHARD: ${{ matrix.shard }}
 
   browser:
     name: Browser tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,7 +56,7 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Build the single-file version
         run: npm run build
-      - name: Play matches in the browser (CPU, two players, guided match, Nations Cup, league season, Mythic deal, online on two phones)
+      - name: Play matches in the browser (CPU, two players, guided match, Nations Cup, league season, Mythic deal, online on two phones, daily challenge, friends league)
         run: node test/e2e/run.mjs
         env:
           E2E_SKIP: unskipped

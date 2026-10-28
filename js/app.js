@@ -20,8 +20,10 @@ import { lobbyPage } from './online-view.js';
 import { momentumChart, momentumFacts, playersTables, potmCard } from './report.js';
 import { createCinema } from './cinema.js';
 import { continueClub } from './club.js';
-import { dailyDice, dailyMatch, dailyResult, dailyScenario, dayKey, scenarioTitle, shareText } from './daily.js';
+import { dailyMatch, dailyResult, dailyScenario, dayKey, scenarioTitle, shareText } from './daily.js';
 import { dailyPage, scoreCard } from './daily-view.js';
+import { fixtureRoomCode, humanOf, myPending, newFriendsLeague, rebuild, roleIn } from './friends.js';
+import { friendsPage } from './friends-view.js';
 import { createPitch } from './pitch.js';
 import { buzz, play, setSoundEnabled, unlockAudio } from './audio.js';
 import { customKit, kitVars, PATTERN_NAMES, PATTERNS } from './color.js';
@@ -113,6 +115,8 @@ function contextLabel(context) {
   if (!context) return null;
   if (context.kind === 'learn') return 'Guided match';
   if (context.kind === 'daily') return `Daily #${context.number}${context.official ? '' : ' · practice'}`;
+  if (context.kind === 'friends') return context.label;
+  if (context.kind === 'online' && context.friends) return context.friends.label;
   if (context.kind === 'online') return 'Online';
   if (context.kind === 'tournament') {
     const t = ui.tournament;
@@ -145,7 +149,7 @@ function renderHome() {
     $('#tournament-detail').textContent = `${teamOf(t, t.userTeam).name}${t.club ? ` · ${t.seasonName}` : ''} · ${stageName(t)}`;
   } else {
     $('#tournament-label').textContent = 'Cups & leagues';
-    $('#tournament-detail').textContent = 'Nations Cup, Champions Cup, Super Rugby, Prem, URC, Top 14';
+    $('#tournament-detail').textContent = 'Champions Cup, four leagues, Nations Cup';
   }
 }
 
@@ -480,9 +484,7 @@ async function dispatch(action) {
   if (ui.busy || !ui.match) return;
   const before = ui.match;
   const online = ui.context?.kind === 'online' && ui.online;
-  // The daily challenge's dice are the day's seeded stream, picked up where they left off.
-  const daily = ui.context?.kind === 'daily' ? dailyDice(ui.daily?.scenario || dailyScenario(ui.context.key), ui.context.rngUsed || 0) : null;
-  const rng = online ? recordingRng() : daily || Math.random;
+  const rng = online ? recordingRng() : Math.random;
   let result;
   try {
     result = act(before, action, rng);
@@ -491,7 +493,6 @@ async function dispatch(action) {
     return;
   }
   if (online) ui.online.session.shareMove(result.state, { s: before.seq, a: encodeAction(action), r: rng.used });
-  if (daily) ui.context.rngUsed = daily.used();
   await applyOutcome(before, result);
 }
 
@@ -622,8 +623,19 @@ function finishMatch() {
     }
   }
   if (context.kind === 'daily') finishDaily(m, context, outcome);
+  if (context.kind === 'friends') {
+    sendFriendsResult(context.code, context.fixture, resultFromMatch(null, m, context.userIsHome));
+    outcome.note = `${m.winner === 0 ? 'A win' : 'A defeat'} for your club. The result is in the league.`;
+  }
+  // Online, team 0 is the home side, whichever phone this is.
+  if (context.kind === 'online' && context.friends) {
+    sendFriendsResult(context.friends.code, context.friends.fixture, resultFromMatch(null, m, true));
+    outcome.note = 'The result is in the league.';
+  }
   const mode = context.kind === 'online' ? 'online' : context.kind === 'learn' ? 'learn' : m.mode;
-  outcome.unlocked = recordMatch(ui.career, m, ui.tracker || newTracker(null), { mode, level: m.cpuLevel, tournament: cup });
+  // A friends league's final, won, is the league won.
+  const friendsFinal = (context.kind === 'friends' && context.fixture === 'F') || (context.kind === 'online' && context.friends?.fixture === 'F');
+  outcome.unlocked = recordMatch(ui.career, m, ui.tracker || newTracker(null), { mode, level: m.cpuLevel, tournament: cup, daily: context.kind === 'daily', friendsFinal });
   save('career', ui.career);
   const facts = momentumFacts(ui.history, m);
   if (facts?.comeback && !outcome.note) outcome.note = `${m.teams[facts.winner].name} came back from a ${pct(facts.low)} chance of winning.`;
@@ -1003,6 +1015,7 @@ function renderBoard(m) {
       cardBtn.onclick = () => openCardDialog(team);
     } else {
       cardBtn.hidden = true;
+      cardBtn.replaceChildren();
     }
 
     const status = side.querySelector('.side-status');
@@ -1573,6 +1586,12 @@ function openBreak() {
     if (kind === 'tournament') {
       actions.append(simpleButton(`Back to the ${ui.tournament?.short || ui.tournament?.name || 'tournament'}`, close(openTournament), 'btn btn-primary'));
       actions.append(button('Title screen', close(() => showView('home')), 'btn btn-quiet'));
+    } else if (kind === 'friends' || (kind === 'online' && ui.context.friends)) {
+      actions.append(simpleButton('Back to the league', close(() => {
+        if (kind === 'online') leaveOnline();
+        openFriends();
+      }), 'btn btn-primary'));
+      actions.append(button('Title screen', close(() => (kind === 'online' ? leaveOnline() : showView('home'))), 'btn btn-quiet'));
     } else if (kind === 'daily') {
       actions.append(simpleButton('Back to the daily challenge', close(openDaily), 'btn btn-primary'));
       actions.append(button('Title screen', close(() => showView('home')), 'btn btn-quiet'));
@@ -1757,7 +1776,9 @@ function dailyState() {
     .filter(([key, r]) => key !== s.key && r.official)
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([, r]) => r.official);
-  return { ...ui.daily, scenario: s, official: record.official || null, practice: record.practice || null, inProgress, history };
+  // An official attempt left behind (another match saved over it) can't be started again.
+  const abandoned = !!record.started && !record.official && !inProgress;
+  return { ...ui.daily, scenario: s, official: record.official || null, practice: record.practice || null, inProgress, abandoned, history };
 }
 
 function openDaily() {
@@ -1785,10 +1806,11 @@ function renderDaily() {
 function playDaily(official) {
   unlockAudio();
   const s = todaysChallenge();
-  // Only the first finished attempt counts: once there's a result, it's practice.
-  const counts = official && !dailyRecord(s.key).official;
+  // Only the first attempt counts: once there's a result (or an attempt was left behind), it's practice.
+  const record = dailyRecord(s.key);
+  const counts = official && !record.official && !record.started;
   if (counts) saveDailyRecord(s.key, { started: true });
-  startMatch(null, { kind: 'daily', key: s.key, number: s.number, official: counts, rngUsed: 0, scores: [] }, dailyMatch(s));
+  startMatch(null, { kind: 'daily', key: s.key, number: s.number, official: counts, scores: [] }, dailyMatch(s));
 }
 
 // At full time: the result, kept on this phone and, for the first
@@ -1893,12 +1915,301 @@ function copyDailyResult() {
 }
 
 // ---------- Friends league ----------
+//
+// The league lives in the page's shared data: friends/<code> (settings),
+// friends/<code>/clubs/<clubId> ({uid, roster}) and
+// friends/<code>/results/<fixtureId>. Every phone subscribes to all three
+// and rebuilds the league from them (see friends.js).
 
-function openFriends() {
-  showView('friends');
+const FRIENDS_FORM = { league: 'prem', team: null, season: 'short', length: 'quick', cards: true, bench: true, weather: false, code: '' };
+
+async function friendsCaps() {
+  const [db, user] = await Promise.all([capability('db'), capability('user')]);
+  const me = user ? await user.id() : null;
+  return { db, user, me };
 }
 
-// ---------- Career ----------
+async function openFriends() {
+  ui.friends ||= { phase: 'loading', form: { ...FRIENDS_FORM, ...load('friends-form', {}) }, cache: {}, unsub: [], names: {}, members: [] };
+  showView('friends');
+  $('#view-friends').scrollTop = 0;
+  renderFriends();
+  const { db, me } = await friendsCaps();
+  if (!db || !me) {
+    ui.friends.phase = 'unavailable';
+    renderFriends();
+    return;
+  }
+  ui.friends.me = me;
+  flushFriendsOutbox();
+  const local = load('friends', null);
+  if (local?.code) {
+    if (ui.friends.code !== local.code) subscribeFriends(local.code);
+    else recomputeFriends();
+  } else {
+    ui.friends.phase = 'start';
+    renderFriends();
+  }
+}
+
+function renderFriends() {
+  const f = ui.friends;
+  if (!f || ui.view !== 'friends') return;
+  $('#friends-body').replaceChildren(friendsPage(f, friendsHandlers));
+}
+
+function stopFriends() {
+  const f = ui.friends;
+  if (!f) return;
+  f.unsub.forEach(stop => stop());
+  f.unsub = [];
+  Object.assign(f, { code: null, settings: null, clubs: {}, results: {}, built: null, mine: null, myClub: null, members: [], loaded: {} });
+}
+
+async function subscribeFriends(code) {
+  const { db } = await friendsCaps();
+  stopFriends();
+  const f = ui.friends;
+  Object.assign(f, { code, phase: 'loading', clubs: {}, results: {}, loaded: {}, error: null });
+  save('friends', { code });
+  renderFriends();
+  const fail = e => {
+    f.error = e?.code === 'revoked' ? 'Access to this page changed.' : 'Lost touch with the league. It will catch up when the connection is back.';
+    renderFriends();
+  };
+  f.unsub.push(db.doc(`friends/${code}`).onSnapshot(snap => {
+    f.settings = snap.exists ? snap.data() : null;
+    f.loaded.settings = true;
+    recomputeFriends();
+  }, fail));
+  f.unsub.push(db.collection(`friends/${code}/clubs`).onSnapshot(snap => {
+    f.clubs = Object.fromEntries(snap.docs.filter(d => d.data()?.uid).map(d => [d.id, d.data()]));
+    f.loaded.clubs = true;
+    recomputeFriends();
+  }, fail));
+  f.unsub.push(db.collection(`friends/${code}/results`).onSnapshot(snap => {
+    f.results = Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    f.loaded.results = true;
+    recomputeFriends();
+  }, fail));
+}
+
+async function recomputeFriends() {
+  const f = ui.friends;
+  if (!f?.loaded || !f.loaded.settings) return;
+  if (!f.settings) {
+    // No league with that code (or it was removed).
+    stopFriends();
+    save('friends', null);
+    Object.assign(f, { phase: 'start', error: 'There’s no league with that code. Check it with your friend.' });
+    renderFriends();
+    return;
+  }
+  if (!f.loaded.clubs || !f.loaded.results) return;
+  const me = f.me;
+  f.myClub = Object.keys(f.clubs).find(id => f.clubs[id].uid === me) || null;
+  if (f.settings.status === 'lobby') {
+    f.phase = 'lobby';
+    f.built = null;
+    f.mine = null;
+  } else {
+    f.phase = 'season';
+    f.built = rebuild(f.settings, f.clubs, f.results, me, f.cache);
+    f.mine = myPending(f.built, me, f.clubs);
+  }
+  // Who's in, and what they're waiting on.
+  const pending = f.built?.pending || [];
+  f.members = Object.entries(f.clubs).map(([club, c]) => {
+    const due = pending.find(x => x.home === club || x.away === club);
+    const status = f.phase !== 'season' ? null : due ? { kind: 'due', text: 'To play' } : f.built.t.stage === 'done' ? null : { kind: 'ready', text: 'Done this round' };
+    return { club, uid: c.uid, me: c.uid === me, name: f.names[c.uid] || '', status };
+  }).sort((a, b) => b.me - a.me || a.club.localeCompare(b.club));
+  renderFriends();
+  // Names for everyone, then once more.
+  const { user } = await friendsCaps();
+  const ids = Object.values(f.clubs).map(c => c.uid).filter(id => !(id in f.names));
+  if (user && ids.length) {
+    const people = await user.profiles(ids);
+    for (const id of ids) f.names[id] = people[id]?.name || '';
+    f.members.forEach(m => (m.name = f.names[m.uid] || ''));
+    renderFriends();
+  }
+}
+
+// Claims a club: a short lease on its document, so two friends can't take it at once.
+async function claimClub(code, club) {
+  const { db, me } = await friendsCaps();
+  const ref = db.doc(`friends/${code}/clubs/${club}`);
+  const lease = await ref.acquire({ holder: me, ttlMs: 5000 });
+  if (!lease.acquired) throw new Error('busy');
+  const snap = await ref.get();
+  const owner = snap.exists ? snap.data()?.uid : null;
+  if (owner && owner !== me) throw new Error('taken');
+  // One club each: let go of any other.
+  const f = ui.friends;
+  const old = f.myClub && f.myClub !== club ? f.myClub : null;
+  await ref.set({ uid: me, at: Date.now() });
+  if (old) await db.doc(`friends/${code}/clubs/${old}`).delete();
+}
+
+const friendsHandlers = {
+  onBack: () => showView('home'),
+  onForm(patch) {
+    Object.assign(ui.friends.form, patch);
+    const { code, ...keep } = ui.friends.form;
+    save('friends-form', keep);
+    renderFriends();
+  },
+  async onCreate(form) {
+    unlockAudio();
+    const { db, me } = await friendsCaps();
+    const f = ui.friends;
+    try {
+      let code;
+      for (let tries = 0; tries < 5; tries++) {
+        code = makeCode(strongRandom);
+        if (!(await db.doc(`friends/${code}`).get()).exists) break;
+      }
+      const seed = Math.floor(strongRandom() * 2 ** 32);
+      await db.doc(`friends/${code}`).set(newFriendsLeague({ code, league: form.league, season: form.season, length: form.length, cards: form.cards, bench: form.bench, weather: form.weather, host: me, seed }));
+      await claimClub(code, form.team);
+      f.error = null;
+      subscribeFriends(code);
+    } catch (e) {
+      console.warn('friends league', e);
+      f.error = e?.code === 'invalid_argument' ? 'You can’t save shared data on this page. Ask its owner to share it with you as a Contributor.' : 'Couldn’t start the league. Check your connection and try again.';
+      renderFriends();
+    }
+  },
+  async onJoin(text) {
+    const code = normaliseCode(text);
+    const f = ui.friends;
+    if (!validCode(code)) {
+      f.error = 'Codes are six letters and numbers, like K7MP2Q.';
+      f.form.code = text;
+      renderFriends();
+      return;
+    }
+    f.error = null;
+    subscribeFriends(code);
+  },
+  async onPickClub(club) {
+    const f = ui.friends;
+    try {
+      await claimClub(f.code, club);
+      f.error = null;
+    } catch (e) {
+      f.error = e?.message === 'busy' || e?.message === 'taken' ? 'Someone else just took that club. Pick another.' : 'Couldn’t take that club. Check your connection and try again.';
+    }
+    renderFriends();
+  },
+  async onStart() {
+    const { db } = await friendsCaps();
+    const f = ui.friends;
+    try {
+      await db.doc(`friends/${f.code}`).update({ status: 'season', started: Date.now() });
+    } catch {
+      f.error = 'Couldn’t start the season. Try again.';
+      renderFriends();
+    }
+  },
+  onLeave() {
+    const f = ui.friends;
+    const inSeason = f.phase === 'season' && f.built?.t.stage !== 'done';
+    ask('Leave this league?', inSeason ? 'Your club goes to the CPU for the rest of the season, so nobody waits for you. You can join again with the code, but not take it back.' : 'You can join again with the code.', [
+      ['Leave', async () => {
+        const { db } = await friendsCaps();
+        if (f.myClub && f.built?.t.stage !== 'done') await db.doc(`friends/${f.code}/clubs/${f.myClub}`).delete().catch(() => {});
+        stopFriends();
+        save('friends', null);
+        f.phase = 'start';
+        renderFriends();
+      }, 'btn btn-danger'],
+      ['Stay', null, 'btn'],
+    ]);
+  },
+  onCopy() {
+    const code = ui.friends.code.toUpperCase();
+    navigator.clipboard?.writeText(code).then(() => {
+      ui.friends.copied = true;
+      renderFriends();
+    }).catch(() => {});
+  },
+  onSquad() {
+    const f = ui.friends;
+    const team = f.built?.t ? teamOf(f.built.t, f.myClub) : null;
+    if (!team) return;
+    openSquad(`${team.name} squad`, team.roster, async roster => {
+      const { db } = await friendsCaps();
+      await db.doc(`friends/${f.code}/clubs/${f.myClub}`).update({ roster }).catch(() => {});
+    }, team.flavour);
+  },
+  onPlay: () => playFriendsFixture(),
+};
+
+function playFriendsFixture() {
+  unlockAudio();
+  const f = ui.friends;
+  const fx = f.mine;
+  if (!fx) return;
+  const t = f.built.t;
+  const opponent = fx.home === f.myClub ? fx.away : fx.home;
+  const friend = humanOf(f.clubs, opponent);
+  const userIsHome = fx.home === f.myClub;
+  if (!friend) {
+    const saved = load('match', null);
+    if (saved?.context?.kind === 'friends' && saved.context.code === f.code && saved.context.fixture === fx.id && saved.match.step.type !== 'fulltime') {
+      resumeMatch(saved);
+      return;
+    }
+    startMatch(matchOptions(t, fx), { kind: 'friends', code: f.code, fixture: fx.id, userIsHome, label: `Friends league · ${fixtureLabel(t, fx)}` });
+    return;
+  }
+  // Against a friend: the home side's phone hosts the match's room.
+  const role = roleIn(f.clubs, fx, f.me);
+  const mine = matchOptions(t, fx).teams[0];
+  const them = teamOf(t, opponent);
+  ui.lobby = {
+    phase: 'checking',
+    role,
+    length: t.length,
+    cards: t.cards,
+    bench: !!t.bench,
+    weather: !!t.weather,
+    team: mine,
+    code: '',
+    error: null,
+    friendsFixture: { code: f.code, fixture: fx.id, label: `Friends league · ${fixtureLabel(t, fx)}`, friendName: f.names[friend] || 'your friend', opponent: { name: them.name, color: them.color, kit: them.kit || null } },
+  };
+  showView('online');
+  renderLobby();
+  openSession(role, fixtureRoomCode(f.settings, fx.id), mine);
+}
+
+// Results go to the shared data; if that fails they wait here and go next time.
+async function sendFriendsResult(code, fixture, result) {
+  const outbox = load('friends-outbox', []);
+  outbox.push({ code, fixture, result });
+  save('friends-outbox', outbox);
+  await flushFriendsOutbox();
+}
+
+async function flushFriendsOutbox() {
+  const { db } = await friendsCaps();
+  const outbox = load('friends-outbox', []);
+  if (!db || !outbox.length) return;
+  const left = [];
+  for (const item of outbox) {
+    try {
+      await db.doc(`friends/${item.code}/results/${item.fixture}`).set(item.result);
+    } catch {
+      left.push(item);
+    }
+  }
+  save('friends-outbox', left);
+}
+
+// ---------- Career ----------// ---------- Career ----------
 
 function openCareer() {
   renderCareer();
@@ -2002,14 +2313,14 @@ const lobbyHandlers = {
   },
 };
 
-async function openSession(role, code) {
+async function openSession(role, code, team = myOnlineTeam()) {
   const room = await roomCapability();
   if (!room) {
     ui.lobby.phase = 'unavailable';
     renderLobby();
     return;
   }
-  const session = new OnlineSession({ room, code, role, team: myOnlineTeam(), build: BUILD, onChange: kind => onSessionChange(session, kind) });
+  const session = new OnlineSession({ room, code, role, team, build: BUILD, onChange: kind => onSessionChange(session, kind) });
   Object.assign(ui.lobby, { phase: role === 'host' ? 'hosting' : 'joined', code, role, session, error: null, copied: false });
   renderLobby();
   try {
@@ -2037,9 +2348,11 @@ function joinOnline(text) {
 }
 
 function leaveLobby() {
+  const friends = !!ui.lobby?.friendsFixture;
   ui.lobby?.session?.leave();
   ui.lobby = null;
-  showView('home');
+  if (friends) openFriends();
+  else showView('home');
 }
 
 async function kickOffOnline() {
@@ -2066,10 +2379,11 @@ function beginOnlineMatch(session, start) {
     }
     return;
   }
-  ui.online = { session, role, team, code: session.code, mid: start.mid, start };
+  const friends = ui.lobby?.friendsFixture || null;
+  ui.online = { session, role, team, code: session.code, mid: start.mid, start, friends };
   ui.lobby = null;
   if (role === 'guest') session.beginGuest(start.mid);
-  startMatch(null, { kind: 'online', team, mid: start.mid }, startingMatch(start, role));
+  startMatch(null, { kind: 'online', team, mid: start.mid, ...(friends ? { friends } : {}) }, startingMatch(start, role));
 }
 
 function onlineSnapshot() {
@@ -2107,6 +2421,11 @@ function onSessionChange(session, kind) {
       return;
     }
     if (kind === 'error') Object.assign(ui.lobby, { error: netMessage(session.error) });
+    // A league match kicks off by itself once both phones are here.
+    if (ui.lobby.friendsFixture && session.role === 'host' && session.peer && !session.versionMismatch && !ui.lobby.starting) {
+      kickOffOnline();
+      return;
+    }
     renderLobby();
     return;
   }
@@ -2182,7 +2501,7 @@ function renderNet() {
   const o = ui.online;
   const onlineMatch = ui.context?.kind === 'online';
   net.hidden = !onlineMatch;
-  $('#btn-restart').hidden = onlineMatch || ui.context?.kind === 'daily';
+  $('#btn-restart').hidden = onlineMatch || ui.context?.kind === 'daily' || ui.context?.kind === 'friends';
   if (!onlineMatch) return;
   const s = o?.session;
   const them = ui.match.teams[other(ui.context.team)].name;
@@ -2266,6 +2585,10 @@ function bindDialogs() {
     }
     if (ui.context?.kind === 'daily') {
       openDaily();
+      return;
+    }
+    if (ui.context?.kind === 'friends') {
+      openFriends();
       return;
     }
     showView(ui.context?.kind === 'tournament' ? 'tournament' : 'home');

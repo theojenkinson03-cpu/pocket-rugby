@@ -1,7 +1,8 @@
 // The daily challenge: one rigged situation a day, the same for everyone.
 // The date picks two real clubs, the score, who has the ball and the
-// conditions; it also seeds the dice, so the same choices meet the same
-// rolls. Only the first finished attempt counts for the leaderboard.
+// conditions. The dice are your own: seeding them too would let a day that
+// starts with the CPU's ball be settled before you made a choice. Only the
+// first finished attempt counts for the leaderboard.
 
 import { POSITIONS } from './dice.js';
 import { CARD_IDS, rollRarity } from './cards.js';
@@ -90,7 +91,8 @@ export function dailyScenario(key) {
     length: 'standard',
     personality: them.personality,
     rosters: [randomRoster(you.flavour, rng), randomRoster(them.flavour, rng)],
-    diceSeed: (daySeed(key) ^ 0x9e3779b9) >>> 0,
+    // For the made-up history of the match so far.
+    seed: (daySeed(key) ^ 0x9e3779b9) >>> 0,
   };
   const full = MATCH_LENGTHS[base.length].full;
   let best = null;
@@ -154,9 +156,9 @@ function backfill(team, points, rng) {
   team.score = points;
 }
 
-// The match at the moment you take over, and the seeded dice for it.
+// The match at the moment you take over.
 export function dailyMatch(s) {
-  const rng = seededRng(s.diceSeed ^ 0x1234567);
+  const rng = seededRng(s.seed ^ 0x1234567);
   const sides = [0, 1].map(i => {
     const club = clubOf(s, i);
     return { name: club.name, color: club.color, kit: club.kit || null, roster: s.rosters[i] };
@@ -234,19 +236,6 @@ export function dailyMatch(s) {
   }
   m.teams.forEach(t => t.stats.possessions = Math.max(1, t.stats.tries + t.stats.penaltyGoals + t.stats.dropGoals));
   return m;
-}
-
-// The dice for the day: a seeded stream, rebuilt after `used` numbers.
-export function dailyDice(s, used = 0) {
-  const base = seededRng(s.diceSeed);
-  for (let i = 0; i < used; i++) base();
-  let count = used;
-  const rng = () => {
-    count++;
-    return base();
-  };
-  rng.used = () => count;
-  return rng;
 }
 
 // A finished attempt, ranked: wins first by the winning margin, then

@@ -15,3 +15,21 @@ node scripts/build-single.mjs --fragment --dev    # Dev:  dist/pocket-rugby-dev.
 ```
 
 To promote Dev to Real, build without `--dev` from the commit being promoted, publish it to the Real artifact, and update the table above.
+
+## Capabilities
+
+Both artifacts declare the `room` capability for online matches. From the build with the daily challenge and friends leagues on, the page also needs:
+
+```js
+{
+  room: {},
+  db: { rules: [
+    { path: 'daily', read: 'view', write: 'owner' },  // the daily leaderboard: everyone reads it...
+    { path: 'daily/{self}', write: 'interact' },      // ...and each player writes only their own entry
+  ] },                                                // friends/<code>/...: the default (Contributors write)
+  user: { scopes: ['profile'] },                      // ids for the leaderboard and leagues, names to show
+  downloads: true,                                    // saving the daily score card
+}
+```
+
+Friends who play the daily challenge or a friends league need the page shared with them as Contributors.

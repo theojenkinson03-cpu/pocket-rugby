@@ -323,7 +323,7 @@ export function createChampions({ userTeam, length = 'quick', cards = true, benc
 export function championsSeeding(t) {
   const C = CHAMPIONS_CUP;
   const tables = Object.keys(t.pools).map(group => standings(t, group));
-  const order = rows => [...rows].sort((a, b) => b.points - a.points || (b.for - b.against) - (a.for - a.against) || b.triesFor - a.triesFor || a.id.localeCompare(b.id));
+  const order = rows => [...rows].sort(tableOrder);
   const seeds = [];
   for (let place = 0; place < C.through; place++) seeds.push(...order(tables.map(rows => rows[place])).map(r => r.id));
   seeds.push(...order(tables.flatMap(rows => rows.slice(C.through))).slice(0, C.bestOthers).map(r => r.id));
@@ -477,6 +477,12 @@ export function simulateRound(t, rng = Math.random) {
   return played;
 }
 
+// Table order: points, then points difference, then tries, then name for a
+// stable order. Pool tables and the Champions Cup's seeding both use it.
+function tableOrder(a, b) {
+  return b.points - a.points || (b.for - b.against) - (a.for - a.against) || b.triesFor - a.triesFor || a.id.localeCompare(b.id);
+}
+
 export function standings(t, group) {
   const ids = t.pools[group];
   const rows = Object.fromEntries(ids.map(id => [id, { id, played: 0, won: 0, lost: 0, for: 0, against: 0, triesFor: 0, bonus: 0, points: 0 }]));
@@ -506,8 +512,7 @@ export function standings(t, group) {
       }
     });
   }
-  // Points, then points difference, then tries, then name for a stable order.
-  return Object.values(rows).sort((a, b) => b.points - a.points || (b.for - b.against) - (a.for - a.against) || b.triesFor - a.triesFor || a.id.localeCompare(b.id));
+  return Object.values(rows).sort(tableOrder);
 }
 
 const winnerOf = f => (f.result.winner === 'home' ? f.home : f.away);

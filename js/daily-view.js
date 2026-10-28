@@ -61,7 +61,7 @@ export function scenarioCard(s) {
     fact(`Team cards: yours ${cardText(0)}, theirs ${cardText(1)}.`);
   }
   fact(conditionsLine(s, [you, them]));
-  fact('The bench is on. The dice are the same for everyone today.');
+  fact('The bench is on. Everyone gets this same situation today; the dice are yours.');
   card.append(facts);
   return card;
 }
@@ -118,6 +118,9 @@ export function dailyPage(state, handlers) {
     if (state.copied) status.append(el('p', 'page-note', 'Copied. Paste it anywhere.'));
     if (state.shareError) status.append(el('p', 'page-note', state.shareError));
     status.append(tallButton('Practice', 'Play it again; it won’t count', handlers.onPractice, 'btn'));
+  } else if (state.abandoned) {
+    status.append(el('p', 'nc-meta', 'Today’s attempt was left unfinished, so there’s no result for the leaderboard today. Practise as much as you like.'));
+    status.append(tallButton('Practice', 'Play today’s situation; it won’t count', handlers.onPractice, 'btn btn-primary'));
   } else if (state.inProgress) {
     status.append(tallButton('Carry on', 'Your attempt is still going', handlers.onResume, 'btn btn-primary'));
   } else {

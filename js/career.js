@@ -113,6 +113,8 @@ export const ACHIEVEMENTS = [
   { id: 'european-champions', name: 'Champions of Europe', text: 'Win the Champions Cup.', check: (m, me, t, c) => c.tournament?.kind === 'champions' && c.tournament.champion },
   { id: 'the-double', name: 'The Double', text: 'Win your league and the Champions Cup in the same season.', check: (m, me, t, c) => !!c.tournament?.double },
   { id: 'dynasty', name: 'Dynasty', text: 'Win three league titles with one club.', check: (m, me, t, c) => (c.tournament?.leagueTitles || 0) >= 3 },
+  { id: 'late-show', name: 'Late Show', text: 'Win a daily challenge.', check: (m, me, t, c) => !!c.daily && m.winner === me },
+  { id: 'friends-champions', name: 'Bragging Rights', text: 'Win a friends league.', check: (m, me, t, c) => !!c.friendsFinal && m.winner === me },
   { id: 'invincibles', name: 'Invincibles', text: 'Win a tournament without losing a match.', check: (m, me, t, c) => !!c.tournament?.champion && c.tournament.lost === 0 },
   { id: 'online-win', name: 'Long-Distance Win', text: 'Win an online match.', check: (m, me, t, c) => c.mode === 'online' && m.winner === me },
   { id: 'graduate', name: 'Graduate', text: 'Finish the guided first match.', check: (m, me, t, c) => c.mode === 'learn' },

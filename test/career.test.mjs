@@ -26,9 +26,9 @@ function finished({ scores = [30, 10], winner = scores[0] > scores[1] ? 0 : 1, l
 const ctx = (over = {}) => ({ mode: '1p', level: 'pro', tournament: null, ...over });
 const unlocks = (match, tracker = newTracker(0), context = ctx(), career = newCareer()) => recordMatch(career, match, tracker, context);
 
-test('34 achievements, each with a name and a description', () => {
-  assert.equal(ACHIEVEMENTS.length, 34);
-  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 34);
+test('36 achievements, each with a name and a description', () => {
+  assert.equal(ACHIEVEMENTS.length, 36);
+  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 36);
   for (const a of ACHIEVEMENTS) assert.ok(a.name && a.text.endsWith('.') && typeof a.check === 'function', a.id);
   assert.equal(ACHIEVEMENT_BY_ID['first-win'].name, 'First Win');
 });
@@ -118,6 +118,10 @@ test('context achievements: Expert, tournaments, online, the guided match', () =
   const dynasty = unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 1, leagueTitles: 3 } }));
   assert.ok(dynasty.includes('dynasty') && !dynasty.includes('the-double'));
   assert.ok(!unlocks(finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 1, leagueTitles: 2 } })).includes('dynasty'));
+  assert.ok(unlocks(finished(), newTracker(0), ctx({ daily: true })).includes('late-show'));
+  assert.ok(!unlocks(finished({ scores: [20, 30] }), newTracker(0), ctx({ daily: true })).includes('late-show'), 'a daily lost');
+  assert.ok(unlocks(finished(), newTracker(0), ctx({ friendsFinal: true })).includes('friends-champions'));
+  assert.ok(!unlocks(finished(), newTracker(0), ctx()).includes('friends-champions'));
   const c = newCareer();
   recordMatch(c, finished(), newTracker(0), ctx({ tournament: cup }));
   recordMatch(c, finished(), newTracker(0), ctx({ tournament: { kind: 'league', champion: true, lost: 2 } }));
