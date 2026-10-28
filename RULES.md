@@ -124,14 +124,14 @@ Team cards aren't on the printed sheet. They're an optional extra, on by default
 | Up and Under | Fly Half's High Ball 8, Fly Half Hit Ups +1, the Fly Half's Into Touch becomes a pass | `intensityParts`, `onAttack` (`faceSwap`) | `cards` |
 | Midfield Maestro | The Centres' Intercepted face becomes a free pass | `onAttack` (`faceSwap`) | `cards`; mutation "Card face swaps ignored" |
 | Sure Hands | The Outside Backs' Knock On and Into Touch become passes | `onAttack` (`faceSwap`) | `cards`; mutation "Sure Hands for every player" |
-| Golden Boot | +2 (20 m) on conversion and penalty kicks | `onKick`, `kickBonus` | `cards`: every range and kick face; mutations "Kick bonus left off the kick", "Golden Boot helps drop goals too" |
-| Drop-Goal Artist | +2 on drop goals, and the Outside Backs' open Pass face is a drop-goal chance | `onKick`, `onAttack` (`passToDrop`) | `cards`; mutation "Drop-Goal Artist: every open pass a drop chance" |
+| Golden Boot | +2 (20 m) on conversion and penalty kicks; once a match, after a penalty goal they win the restart back instead of handing the ball over | `onKick`, `kickBonus`, `afterScore` (`keepsBall`) | `cards`: every range and kick face, the restart after every kind of goal; `invariants`: the restart goes to the side that conceded unless a kicking card wins it back after its own kind of goal; mutations "Kick bonus left off the kick", "Golden Boot helps drop goals too", "Kicking cards keep the ball after any score", "Keeping the ball never runs out" |
+| Drop-Goal Artist | +2 on drop goals, and the Outside Backs' open Pass face is a drop-goal chance; once a match, after a drop goal they win the restart back | `onKick`, `onAttack` (`passToDrop`), `afterScore` | `cards`; mutation "Drop-Goal Artist: every open pass a drop chance" |
 | Rush Defence | +1 on the first brown die against Hit Ups (not big moves) | `tackleBonusFor`, `resolveTackle` (`bonus`) | `cards`: all 36 dice pairs at every rarity; mutations "Rush Defence on both dice", "Rush Defence against big moves" |
 | Jackal | A Big Hit on either die contests the ruck against Hit Ups up to 5; VIDEO REF also wins the ruck | `ruckFor`, `ruckEligible`, `resolveTackle`, `onRuck` | `cards`; mutations "Second-die ruck for everyone", "Jackal: video ref does not win the ruck" |
 | Fortress | The other side's big moves are 2 lower against you (never below 1) | `intensityParts` (`specialDefence`) | `cards`; mutations "Fortress protects the attackers", "Fortress against Hit Ups too" |
 | Clinical Finisher | Once a match, a NO TRY or held-up roll is rolled again | `onTry`, `useCharge` | `cards`; mutations "Limited cards never run out", "Once-a-match cards refreshed at half time" |
-| Set-Piece Kings | Reset scrums and crooked lineouts go to them; +1 on their first run after a set piece they win | `onSetPiece` | `cards`: every feeder and piece; mutations "Set-Piece Kings ignored at resets", "Set-piece advantage for three runs" |
-| Squeaky Clean | Once a match, PENALTY AGAINST on their own feed becomes PENALTY WON | `onSetPiece`, `useCharge` | `cards`; mutation "Squeaky Clean on the other side's feed" |
+| Set-Piece Kings | Reset scrums and crooked lineouts go to them; +1 on their first two runs after a set piece they win | `onSetPiece` | `cards`: every feeder and piece; mutations "Set-Piece Kings ignored at resets", "Set-piece advantage for three runs" |
+| Squeaky Clean | Once a half, PENALTY AGAINST on their own feed becomes PENALTY WON | `onSetPiece`, `useCharge` | `cards`; mutation "Squeaky Clean on the other side's feed" |
 
 ### Rarities
 
@@ -140,17 +140,17 @@ The table above is each card at **Common**, as it always was. Every rarity above
 | Card | Rare adds | Epic adds | Mythic adds |
 | --- | --- | --- | --- |
 | Big Pack | Forwards' Hit Ups +2 | They never knock on | Hit Ups +3, Line Break 10, Scrum Half's Hit Up +2 |
-| Midfield Maestro | Centres' Hit Ups +1 | Thru the Gap 9, drop goals +20 m | Hit Ups +2, the Centres' ‹Pass› face is a drop-goal chance |
-| Sure Hands | Outside Backs' Hit Ups +1 | Hit Ups +2, Into the Corner 10 | The Fly Half's Into Touch becomes a pass too |
-| Up and Under | Conversions and penalties +10 m | High Ball 9, Fly Half Hit Ups +2, drop goals +10 m | High Ball 10, every kick +20 m |
-| Golden Boot | Place kicks +30 m, drop goals +10 m | Place kicks +40 m (never miss in still air), drop goals +30 m | Every kick +40 m; the Fly Half's and Centres' ‹Pass› faces are drop-goal chances |
-| Drop-Goal Artist | Drop goals +30 m | Drop goals +40 m (never miss in still air); the Fly Half's ‹Pass› face is a drop-goal chance too | Every ‹Pass› face is a drop-goal chance |
+| Midfield Maestro | Centres' Hit Ups +1, Thru the Gap 8 | Hit Ups +2, Thru the Gap 9 | Hit Ups +3, Thru the Gap 10, and everyone else's Hit Ups +1 |
+| Sure Hands | Outside Backs' Hit Ups +1, Into the Corner 9 | Hit Ups +2, Into the Corner 10 | The Fly Half's Into Touch becomes a pass too |
+| Up and Under | Conversions and penalties +10 m | High Ball 9, Fly Half Hit Ups +2, drop goals +10 m | High Ball 10, Fly Half Hit Ups +3, every kick +20 m |
+| Golden Boot | Place kicks +30 m, drop goals +10 m; the restart back once a half | Place kicks +40 m (never miss in still air), drop goals +30 m | Every kick +40 m; the Fly Half's and Centres' ‹Pass› faces are drop-goal chances; the restart back after drop goals too |
+| Drop-Goal Artist | Drop goals +30 m; the restart back once a half | Drop goals +40 m (never miss in still air); the Fly Half's ‹Pass› face is a drop-goal chance too | Every ‹Pass› face is a drop-goal chance |
 | Rush Defence | +1 on both brown dice against Hit Ups | A Big Hit on either die contests the ruck | +1 on the first brown die against big moves too |
 | Jackal | NO TRY also wins the ruck | Big moves can be contested too | Every ruck roll wins |
 | Fortress | Big moves −3 | Big moves −4 | Hit Ups of 5 −1 too |
 | Clinical Finisher | Once a half instead of once a match | One reroll on every try attempt | Up to two rerolls on every try attempt |
-| Set-Piece Kings | They never lose their own scrum or lineout | They steal the other side's lineouts; the advantage lasts two runs | They steal the other side's scrums too; three runs |
-| Squeaky Clean | Every time, not once a match | Once a match, PENALTY WON on the other side's feed goes to them | Every time, on both feeds: they never give away a set-piece penalty |
+| Set-Piece Kings | They never lose their own scrum or lineout | They steal the other side's lineouts; the advantage lasts three runs | They steal the other side's scrums too |
+| Squeaky Clean | Every time, not once a half; and the referee never shows them a card | Once a half, PENALTY WON on the other side's feed goes to them | Every time, on both feeds: they never give away a set-piece penalty |
 
 New effects behind the higher rarities: `tackleBonus` on both dice (`tackleBonusFor`), `ruckOnSpecial` (`ruckFor`), `hitUpDefence` from a Hit Up of 5 (`intensityParts`), `ownFeedWins` and `stealFeed` (`onSetPiece`), Squeaky Clean's `theirFeedPenalty`, and uses `per: 'try'` and `per: 'always'` (`useCharge`). `cards` plays each with exact dice; `invariants` plays whole matches with every card at every rarity, checking the tackle against the rules reading with the new effects in it; the mutation tests plant a bug in each.
 

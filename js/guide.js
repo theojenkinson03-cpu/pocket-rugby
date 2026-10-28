@@ -152,8 +152,10 @@ function kickFace(m, i) {
   const end = whistle(events, team);
   const what = { conversion: 'Conversion', penalty: 'Penalty goal', drop: 'Drop goal' }[k.kick];
   const after = end ? ` ${end.note}.` : '';
+  // A kicking card wins the restart back.
+  const kept = events.some(e => e.type === 'cardPlayed' && e.what === 'keepBall');
   return k.good
-    ? { tone: 'good', caption: 'Over', note: end?.note === 'Full time' && end.tone === 'good' ? 'wins it' : end?.note || metres(k.distance), text: `${what}: ${metres(k.distance)} reaches the ${metres(k.range)} needed.${after}` }
+    ? { tone: 'good', caption: 'Over', note: end?.note === 'Full time' && end.tone === 'good' ? 'wins it' : end?.note || (kept ? 'ball back' : metres(k.distance)), text: `${what}: ${metres(k.distance)} reaches the ${metres(k.range)} needed.${after}${kept ? ' The team card wins the restart back.' : ''}` }
     : { tone: 'bad', caption: 'Short', note: end?.note || metres(k.distance), text: `${metres(k.distance)} falls short of the ${metres(k.range)} needed.${after}` };
 }
 

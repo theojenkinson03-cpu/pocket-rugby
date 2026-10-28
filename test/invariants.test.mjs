@@ -170,6 +170,21 @@ function checkState(m, label) {
 }
 
 function checkEvents(before, after, events, label) {
+  // After a score the side that conceded restarts, unless a kicking card wins
+  // the ball back after its own kind of goal.
+  const scored = events.find(e => e.type === 'score');
+  const restart = events.find(e => e.type === 'possession' && e.reason === 'restart');
+  const kept = events.find(e => e.type === 'cardPlayed' && e.what === 'keepBall');
+  if (scored && restart) {
+    assert.equal(restart.team, kept ? scored.team : 1 - scored.team, `${label}: the restart after a score`);
+    if (kept) assert.ok((fx(before, scored.team).keepBall || []).includes(scored.kind), `${label}: kept the ball after a ${scored.kind}`);
+  }
+  if (kept) assert.ok(scored && restart, `${label}: the ball is only kept after a goal`);
+  // Squeaky Clean (Rare up) is never shown a card.
+  before.teams.forEach((t, i) => {
+    if (fx(before, i).noCards) assert.equal(after.teams[i].yellows, t.yellows, `${label}: team ${i} shown a card with Squeaky Clean`);
+  });
+
   const delta = after.teams.map((t, i) => t.score - before.teams[i].score);
   const fromEvents = [0, 0];
   for (const e of events) {
@@ -425,7 +440,9 @@ test('every card at every rarity plays whole matches within the rules', () => {
   has('sure-hands', ['epic', 'mythic'], 'touch');
   has('drop-artist', ['epic', 'mythic'], 'dropChance');
   has('golden-boot', ['mythic'], 'dropChance');
-  has('midfield-maestro', ['mythic'], 'dropChance');
+  has('golden-boot', RARITY_IDS, 'keepBall');
+  has('drop-artist', RARITY_IDS, 'keepBall');
+  has('squeaky-clean', ['rare', 'epic', 'mythic'], 'noCard');
   has('clinical', ['epic', 'mythic'], 'noTry');
   has('squeaky-clean', ['rare', 'epic', 'mythic'], 'penalty');
 });

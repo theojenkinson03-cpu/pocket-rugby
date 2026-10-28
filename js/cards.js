@@ -9,9 +9,10 @@
 // one in five deals has at least one.
 //
 // value: how much the card lifts a side's chance of winning against a side
-// with no card (its win rate above 50%), measured over 10,000 CPU matches
-// each by scripts/balance-cards.mjs. Each rarity sits in its own band, above
-// every card of the rarity below.
+// with no card (its win rate above 50%) in a race to the target; clock: the
+// same on the clock. Both measured over 4,000 CPU matches each, at standard
+// length, by scripts/balance-cards.mjs. Cards count for less on the clock,
+// where there are fewer scores to swing.
 //
 // Effects:
 //   runBonus        {pos: {hitUp, special}}  added to that player's run intensity
@@ -30,7 +31,9 @@
 //   setPieceAdvantage n  runs of quick-tap style +1 after winning a set piece
 //   ownFeedWins     true  you never lose a scrum or lineout on your own feed
 //   stealFeed       [piece]  the other side's scrums or lineouts that they would win go to you
-//   uses            {tryRerolls|ownFeedPenalty|theirFeedPenalty: {n, per}}  limited effects,
+//   keepBall        [penalty|drop]  after that kind of goal they take the restart instead (limited by uses)
+//   noCards         true  the referee never shows them a yellow or red card
+//   uses            {tryRerolls|ownFeedPenalty|theirFeedPenalty|keepBall: {n, per}}  limited effects,
 //                   per 'match' or 'half'; per 'try' is n for each try attempt; per 'always' has no limit
 
 export const RARITIES = [
@@ -50,10 +53,10 @@ export const CARDS = [
     name: 'Big Pack',
     tag: 'Attack',
     tiers: tiers(
-      { value: 0.070, text: "The Forwards' Hit Ups are +1, and Line Break is 8.", effects: { runBonus: { F: { hitUp: 1, special: 2 } } } },
-      { value: 0.111, text: "The Forwards' Hit Ups are +2, and Line Break is 8.", effects: { runBonus: { F: { hitUp: 2, special: 2 } } } },
-      { value: 0.177, text: "The Forwards' Hit Ups are +2, Line Break is 8, and they never knock on.", effects: { runBonus: { F: { hitUp: 2, special: 2 } }, faceSwap: { F: { knockon: 'pass' } } } },
-      { value: 0.224, text: "The Forwards' Hit Ups are +3, Line Break is 10, they never knock on, and the Scrum Half's Hit Up is +2 behind them.", effects: { runBonus: { F: { hitUp: 3, special: 4 }, S: { hitUp: 2, special: 0 } }, faceSwap: { F: { knockon: 'pass' } } } },
+      { value: 0.086, clock: 0.054, text: "The Forwards' Hit Ups are +1, and Line Break is 8.", effects: { runBonus: { F: { hitUp: 1, special: 2 } } } },
+      { value: 0.125, clock: 0.092, text: "The Forwards' Hit Ups are +2, and Line Break is 8.", effects: { runBonus: { F: { hitUp: 2, special: 2 } } } },
+      { value: 0.193, clock: 0.136, text: "The Forwards' Hit Ups are +2, Line Break is 8, and they never knock on.", effects: { runBonus: { F: { hitUp: 2, special: 2 } }, faceSwap: { F: { knockon: 'pass' } } } },
+      { value: 0.221, clock: 0.174, text: "The Forwards' Hit Ups are +3, Line Break is 10, they never knock on, and the Scrum Half's Hit Up is +2 behind them.", effects: { runBonus: { F: { hitUp: 3, special: 4 }, S: { hitUp: 2, special: 0 } }, faceSwap: { F: { knockon: 'pass' } } } },
     ),
   },
   {
@@ -61,10 +64,10 @@ export const CARDS = [
     name: 'Midfield Maestro',
     tag: 'Attack',
     tiers: tiers(
-      { value: 0.089, text: 'Your Centres are never intercepted: Intercepted becomes a pass.', effects: { faceSwap: { C: { intercept: 'pass' } } } },
-      { value: 0.119, text: 'Your Centres are never intercepted, and their Hit Ups are +1.', effects: { faceSwap: { C: { intercept: 'pass' } }, runBonus: { C: { hitUp: 1, special: 0 } } } },
-      { value: 0.183, text: 'Your Centres are never intercepted, their Hit Ups are +1, Thru the Gap is 9, and drop goals are +20 m.', effects: { faceSwap: { C: { intercept: 'pass' } }, runBonus: { C: { hitUp: 1, special: 2 } }, kickBonus: { drop: 2 } } },
-      { value: 0.230, text: "Your Centres are never intercepted, their Hit Ups are +2, Thru the Gap is 9, drop goals are +20 m, and the Centres' ‹Pass› face is a drop-goal chance too.", effects: { faceSwap: { C: { intercept: 'pass' } }, runBonus: { C: { hitUp: 2, special: 2 } }, kickBonus: { drop: 2 }, passToDrop: ['C'] } },
+      { value: 0.100, clock: 0.080, text: 'Your Centres are never intercepted: Intercepted becomes a pass.', effects: { faceSwap: { C: { intercept: 'pass' } } } },
+      { value: 0.126, clock: 0.083, text: 'Your Centres are never intercepted, their Hit Ups are +1, and Thru the Gap is 8.', effects: { faceSwap: { C: { intercept: 'pass' } }, runBonus: { C: { hitUp: 1, special: 1 } } } },
+      { value: 0.160, clock: 0.114, text: 'Your Centres are never intercepted, their Hit Ups are +2, and Thru the Gap is 9.', effects: { faceSwap: { C: { intercept: 'pass' } }, runBonus: { C: { hitUp: 2, special: 2 } } } },
+      { value: 0.225, clock: 0.175, text: "Your Centres are never intercepted, their Hit Ups are +3, Thru the Gap is 10, and everyone else's Hit Ups are +1 behind them.", effects: { faceSwap: { C: { intercept: 'pass' } }, runBonus: { C: { hitUp: 3, special: 3 }, S: { hitUp: 1, special: 0 }, F: { hitUp: 1, special: 0 }, W: { hitUp: 1, special: 0 }, B: { hitUp: 1, special: 0 } } } },
     ),
   },
   {
@@ -72,10 +75,10 @@ export const CARDS = [
     name: 'Sure Hands',
     tag: 'Attack',
     tiers: tiers(
-      { value: 0.096, text: 'Your Outside Backs never lose it: Knock On and Into Touch become passes.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } } } },
-      { value: 0.111, text: 'Your Outside Backs never lose it, and their Hit Ups are +1.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } }, runBonus: { W: { hitUp: 1, special: 0 } } } },
-      { value: 0.147, text: 'Your Outside Backs never lose it, their Hit Ups are +2, and Into the Corner is 10.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } }, runBonus: { W: { hitUp: 2, special: 2 } } } },
-      { value: 0.215, text: 'Your Outside Backs never lose it, their Hit Ups are +2, Into the Corner is 10, and the Fly Half never finds touch either.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' }, B: { touch: 'pass' } }, runBonus: { W: { hitUp: 2, special: 2 } } } },
+      { value: 0.107, clock: 0.086, text: 'Your Outside Backs never lose it: Knock On and Into Touch become passes.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } } } },
+      { value: 0.138, clock: 0.091, text: 'Your Outside Backs never lose it, their Hit Ups are +1, and Into the Corner is 9.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } }, runBonus: { W: { hitUp: 1, special: 1 } } } },
+      { value: 0.157, clock: 0.116, text: 'Your Outside Backs never lose it, their Hit Ups are +2, and Into the Corner is 10.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' } }, runBonus: { W: { hitUp: 2, special: 2 } } } },
+      { value: 0.218, clock: 0.181, text: 'Your Outside Backs never lose it, their Hit Ups are +2, Into the Corner is 10, and the Fly Half never finds touch either.', effects: { faceSwap: { W: { knockon: 'pass', touch: 'pass' }, B: { touch: 'pass' } }, runBonus: { W: { hitUp: 2, special: 2 } } } },
     ),
   },
   {
@@ -83,10 +86,10 @@ export const CARDS = [
     name: 'Up and Under',
     tag: 'Attack',
     tiers: tiers(
-      { value: 0.094, text: "The Fly Half's High Ball is 8, Fly Half Hit Ups are +1, and Into Touch becomes a pass.", effects: { runBonus: { B: { hitUp: 1, special: 2 } }, faceSwap: { B: { touch: 'pass' } } } },
-      { value: 0.127, text: "The Fly Half's High Ball is 8, Fly Half Hit Ups are +1, Into Touch becomes a pass, and conversions and penalties are +10 m.", effects: { runBonus: { B: { hitUp: 1, special: 2 } }, faceSwap: { B: { touch: 'pass' } }, kickBonus: { conversion: 1, penalty: 1 } } },
-      { value: 0.169, text: "The Fly Half's High Ball is 9, Fly Half Hit Ups are +2, Into Touch becomes a pass, and every kick is +10 m.", effects: { runBonus: { B: { hitUp: 2, special: 3 } }, faceSwap: { B: { touch: 'pass' } }, kickBonus: { conversion: 1, penalty: 1, drop: 1 } } },
-      { value: 0.217, text: "The Fly Half's High Ball is 10, Fly Half Hit Ups are +2, Into Touch becomes a pass, and every kick is +20 m.", effects: { runBonus: { B: { hitUp: 2, special: 4 } }, faceSwap: { B: { touch: 'pass' } }, kickBonus: { conversion: 2, penalty: 2, drop: 2 } } },
+      { value: 0.087, clock: 0.054, text: "The Fly Half's High Ball is 8, Fly Half Hit Ups are +1, and Into Touch becomes a pass.", effects: { runBonus: { B: { hitUp: 1, special: 2 } }, faceSwap: { B: { touch: 'pass' } } } },
+      { value: 0.123, clock: 0.091, text: "The Fly Half's High Ball is 8, Fly Half Hit Ups are +1, Into Touch becomes a pass, and conversions and penalties are +10 m.", effects: { runBonus: { B: { hitUp: 1, special: 2 } }, faceSwap: { B: { touch: 'pass' } }, kickBonus: { conversion: 1, penalty: 1 } } },
+      { value: 0.165, clock: 0.115, text: "The Fly Half's High Ball is 9, Fly Half Hit Ups are +2, Into Touch becomes a pass, and every kick is +10 m.", effects: { runBonus: { B: { hitUp: 2, special: 3 } }, faceSwap: { B: { touch: 'pass' } }, kickBonus: { conversion: 1, penalty: 1, drop: 1 } } },
+      { value: 0.217, clock: 0.168, text: "The Fly Half's High Ball is 10, Fly Half Hit Ups are +3, Into Touch becomes a pass, and every kick is +20 m.", effects: { runBonus: { B: { hitUp: 3, special: 4 } }, faceSwap: { B: { touch: 'pass' } }, kickBonus: { conversion: 2, penalty: 2, drop: 2 } } },
     ),
   },
   {
@@ -94,10 +97,10 @@ export const CARDS = [
     name: 'Golden Boot',
     tag: 'Kicking',
     tiers: tiers(
-      { value: 0.073, text: '+20 m on every conversion and penalty kick.', effects: { kickBonus: { conversion: 2, penalty: 2 } } },
-      { value: 0.114, text: '+30 m on every conversion and penalty kick, and +10 m on drop goals.', effects: { kickBonus: { conversion: 3, penalty: 3, drop: 1 } } },
-      { value: 0.159, text: '+40 m on every conversion and penalty kick, so they never miss in still air, and +30 m on drop goals.', effects: { kickBonus: { conversion: 4, penalty: 4, drop: 3 } } },
-      { value: 0.240, text: "Every kick is +40 m and never misses in still air, and the Fly Half's and Centres' ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { conversion: 4, penalty: 4, drop: 4 }, passToDrop: ['B', 'C'] } },
+      { value: 0.112, clock: 0.085, text: '+20 m on every conversion and penalty kick.', effects: { kickBonus: { conversion: 2, penalty: 2 }, keepBall: ['penalty'], uses: { keepBall: { n: 1, per: 'match' } } } },
+      { value: 0.165, clock: 0.117, text: '+30 m on every conversion and penalty kick, and +10 m on drop goals.', effects: { kickBonus: { conversion: 3, penalty: 3, drop: 1 }, keepBall: ['penalty'], uses: { keepBall: { n: 1, per: 'half' } } } },
+      { value: 0.183, clock: 0.124, text: '+40 m on every conversion and penalty kick, so they never miss in still air, and +30 m on drop goals.', effects: { kickBonus: { conversion: 4, penalty: 4, drop: 3 }, keepBall: ['penalty'], uses: { keepBall: { n: 1, per: 'half' } } } },
+      { value: 0.261, clock: 0.228, text: "Every kick is +40 m and never misses in still air, and the Fly Half's and Centres' ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { conversion: 4, penalty: 4, drop: 4 }, passToDrop: ['B', 'C'], keepBall: ['penalty', 'drop'], uses: { keepBall: { n: 1, per: 'half' } } } },
     ),
   },
   {
@@ -105,10 +108,10 @@ export const CARDS = [
     name: 'Drop-Goal Artist',
     tag: 'Kicking',
     tiers: tiers(
-      { value: 0.084, text: "+20 m on drop goals, and the Outside Backs' ‹Pass› face is a drop-goal chance too.", effects: { kickBonus: { drop: 2 }, passToDrop: ['W'] } },
-      { value: 0.103, text: "+30 m on drop goals, and the Outside Backs' ‹Pass› face is a drop-goal chance too.", effects: { kickBonus: { drop: 3 }, passToDrop: ['W'] } },
-      { value: 0.163, text: "+40 m on drop goals, so they never miss in still air, and the Outside Backs' and Fly Half's ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { drop: 4 }, passToDrop: ['W', 'B'] } },
-      { value: 0.257, text: 'Drop goals never miss in still air (+40 m), and every ‹Pass› face is a drop-goal chance.', effects: { kickBonus: { drop: 4 }, passToDrop: ['F', 'C', 'W', 'B'] } },
+      { value: 0.105, clock: 0.101, text: "+20 m on drop goals, and the Outside Backs' ‹Pass› face is a drop-goal chance too.", effects: { kickBonus: { drop: 2 }, passToDrop: ['W'], keepBall: ['drop'], uses: { keepBall: { n: 1, per: 'match' } } } },
+      { value: 0.146, clock: 0.127, text: "+30 m on drop goals, and the Outside Backs' ‹Pass› face is a drop-goal chance too.", effects: { kickBonus: { drop: 3 }, passToDrop: ['W'], keepBall: ['drop'], uses: { keepBall: { n: 1, per: 'half' } } } },
+      { value: 0.185, clock: 0.145, text: "+40 m on drop goals, so they never miss in still air, and the Outside Backs' and Fly Half's ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { drop: 4 }, passToDrop: ['W', 'B'], keepBall: ['drop'], uses: { keepBall: { n: 1, per: 'half' } } } },
+      { value: 0.249, clock: 0.231, text: 'Drop goals never miss in still air (+40 m), and every ‹Pass› face is a drop-goal chance.', effects: { kickBonus: { drop: 4 }, passToDrop: ['F', 'C', 'W', 'B'], keepBall: ['drop'], uses: { keepBall: { n: 1, per: 'half' } } } },
     ),
   },
   {
@@ -116,10 +119,10 @@ export const CARDS = [
     name: 'Rush Defence',
     tag: 'Defence',
     tiers: tiers(
-      { value: 0.081, text: '+1 on the first brown die when you tackle a Hit Up.', effects: { tackleBonus: { hitUp: 1, special: 0 } } },
-      { value: 0.129, text: '+1 on both brown dice when you tackle a Hit Up.', effects: { tackleBonus: { hitUp: 2, special: 0 } } },
-      { value: 0.151, text: '+1 on both brown dice when you tackle a Hit Up, and a Big Hit on either die contests the ruck.', effects: { tackleBonus: { hitUp: 2, special: 0 }, ruckOnSecond: true } },
-      { value: 0.223, text: '+1 on both brown dice against Hit Ups and on the first against big moves, and a Big Hit on either die contests the ruck.', effects: { tackleBonus: { hitUp: 2, special: 1 }, ruckOnSecond: true } },
+      { value: 0.108, clock: 0.063, text: '+1 on the first brown die when you tackle a Hit Up.', effects: { tackleBonus: { hitUp: 1, special: 0 } } },
+      { value: 0.149, clock: 0.091, text: '+1 on both brown dice when you tackle a Hit Up.', effects: { tackleBonus: { hitUp: 2, special: 0 } } },
+      { value: 0.164, clock: 0.115, text: '+1 on both brown dice when you tackle a Hit Up, and a Big Hit on either die contests the ruck.', effects: { tackleBonus: { hitUp: 2, special: 0 }, ruckOnSecond: true } },
+      { value: 0.253, clock: 0.143, text: '+1 on both brown dice against Hit Ups and on the first against big moves, and a Big Hit on either die contests the ruck.', effects: { tackleBonus: { hitUp: 2, special: 1 }, ruckOnSecond: true } },
     ),
   },
   {
@@ -127,10 +130,10 @@ export const CARDS = [
     name: 'Jackal',
     tag: 'Defence',
     tiers: tiers(
-      { value: 0.083, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5, and VIDEO REF also wins it.', effects: { ruckMax: 5, ruckOnSecond: true, ruckAlsoWins: ['video'] } },
-      { value: 0.114, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5, and VIDEO REF and NO TRY also win it.', effects: { ruckMax: 5, ruckOnSecond: true, ruckAlsoWins: ['video', 'notry'] } },
-      { value: 0.159, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5 and big moves too, and VIDEO REF and NO TRY also win it.', effects: { ruckMax: 5, ruckOnSecond: true, ruckOnSpecial: true, ruckAlsoWins: ['video', 'notry'] } },
-      { value: 0.273, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5 and big moves too, and every ruck roll is yours.', effects: { ruckMax: 5, ruckOnSecond: true, ruckOnSpecial: true, ruckAlsoWins: ['video', 'notry', 'try'] } },
+      { value: 0.078, clock: 0.066, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5, and VIDEO REF also wins it.', effects: { ruckMax: 5, ruckOnSecond: true, ruckAlsoWins: ['video'] } },
+      { value: 0.120, clock: 0.078, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5, and VIDEO REF and NO TRY also win it.', effects: { ruckMax: 5, ruckOnSecond: true, ruckAlsoWins: ['video', 'notry'] } },
+      { value: 0.169, clock: 0.116, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5 and big moves too, and VIDEO REF and NO TRY also win it.', effects: { ruckMax: 5, ruckOnSecond: true, ruckOnSpecial: true, ruckAlsoWins: ['video', 'notry'] } },
+      { value: 0.276, clock: 0.192, text: 'A Big Hit on either die contests the ruck against Hit Ups up to 5 and big moves too, and every ruck roll is yours.', effects: { ruckMax: 5, ruckOnSecond: true, ruckOnSpecial: true, ruckAlsoWins: ['video', 'notry', 'try'] } },
     ),
   },
   {
@@ -138,10 +141,10 @@ export const CARDS = [
     name: 'Fortress',
     tag: 'Defence',
     tiers: tiers(
-      { value: 0.094, text: "Your opponents' big moves are −2 intensity against you.", effects: { specialDefence: 2 } },
-      { value: 0.136, text: "Your opponents' big moves are −3 intensity against you.", effects: { specialDefence: 3 } },
-      { value: 0.155, text: "Your opponents' big moves are −4 intensity against you.", effects: { specialDefence: 4 } },
-      { value: 0.236, text: "Your opponents' big moves are −4 and their Hit Ups of 5 are −1 intensity against you.", effects: { specialDefence: 4, hitUpDefence: 1, hitUpDefenceFrom: 5 } },
+      { value: 0.125, clock: 0.084, text: "Your opponents' big moves are −2 intensity against you.", effects: { specialDefence: 2 } },
+      { value: 0.150, clock: 0.087, text: "Your opponents' big moves are −3 intensity against you.", effects: { specialDefence: 3 } },
+      { value: 0.169, clock: 0.107, text: "Your opponents' big moves are −4 intensity against you.", effects: { specialDefence: 4 } },
+      { value: 0.279, clock: 0.185, text: "Your opponents' big moves are −4 and their Hit Ups of 5 are −1 intensity against you.", effects: { specialDefence: 4, hitUpDefence: 1, hitUpDefenceFrom: 5 } },
     ),
   },
   {
@@ -149,10 +152,10 @@ export const CARDS = [
     name: 'Clinical Finisher',
     tag: 'Finishing',
     tiers: tiers(
-      { value: 0.081, text: 'Once a match, a NO TRY or held-up roll is rolled again.', effects: { uses: { tryRerolls: { n: 1, per: 'match' } } } },
-      { value: 0.124, text: 'Once a half, a NO TRY or held-up roll is rolled again.', effects: { uses: { tryRerolls: { n: 1, per: 'half' } } } },
-      { value: 0.199, text: 'On every try attempt, a NO TRY or held-up roll is rolled again.', effects: { uses: { tryRerolls: { n: 1, per: 'try' } } } },
-      { value: 0.243, text: 'On every try attempt, a NO TRY or held-up roll is rolled again, up to twice.', effects: { uses: { tryRerolls: { n: 2, per: 'try' } } } },
+      { value: 0.095, clock: 0.108, text: 'Once a match, a NO TRY or held-up roll is rolled again.', effects: { uses: { tryRerolls: { n: 1, per: 'match' } } } },
+      { value: 0.132, clock: 0.118, text: 'Once a half, a NO TRY or held-up roll is rolled again.', effects: { uses: { tryRerolls: { n: 1, per: 'half' } } } },
+      { value: 0.197, clock: 0.150, text: 'On every try attempt, a NO TRY or held-up roll is rolled again.', effects: { uses: { tryRerolls: { n: 1, per: 'try' } } } },
+      { value: 0.274, clock: 0.210, text: 'On every try attempt, a NO TRY or held-up roll is rolled again, up to twice.', effects: { uses: { tryRerolls: { n: 2, per: 'try' } } } },
     ),
   },
   {
@@ -160,10 +163,10 @@ export const CARDS = [
     name: 'Set-Piece Kings',
     tag: 'Set piece',
     tiers: tiers(
-      { value: 0.067, text: 'Collapsed scrums and crooked lineouts go your way, and your first run after a set piece you win is +1.', effects: { setPieceTies: true, setPieceAdvantage: 1 } },
-      { value: 0.115, text: 'You never lose your own scrum or lineout, collapsed scrums and crooked lineouts go your way, and your first run after a set piece you win is +1.', effects: { setPieceTies: true, setPieceAdvantage: 1, ownFeedWins: true } },
-      { value: 0.166, text: "You never lose your own scrum or lineout and you steal the other side's lineouts; resets and crooked throws go your way, and your first two runs after a set piece you win are +1.", effects: { setPieceTies: true, setPieceAdvantage: 2, ownFeedWins: true, stealFeed: ['lineout'] } },
-      { value: 0.245, text: 'Every scrum and lineout is yours, whoever feeds it (penalties aside), and your first three runs after one are +1.', effects: { setPieceTies: true, setPieceAdvantage: 3, ownFeedWins: true, stealFeed: ['scrum', 'lineout'] } },
+      { value: 0.083, clock: 0.047, text: 'Collapsed scrums and crooked lineouts go your way, and your first two runs after a set piece you win are +1.', effects: { setPieceTies: true, setPieceAdvantage: 2 } },
+      { value: 0.120, clock: 0.081, text: 'You never lose your own scrum or lineout, collapsed scrums and crooked lineouts go your way, and your first two runs after a set piece you win are +1.', effects: { setPieceTies: true, setPieceAdvantage: 2, ownFeedWins: true } },
+      { value: 0.172, clock: 0.116, text: "You never lose your own scrum or lineout and you steal the other side's lineouts; resets and crooked throws go your way, and your first three runs after a set piece you win are +1.", effects: { setPieceTies: true, setPieceAdvantage: 3, ownFeedWins: true, stealFeed: ['lineout'] } },
+      { value: 0.248, clock: 0.175, text: 'Every scrum and lineout is yours, whoever feeds it (penalties aside), and your first three runs after one are +1.', effects: { setPieceTies: true, setPieceAdvantage: 3, ownFeedWins: true, stealFeed: ['scrum', 'lineout'] } },
     ),
   },
   {
@@ -171,10 +174,10 @@ export const CARDS = [
     name: 'Squeaky Clean',
     tag: 'Discipline',
     tiers: tiers(
-      { value: 0.085, text: 'Once a match, PENALTY AGAINST on your own feed becomes PENALTY WON.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'match' } } } },
-      { value: 0.133, text: 'PENALTY AGAINST on your own feed always becomes PENALTY WON.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'always' } } } },
-      { value: 0.191, text: 'PENALTY AGAINST on your own feed always becomes PENALTY WON, and once a match PENALTY WON on their feed goes to you instead.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'always' }, theirFeedPenalty: { n: 1, per: 'match' } } } },
-      { value: 0.239, text: 'You never give away a set-piece penalty: PENALTY AGAINST on your feed and PENALTY WON on theirs both go to you.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'always' }, theirFeedPenalty: { n: 1, per: 'always' } } } },
+      { value: 0.085, clock: 0.045, text: 'Once a half, PENALTY AGAINST on your own feed becomes PENALTY WON.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'half' } } } },
+      { value: 0.120, clock: 0.057, text: 'PENALTY AGAINST on your own feed always becomes PENALTY WON, and you are never shown a card.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'always' } }, noCards: true } },
+      { value: 0.181, clock: 0.094, text: 'PENALTY AGAINST on your own feed always becomes PENALTY WON, once a half PENALTY WON on their feed goes to you instead, and you are never shown a card.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'always' }, theirFeedPenalty: { n: 1, per: 'half' } }, noCards: true } },
+      { value: 0.213, clock: 0.109, text: 'You never give away a set-piece penalty: PENALTY AGAINST on your feed and PENALTY WON on theirs both go to you, and you are never shown a card.', effects: { uses: { ownFeedPenalty: { n: 1, per: 'always' }, theirFeedPenalty: { n: 1, per: 'always' } }, noCards: true } },
     ),
   },
 ];
@@ -201,8 +204,11 @@ export function teamCards(match, team) {
   return (match.teams[team].cards || []).map(c => cardTier(c.id, c.rarity));
 }
 
-// What a team's cards are worth together: the sum of their measured values.
-export const cardsValue = (match, team) => teamCards(match, team).reduce((sum, card) => sum + (card.value || 0), 0);
+// A card's measured worth in a format: on the clock, or in a race.
+export const cardWorth = (card, format = 'points') => (format === 'rolls' ? card.clock ?? card.value : card.value) || 0;
+
+// What a team's cards are worth together in the match's format.
+export const cardsValue = (match, team) => teamCards(match, team).reduce((sum, card) => sum + cardWorth(card, match.format), 0);
 
 // A rarity for one dealt card, from the odds above.
 export function rollRarity(rng) {

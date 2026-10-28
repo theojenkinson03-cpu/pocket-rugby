@@ -125,20 +125,24 @@ test('styles lean towards their players when the odds are close', () => {
 
 test('the draft: the best card for the style', () => {
   const draft = options => stateAt({ step: { type: 'choose', purpose: 'draft', team: 1, options, first: true }, attacker: null });
-  const options = ['sure-hands', 'golden-boot', 'big-pack'];
-  assert.equal(cpuChoice(withStyle(draft(options), 'pro', 'balanced')), 'sure-hands', 'the strongest card');
+  const options = ['fortress', 'golden-boot', 'big-pack'];
+  assert.equal(cpuChoice(withStyle(draft(options), 'pro', 'balanced')), 'fortress', 'the strongest card');
   assert.equal(cpuChoice(withStyle(draft(options), 'pro', 'boot')), 'golden-boot');
   assert.equal(cpuChoice(withStyle(draft(options), 'pro', 'pack')), 'big-pack');
-  assert.equal(cpuChoice(withStyle(draft(options), 'expert', 'boot')), 'sure-hands', 'Expert drafts on value alone');
+  assert.equal(cpuChoice(withStyle(draft(options), 'expert', 'boot')), 'fortress', 'Expert drafts on value alone');
+  // On the clock, by what the cards are worth on the clock.
+  const pair = { ...draft(['squeaky-clean', 'clinical']), dealRarity: { 'squeaky-clean': 'epic', clinical: 'rare' } };
+  assert.equal(cpuChoice(withStyle(pair, 'pro', 'balanced')), 'squeaky-clean', 'in a race');
+  assert.equal(cpuChoice(withStyle({ ...pair, format: 'rolls' }, 'pro', 'balanced')), 'clinical', 'on the clock');
   for (const id of CARD_IDS) assert.ok(cardValue(id) > 0);
   for (const id of CARD_IDS) assert.ok(cardValue(id, undefined, 'mythic') > cardValue(id, undefined, 'epic') && cardValue(id, undefined, 'rare') > cardValue(id));
   // Rarity counts: a rarer card beats a style's favourite.
   const dealt = (options, rarity) => ({ ...draft(options), dealRarity: rarity });
-  const mythicBoot = dealt(options, { 'sure-hands': 'common', 'golden-boot': 'mythic', 'big-pack': 'common' });
+  const mythicBoot = dealt(options, { fortress: 'common', 'golden-boot': 'mythic', 'big-pack': 'common' });
   for (const [level, style] of [['pro', 'balanced'], ['pro', 'pack'], ['expert', 'balanced'], ['rookie', 'run']]) {
     assert.equal(cpuChoice(withStyle(mythicBoot, level, style)), 'golden-boot', `${level} ${style}`);
   }
-  assert.equal(cpuChoice(withStyle(dealt(options, { 'sure-hands': 'common', 'golden-boot': 'common', 'big-pack': 'epic' }), 'pro', 'balanced')), 'big-pack');
+  assert.equal(cpuChoice(withStyle(dealt(options, { fortress: 'common', 'golden-boot': 'common', 'big-pack': 'epic' }), 'pro', 'balanced')), 'big-pack');
   // Every pair of options, every style: always one of them.
   for (const a of CARD_IDS) {
     for (const b of CARD_IDS) {

@@ -6,8 +6,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, breakChance, drafterOf, isLegal, kickChance, migrate, newMatch, receiverOdds, seededRng, VERSION } from '../js/engine.js';
-import { CARD_BY_ID, CARD_IDS, CARDS, cardEffects, cardsValue, cardTier, cardWith, DEAL_SIZE, DRAFT_ORDER, RARITIES, RARITY_IDS, rollRarity, teamCards } from '../js/cards.js';
+import { act, breakChance, drafterOf, halfRolls, isLegal, kickChance, migrate, newMatch, receiverOdds, seededRng, VERSION } from '../js/engine.js';
+import { CARD_BY_ID, CARD_IDS, CARDS, cardEffects, cardsValue, cardTier, cardWith, cardWorth, DEAL_SIZE, DRAFT_ORDER, RARITIES, RARITY_IDS, rollRarity, teamCards } from '../js/cards.js';
 import { DICE } from '../js/dice.js';
 import { choose, dice, OUTSIDE_BACKS, roll, stateAt } from './helpers.mjs';
 
@@ -30,7 +30,7 @@ const attackWith = (cards, pos, opts = {}) => carded(cards, { carrier: pos, ...o
 const runOf = events => events.find(e => e.type === 'run');
 const played = events => events.filter(e => e.type === 'cardPlayed');
 const KNOWN_EFFECTS = ['runBonus', 'faceSwap', 'passToDrop', 'kickBonus', 'tackleBonus', 'ruckMax', 'ruckOnSecond', 'ruckOnSpecial', 'ruckAlsoWins',
-  'specialDefence', 'hitUpDefence', 'hitUpDefenceFrom', 'setPieceTies', 'setPieceAdvantage', 'ownFeedWins', 'stealFeed', 'uses'];
+  'specialDefence', 'hitUpDefence', 'hitUpDefenceFrom', 'setPieceTies', 'setPieceAdvantage', 'ownFeedWins', 'stealFeed', 'keepBall', 'noCards', 'uses'];
 
 test('twelve cards, each in four rarities with a name, a kind, a description and only known effects', () => {
   assert.equal(CARDS.length, 12);
@@ -86,31 +86,46 @@ test('two cards work together: numbers add up, lists join, and each effect says 
   assert.equal(cardEffects(drops, 0).kickBonus.drop, 8);
   // Limited uses keep their own counters.
   const uses = carded(['clinical:rare+squeaky-clean', null]);
-  assert.deepEqual(cardEffects(uses, 0).uses, { tryRerolls: { n: 1, per: 'half' }, ownFeedPenalty: { n: 1, per: 'match' } });
+  assert.deepEqual(cardEffects(uses, 0).uses, { tryRerolls: { n: 1, per: 'half' }, ownFeedPenalty: { n: 1, per: 'half' } });
   // Which card did it.
   assert.deepEqual(cardWith(uses, 0, f => f.uses?.ownFeedPenalty), { id: 'squeaky-clean', rarity: 'common' });
   assert.equal(cardWith(uses, 0, f => f.kickBonus), null);
-  // Their worth together is the sum of their measured values.
+  // Their worth together is the sum of their measured values, in the match's format.
   assert.ok(Math.abs(cardsValue(kicks, 0) - cardTier('golden-boot', 'rare').value - cardTier('up-and-under', 'epic').value) < 1e-12);
+  kicks.format = 'rolls';
+  assert.ok(Math.abs(cardsValue(kicks, 0) - cardTier('golden-boot', 'rare').clock - cardTier('up-and-under', 'epic').clock) < 1e-12);
+  kicks.format = 'points';
   assert.equal(cardsValue(kicks, 1), 0);
 });
 
 // Measured by scripts/balance-cards.mjs: how far each card lifts the win
-// rate above 50% against a side with no card, over 10,000 matches.
-const BANDS = { common: [0.06, 0.1], rare: [0.1, 0.145], epic: [0.145, 0.2], mythic: [0.2, 0.29] };
+// rate above 50% against a side with no card, over 4,000 matches in each
+// format. value is a race, clock the clock, where cards count for less.
+const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-test('each rarity is measured stronger than the one below, in a band of its own', () => {
-  for (const c of CARDS) {
-    const values = RARITY_IDS.map(r => c.tiers[r].value);
-    assert.ok(values.every((v, i) => i === 0 || v > values[i - 1]), `${c.id}: ${values}`);
-    RARITY_IDS.forEach((r, i) => assert.ok(values[i] >= BANDS[r][0] && values[i] <= BANDS[r][1], `${c.id} ${r} value ${values[i]}`));
+test('each rarity is measured stronger than the one below, in both formats', () => {
+  for (const format of ['points', 'rolls']) {
+    const worth = (c, r) => cardWorth(c.tiers[r], format);
+    for (const c of CARDS) {
+      const values = RARITY_IDS.map(r => worth(c, r));
+      assert.ok(values.every(v => v > 0.03 && v < 0.3), `${c.id} ${format}: ${values}`);
+      assert.ok(values.every((v, i) => i === 0 || v > values[i - 1]), `${c.id} ${format}: each rarity stronger than the last: ${values}`);
+    }
+    // Each rarity is clearly stronger on average. In a race, where cards
+    // count for most, any card two rarities up beats any card below.
+    const means = RARITY_IDS.map(r => mean(CARDS.map(c => worth(c, r))));
+    means.forEach((m, i) => i && assert.ok(m - means[i - 1] > 0.015, `${format}: ${RARITY_IDS[i]} ${m} over ${means[i - 1]}`));
+    for (let i = 2; format === 'points' && i < RARITY_IDS.length; i++) {
+      const below = Math.max(...CARDS.map(c => worth(c, RARITY_IDS[i - 2])));
+      const above = Math.min(...CARDS.map(c => worth(c, RARITY_IDS[i])));
+      assert.ok(above > below, `${format}: every ${RARITY_IDS[i]} (${above}) over every ${RARITY_IDS[i - 2]} (${below})`);
+    }
   }
-  // Every card of a rarity beats every card of the rarity below.
-  for (let i = 1; i < RARITY_IDS.length; i++) {
-    const below = Math.max(...CARDS.map(c => c.tiers[RARITY_IDS[i - 1]].value));
-    const above = Math.min(...CARDS.map(c => c.tiers[RARITY_IDS[i]].value));
-    assert.ok(above > below, `${RARITY_IDS[i]} ${above} over ${RARITY_IDS[i - 1]} ${below}`);
-  }
+  // Cards count for less on the clock.
+  const total = format => CARDS.reduce((n, c) => n + RARITY_IDS.reduce((m, r) => m + cardWorth(c.tiers[r], format), 0), 0);
+  assert.ok(total('rolls') < total('points'));
+  assert.equal(cardWorth(cardTier('jackal', 'epic'), 'rolls'), cardTier('jackal', 'epic').clock);
+  assert.equal(cardWorth(cardTier('jackal', 'epic')), cardTier('jackal', 'epic').value);
 });
 
 // Whether effects `hi` keep everything `lo` has: numbers at least as big,
@@ -378,7 +393,7 @@ test('Clinical Finisher: one failed try roll a match is rolled again', () => {
   assert.equal(roll(carded(['clinical', null], { step: tryStep, half: 2 }), dice(3)).state.step.purpose, 'try', 'fresh in a new match');
 });
 
-test('Set-Piece Kings: resets and crooked throws go their way, and a won set piece gives +1 on the next run', () => {
+test('Set-Piece Kings: resets and crooked throws go their way, and a won set piece gives +1 on the next two runs', () => {
   const setpiece = (piece, feeder) => ({ type: 'roll', purpose: 'setpiece', dice: ['R'], team: feeder, piece });
   for (const kings of [0, 1]) {
     for (const feeder of [0, 1]) {
@@ -386,18 +401,22 @@ test('Set-Piece Kings: resets and crooked throws go their way, and a won set pie
         const cards = kings === 0 ? ['set-piece-kings', null] : [null, 'set-piece-kings'];
         const { state, events } = roll(carded(cards, { step: setpiece(piece, feeder), attacker: feeder }), dice(3));
         assert.equal(state.attacker, kings, `${piece} fed by ${feeder}, kings ${kings}`);
-        assert.equal(state.quickTap, 1);
+        assert.equal(state.quickTap, 2);
         assert.deepEqual(played(events).map(e => [e.team, e.what]), [[kings, piece === 'scrum' ? 'reset' : 'notstraight']]);
       }
     }
   }
-  // Winning your own feed: +1 for one run.
+  // Winning your own feed: +1 for two runs.
   const won = roll(carded(['set-piece-kings', null], { step: setpiece('scrum', 0) }), dice(0));
   assert.deepEqual(played(won.events).map(e => e.what), ['advantage']);
-  assert.equal(won.state.quickTap, 1);
+  assert.equal(won.state.quickTap, 2);
   let s = roll(won.state, dice(0)).state; // Scrum Half Hit Up 4
   assert.equal(s.step.intensity, 5);
-  const tackled = roll(s, dice(4, 4));
+  let tackled = roll(s, dice(4, 4));
+  assert.equal(tackled.state.quickTap, 1);
+  s = roll(tackled.state, dice(0)).state;
+  assert.equal(s.step.intensity, 5);
+  tackled = roll(s, dice(4, 4));
   assert.equal(tackled.state.quickTap, 0);
   assert.ok(tackled.events.some(e => e.type === 'advantageOver'));
   // The other side winning the ball gets nothing extra.
@@ -406,7 +425,7 @@ test('Set-Piece Kings: resets and crooked throws go their way, and a won set pie
   assert.equal(played(lost.events).length, 0);
 });
 
-test('Squeaky Clean: once a match, a penalty against on their own feed becomes a penalty to them', () => {
+test('Squeaky Clean: once a half, a penalty against on their own feed becomes a penalty to them', () => {
   const step = { type: 'roll', purpose: 'setpiece', dice: ['R'], team: 0, piece: 'scrum' };
   const AGAINST = 5;
   const first = roll(carded(['squeaky-clean', null], { step }), dice(AGAINST));
@@ -448,26 +467,23 @@ test('Big Pack: Hit Ups +2 (Rare), no knock ons (Epic), then Hit Ups +3, Line Br
   assert.equal(outcomeOf(['big-pack:mythic', null], 'F', KO).state.step.purpose, 'pass');
 });
 
-test('Midfield Maestro: Centre Hit Ups +1 (Rare), Thru the Gap 9 and +20 m drop goals (Epic), Hit Ups +2 and the open pass a drop chance (Mythic)', () => {
+test('Midfield Maestro: Hit Ups +1 and Thru the Gap 8 (Rare), +2 and 9 (Epic), +3 and 10 (Mythic)', () => {
   const [HU4, HU5, TTG] = [0, 1, 2];
-  assert.deepEqual([HU4, HU5, TTG].map(f => intensityOf(['midfield-maestro:rare', null], 'C', f)), [5, 6, 7]);
-  assert.deepEqual([HU4, HU5, TTG].map(f => intensityOf(['midfield-maestro:epic', null], 'C', f)), [5, 6, 9]);
-  assert.deepEqual([HU4, HU5, TTG].map(f => intensityOf(['midfield-maestro:mythic', null], 'C', f)), [6, 7, 9]);
-  assert.equal(kickWith('midfield-maestro:rare', 'drop', 0).bonus, 0);
-  assert.equal(kickWith('midfield-maestro:epic', 'drop', 0).bonus, 2);
-  assert.equal(kickWith('midfield-maestro:epic', 'conversion', 0).bonus, 0, 'drop goals only');
-  assert.equal(outcomeOf(['midfield-maestro:epic', null], 'C', openPass('C')).state.step.purpose, 'pass');
-  const mythic = outcomeOf(['midfield-maestro:mythic', null], 'C', openPass('C'));
-  assert.deepEqual([mythic.state.step.purpose, mythic.state.step.kick], ['range', 'drop']);
-  assert.deepEqual(played(mythic.events).map(e => e.what), ['dropChance']);
+  assert.deepEqual([HU4, HU5, TTG].map(f => intensityOf(['midfield-maestro:rare', null], 'C', f)), [5, 6, 8]);
+  assert.deepEqual([HU4, HU5, TTG].map(f => intensityOf(['midfield-maestro:epic', null], 'C', f)), [6, 7, 9]);
+  assert.deepEqual([HU4, HU5, TTG].map(f => intensityOf(['midfield-maestro:mythic', null], 'C', f)), [7, 8, 10]);
+  for (const rarity of RARITY_IDS) {
+    assert.equal(kickWith(`midfield-maestro:${rarity}`, 'drop', 0).bonus, 0, 'no kicking');
+    assert.equal(outcomeOf([`midfield-maestro:${rarity}`, null], 'C', openPass('C')).state.step.purpose, 'pass');
+  }
   // Still never intercepted.
   assert.equal(outcomeOf(['midfield-maestro:mythic', null], 'C', 5).state.attacker, 0);
 });
 
-test('Sure Hands: Hit Ups +1 (Rare), Hit Ups +2 and Into the Corner 10 (Epic), and the Fly Half keeps it in play too (Mythic)', () => {
+test('Sure Hands: Hit Ups +1 and Into the Corner 9 (Rare), Hit Ups +2 and Into the Corner 10 (Epic), and the Fly Half keeps it in play too (Mythic)', () => {
   const [HU4, HU5, ITC] = [0, 1, 2];
   const B_TOUCH = 5;
-  assert.deepEqual([HU4, HU5, ITC].map(f => intensityOf(['sure-hands:rare', null], 'W', f)), [5, 6, 8]);
+  assert.deepEqual([HU4, HU5, ITC].map(f => intensityOf(['sure-hands:rare', null], 'W', f)), [5, 6, 9]);
   assert.equal(outcomeOf(['sure-hands:rare', null], 'B', B_TOUCH).state.step.piece, 'lineout');
   assert.deepEqual([HU4, HU5, ITC].map(f => intensityOf(['sure-hands:epic', null], 'W', f)), [6, 7, 10]);
   assert.equal(outcomeOf(['sure-hands:epic', null], 'B', B_TOUCH).state.step.piece, 'lineout');
@@ -478,13 +494,13 @@ test('Sure Hands: Hit Ups +1 (Rare), Hit Ups +2 and Into the Corner 10 (Epic), a
   assert.equal(outcomeOf(['sure-hands:mythic', null], 'F', 5).state.step.piece, 'scrum', 'the Forwards still knock on');
 });
 
-test('Up and Under: +10 m on place kicks (Rare), High Ball 9, Hit Ups +2 and +10 m on every kick (Epic), High Ball 10 and +20 m (Mythic)', () => {
+test('Up and Under: +10 m on place kicks (Rare), High Ball 9, Hit Ups +2 and +10 m on every kick (Epic), High Ball 10, Hit Ups +3 and +20 m (Mythic)', () => {
   const [HU3, HU4, HB] = [0, 1, 2];
   assert.deepEqual([HU3, HU4, HB].map(f => intensityOf(['up-and-under:rare', null], 'B', f)), [4, 5, 8]);
   assert.deepEqual(['conversion', 'penalty', 'drop'].map(k => kickWith('up-and-under:rare', k, 0).bonus), [1, 1, 0]);
   assert.deepEqual([HU3, HU4, HB].map(f => intensityOf(['up-and-under:epic', null], 'B', f)), [5, 6, 9]);
   assert.deepEqual(['conversion', 'penalty', 'drop'].map(k => kickWith('up-and-under:epic', k, 0).bonus), [1, 1, 1]);
-  assert.deepEqual([HU3, HU4, HB].map(f => intensityOf(['up-and-under:mythic', null], 'B', f)), [5, 6, 10]);
+  assert.deepEqual([HU3, HU4, HB].map(f => intensityOf(['up-and-under:mythic', null], 'B', f)), [6, 7, 10]);
   assert.deepEqual(['conversion', 'penalty', 'drop'].map(k => kickWith('up-and-under:mythic', k, 0).bonus), [2, 2, 2]);
 });
 
@@ -591,13 +607,13 @@ test('Clinical Finisher: once a half (Rare), every try attempt (Epic), up to twi
   assert.equal(scored.state.teams[0].score, 5);
 });
 
-test('Set-Piece Kings: never lose your own feed (Rare), steal their lineouts (Epic), every scrum and lineout (Mythic)', () => {
+test('Set-Piece Kings: never lose your own feed (Rare), steal their lineouts and three runs (Epic), every scrum and lineout (Mythic)', () => {
   const setpiece = (piece, feeder) => ({ type: 'roll', purpose: 'setpiece', dice: ['R'], team: feeder, piece });
   // White die: 0 wins both, 1 wins the scrum and loses the lineout, 2 the other way round.
   const LOSE = { scrum: 2, lineout: 1 };
   const WIN = { scrum: 0, lineout: 0 };
   for (const rarity of RARITY_IDS) {
-    const runs = { common: 1, rare: 1, epic: 2, mythic: 3 }[rarity];
+    const runs = { common: 2, rare: 2, epic: 3, mythic: 3 }[rarity];
     const steals = { common: [], rare: [], epic: ['lineout'], mythic: ['scrum', 'lineout'] }[rarity];
     for (const piece of ['scrum', 'lineout']) {
       // Their own feed, lost on the die.
@@ -619,7 +635,7 @@ test('Set-Piece Kings: never lose your own feed (Rare), steal their lineouts (Ep
   assert.equal(pen.state.step.team, 1);
 });
 
-test('Squeaky Clean: always on your own feed (Rare), their feed once a match (Epic), never give away a set-piece penalty (Mythic)', () => {
+test('Squeaky Clean: always on your own feed (Rare), their feed once a half (Epic), never give away a set-piece penalty (Mythic)', () => {
   const step = feeder => ({ type: 'roll', purpose: 'setpiece', dice: ['R'], team: feeder, piece: 'scrum' });
   const [WON, AGAINST] = [4, 5];
   // Rare: every time, without counting.
@@ -629,7 +645,7 @@ test('Squeaky Clean: always on your own feed (Rare), their feed once a match (Ep
   assert.deepEqual([r.state.step.team, r.state.teams[0].cardUses.ownFeedPenalty], [0, 3]);
   // Their feed, PENALTY WON: theirs below Epic.
   assert.equal(roll(carded(['squeaky-clean:rare', null], { step: step(1), attacker: 1 }), dice(WON)).state.step.team, 1);
-  // Epic: once a match.
+  // Epic: once a half.
   const epic = roll(carded(['squeaky-clean:epic', null], { step: step(1), attacker: 1 }), dice(WON));
   assert.deepEqual([epic.state.step.team, epic.state.teams[0].cardUses.theirFeedPenalty], [0, 1]);
   assert.deepEqual(played(epic.events).map(e => [e.team, e.what]), [[0, 'penalty']]);
@@ -644,6 +660,62 @@ test('Squeaky Clean: always on your own feed (Rare), their feed once a match (Ep
   assert.equal(roll(carded(['squeaky-clean:mythic', null], { step: step(0) }), dice(AGAINST)).state.step.team, 0);
   // The penalty against them on their feed was always theirs anyway.
   assert.equal(roll(carded(['squeaky-clean:mythic', null], { step: step(1), attacker: 1 }), dice(AGAINST)).state.step.team, 0);
+});
+
+// After a goal the other side restart, unless a kicking card wins the ball back.
+const goalWith = (card, kick, uses = 0) => {
+  const m = carded([card, null], { step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick, range: 1, kicker: 'B' } });
+  m.teams[0].cardUses.keepBall = uses;
+  return roll(m, dice(0));
+};
+
+test('kicking cards win the restart back after their own goals: Golden Boot after penalty goals, Drop-Goal Artist after drop goals', () => {
+  const plain = goalWith(null, 'penalty');
+  assert.deepEqual([plain.state.attacker, plain.events.find(e => e.type === 'possession').reason], [1, 'restart']);
+  // Golden Boot, Common: once a match, after a penalty goal only.
+  const pen = goalWith('golden-boot', 'penalty');
+  assert.equal(pen.state.attacker, 0);
+  assert.deepEqual(played(pen.events).map(e => [e.what, e.kick]), [['keepBall', 'penalty']]);
+  assert.equal(pen.state.teams[0].cardUses.keepBall, 1);
+  assert.deepEqual(pen.events.find(e => e.type === 'possession'), { type: 'possession', team: 0, reason: 'restart', changed: false });
+  assert.equal(goalWith('golden-boot', 'penalty', 1).state.attacker, 1, 'once a match');
+  assert.equal(goalWith('golden-boot', 'conversion').state.attacker, 1, 'not after a conversion');
+  assert.equal(goalWith('golden-boot', 'drop').state.attacker, 1, 'not after a drop goal');
+  // Mythic: drop goals too.
+  assert.equal(goalWith('golden-boot:mythic', 'drop').state.attacker, 0);
+  // Drop-Goal Artist: after drop goals, not penalty goals.
+  assert.equal(goalWith('drop-artist', 'drop').state.attacker, 0);
+  assert.equal(goalWith('drop-artist', 'penalty').state.attacker, 1);
+  assert.equal(goalWith('drop-artist:mythic', 'drop', 1).state.attacker, 1, 'once a half');
+  // With the clock out the ball goes dead anyway, and the use is kept.
+  const late = carded(['golden-boot', null], { format: 'rolls', step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 1, kicker: 'B' } });
+  late.clock = halfRolls(late);
+  const whistle = roll(late, dice(0));
+  assert.deepEqual([whistle.state.step.type, whistle.state.teams[0].cardUses.keepBall || 0, played(whistle.events).length], ['halftime', 0, 0]);
+  // A missed kick still hands the ball over.
+  const miss = carded(['drop-artist:mythic', null], { step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'drop', range: 20, kicker: 'B' } });
+  assert.equal(roll(miss, dice(0)).state.attacker, 1);
+  // Common counts once a match; Rare and up get it back at half time.
+  for (const [card, left] of [['golden-boot', 1], ['golden-boot:rare', 0], ['drop-artist', 1], ['drop-artist:epic', 0]]) {
+    const m = carded([card, null], { step: { type: 'halftime' }, attacker: null });
+    m.teams[0].cardUses.keepBall = 1;
+    assert.equal(act(m, { type: 'continue' }).state.teams[0].cardUses.keepBall, left, card);
+  }
+});
+
+test('Squeaky Clean, Rare and up: the referee never shows them a card', () => {
+  const YELLOW = DICE.K.faces.findIndex(f => f.card);
+  const check = card => roll(carded([null, card], { step: { type: 'roll', purpose: 'penalty', dice: ['K', 'D'], team: 0, offender: 1 } }), dice(YELLOW, 2));
+  const common = check('squeaky-clean');
+  assert.deepEqual([common.state.teams[1].yellows, common.events.find(e => e.type === 'card').color], [1, 'yellow']);
+  for (const rarity of ['rare', 'epic', 'mythic']) {
+    const { state, events } = check(`squeaky-clean:${rarity}`);
+    assert.equal(state.teams[1].yellows, 0, rarity);
+    assert.equal(state.teams[1].sinBin, false);
+    assert.equal(events.some(e => e.type === 'card'), false);
+    assert.deepEqual(played(events).map(e => [e.team, e.what]), [[1, 'noCard']]);
+    assert.deepEqual([state.step.purpose, state.step.team], ['penalty', 0], 'the penalty itself still stands');
+  }
 });
 
 test('a saved match from before rarities loads with Common cards, one each', () => {

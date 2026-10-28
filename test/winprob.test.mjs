@@ -105,6 +105,49 @@ test('the meter: team cards give an edge worth their measured lift at the kick-o
   assert.equal(winMeter(done, 0), 1);
 });
 
+test('the meter on the clock uses the cards\' clock values', () => {
+  const m = stateAt({ format: 'rolls', firstReceiver: 0 });
+  m.cards = true;
+  m.teams[0].cards = [{ id: 'squeaky-clean', rarity: 'epic' }];
+  const want = winProbability(m, 0) + cardTier('squeaky-clean', 'epic').clock;
+  assert.ok(Math.abs(winMeter(m, 0) - want) < 0.02, `${winMeter(m, 0)} vs ${want}`);
+  assert.ok(cardTier('squeaky-clean', 'epic').clock < cardTier('squeaky-clean', 'epic').value - 0.03, 'and it is smaller');
+});
+
+test('the meter sees what the model can\'t: sin bins for the rest of the half, red cards and injuries for the match', () => {
+  const at = (format, opts = {}) => {
+    const m = stateAt({ format, firstReceiver: 0, ...opts });
+    return m;
+  };
+  for (const format of ['points', 'rolls']) {
+    const base = at(format);
+    const p = winMeter(base, 0);
+    // The other side sin-binned from the kick-off: worth its measured half.
+    const binned = at(format, { sinBin: [false, true], yellows: [0, 1] });
+    const lift = winMeter(binned, 0) - p;
+    assert.ok(lift > 0.07 && lift < 0.14, `${format}: sin bin ${lift}`);
+    assert.ok(Math.abs(winMeter(binned, 0) + winMeter(binned, 1) - 1) < 1e-9);
+    // A red card counts for more; an injury costs the injured side.
+    const red = at(format, { yellows: [0, 2] });
+    assert.ok(winMeter(red, 0) - p > lift);
+    const hurt = at(format, { injuries: [{ F: 1 }, {}] });
+    assert.ok(winMeter(hurt, 0) < p && winMeter(hurt, 0) > p - 0.07);
+    const worse = at(format, { injuries: [{ F: 2 }, {}] });
+    assert.ok(winMeter(worse, 0) < winMeter(hurt, 0));
+    assert.ok(p - winMeter(at(format, { injuries: [{ S: 1 }, {}] }), 0) < p - winMeter(hurt, 0), 'a Scrum Half matters less than the Forwards');
+  }
+  // A sin bin fades as the half runs out, and is gone at half time.
+  const fresh = at('rolls', { sinBin: [false, true], yellows: [0, 1] });
+  const later = at('rolls', { sinBin: [false, true], yellows: [0, 1] });
+  later.clock = 40;
+  const plainLater = at('rolls');
+  plainLater.clock = 40;
+  assert.ok(winMeter(fresh, 0) - winMeter(at('rolls'), 0) > winMeter(later, 0) - winMeter(plainLater, 0));
+  // In a race's second half it runs to full time.
+  const second = at('points', { half: 2, scores: [20, 20], sinBin: [false, true], yellows: [0, 1] });
+  assert.ok(winMeter(second, 0) > winMeter(at('points', { half: 2, scores: [20, 20] }), 0) + 0.02);
+});
+
 test('the model agrees with simulated matches from the kick-off and from a lead', () => {
   const runs = 1500;
   const play = (setup, seed) => {

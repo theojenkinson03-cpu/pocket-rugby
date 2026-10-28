@@ -32,7 +32,7 @@ import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
 // anything that changes a match's outcome changes.
-const BUILD = 'pr-4.0';
+const BUILD = 'pr-4.1';
 
 const KITS = [
   { name: 'Navy', color: '#1d3577' },
@@ -1960,10 +1960,16 @@ function playTournamentMatch() {
 
 // ---------- Daily challenge ----------
 
-// Today's scenario, worked out once per day.
+// Today's scenario, worked out once per day: it is played through to check
+// it, so this phone keeps it until the day (or the build) changes.
 function todaysChallenge() {
   const key = dayKey();
-  if (ui.daily?.scenario?.key !== key) ui.daily = { scenario: dailyScenario(key), board: 'loading' };
+  if (ui.daily?.scenario?.key !== key) {
+    const kept = load('daily-scenario');
+    const scenario = kept?.key === key && kept.build === BUILD ? kept.scenario : dailyScenario(key);
+    if (scenario !== kept?.scenario) save('daily-scenario', { key, build: BUILD, scenario });
+    ui.daily = { scenario, board: 'loading' };
+  }
   return ui.daily.scenario;
 }
 

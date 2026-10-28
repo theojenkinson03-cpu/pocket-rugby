@@ -6,7 +6,8 @@
 
 import { POSITIONS } from './dice.js';
 import { CARD_IDS, rollRarity } from './cards.js';
-import { MATCH_LENGTHS, newMatch, rollWeather, seededRng, TRY_RUN_IN } from './engine.js';
+import { act, MATCH_LENGTHS, newMatch, rollWeather, seededRng, TRY_RUN_IN } from './engine.js';
+import { cpuChoice } from './ai.js';
 import { randomRoster } from './players.js';
 import { realRoster } from './squads.js';
 import { LEAGUES } from './tournament.js';
@@ -72,10 +73,32 @@ const TWISTS = ['none', 'none', 'injured', 'sinbinned', 'theirSinBin', 'theirInj
 
 // How hard a day may be: the win model's chance for you when you take over.
 export const DIFFICULTY = [0.12, 0.42];
+// The model can't see everything (a sin bin that runs to full time, a card
+// that wins the ball back), so a day is also played out, Pro against Pro,
+// PLAYOUTS times with seeded dice: it must be won between these shares.
+export const PLAYOUTS = 40;
+export const PLAYED_OUT = [0.05, 0.55];
+
+// How often Pro against Pro wins the day from where you take over.
+export function playOut(candidate, n = PLAYOUTS) {
+  let wins = 0;
+  for (let i = 0; i < n; i++) {
+    const rng = seededRng((candidate.seed + i * 7919) >>> 0);
+    let m = dailyMatch(candidate);
+    for (let guard = 0; m.step.type !== 'fulltime' && guard < 2000; guard++) {
+      const st = m.step;
+      const a = st.type === 'roll' ? { type: 'roll' } : st.type === 'halftime' ? { type: 'continue' } : { type: 'choose', value: cpuChoice({ ...m, cpuLevel: 'pro' }, rng) };
+      m = act(m, a, rng).state;
+    }
+    if (m.winner === 0) wins++;
+    else if (m.winner === null) wins += 0.5;
+  }
+  return wins / n;
+}
 
 // The day's scenario: plain data, the same for everyone that day. The
 // score and the situation are drawn until the win model gives you a real
-// but uphill chance (between 12% and 42%).
+// but uphill chance (between 12% and 42%), and playing it out agrees.
 export function dailyScenario(key) {
   const rng = seededRng(daySeed(key));
   const leagueId = pick(['prem', 'urc', 'top14', 'super'], rng);
@@ -121,7 +144,13 @@ export function dailyScenario(key) {
     };
     const chance = winMeter(dailyMatch(candidate), 0);
     const [lo, hi] = DIFFICULTY;
-    const miss = chance < lo ? lo - chance : chance > hi ? chance - hi : 0;
+    let miss = chance < lo ? lo - chance : chance > hi ? chance - hi : 0;
+    // Only a day the model likes is played out; one that plays out too easy
+    // or too hard ranks behind any the model alone would pass.
+    if (miss === 0) {
+      const won = playOut(candidate);
+      if (won < PLAYED_OUT[0] || won > PLAYED_OUT[1]) miss = 1 + Math.abs(won - 0.3);
+    }
     if (!best || miss < best.miss) best = { scenario: { ...candidate, chance: Math.round(chance * 1000) / 1000 }, miss };
     if (miss === 0) break;
   }

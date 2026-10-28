@@ -2,8 +2,8 @@
 // Expert plays out many matches from the current position for each option
 // and picks the one that wins most often. Personalities flavour the choices.
 
-import { act, actInPlace, halfRolls, kickBonus, kickChance, receiverOdds, seededRng, tryChance } from './engine.js';
-import { cardTier, RARITY_IDS } from './cards.js';
+import { act, actInPlace, halfRolls, keepsBall, kickBonus, kickChance, receiverOdds, seededRng, tryChance } from './engine.js';
+import { cardTier, cardWorth, RARITY_IDS } from './cards.js';
 import { possessionsLeft, winFromPossession, winProbability } from './winprob.js';
 
 export const LEVELS = {
@@ -65,6 +65,8 @@ function goesForGoal(match, team, kick, range, threshold) {
   const chance = kickChance(range, kickBonus(match, team, kick));
   // Sudden death: any score wins it.
   if (match.suddenDeath) return chance >= 1 / 3;
+  // Three points and the ball back: worth a go at one in three.
+  if (keepsBall(match, team, kick)) return chance >= 1 / 3;
   if (match.format === 'rolls') {
     // Near the end, three points are only worth it if they draw or win the match.
     if (match.half === 2 && possessionsLeft(match) <= 2) {
@@ -75,15 +77,15 @@ function goesForGoal(match, team, kick, range, threshold) {
   return chance >= threshold - 1e-9;
 }
 
-// A dealt card's worth: its measured value at its rarity, plus the style's liking.
-export function cardValue(id, personality = PERSONALITIES.balanced, rarity = 'common') {
-  return (cardTier(id, rarity).value || 0) + (personality.cards[id] || 0);
+// A dealt card's worth: its measured value at its rarity in this format, plus the style's liking.
+export function cardValue(id, personality = PERSONALITIES.balanced, rarity = 'common', format = 'points') {
+  return cardWorth(cardTier(id, rarity), format) + (personality.cards[id] || 0);
 }
 
 const dealtRarity = (match, id) => match.dealRarity?.[id] || 'common';
 
 function bestCard(match, personality) {
-  const worth = id => cardValue(id, personality, dealtRarity(match, id));
+  const worth = id => cardValue(id, personality, dealtRarity(match, id), match.format);
   return [...match.step.options].sort((a, b) => worth(b) - worth(a))[0];
 }
 

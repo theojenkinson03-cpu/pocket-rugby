@@ -115,15 +115,25 @@ const freshUses = () => ({ tryRerolls: 0, ownFeedPenalty: 0, theirFeedPenalty: 0
 
 // Spends one of a card's limited uses (e.g. "once a half"), if one is left.
 // Uses 'per try' count the rerolls on this try attempt; 'always' never run out.
-function useCharge(m, team, key) {
+function chargeLeft(m, team, key) {
   const limit = cardEffects(m, team).uses?.[key];
   if (!limit) return false;
   if (limit.per === 'always') return true;
   if (limit.per === 'try') return (m.step.rerolled || 0) < limit.n;
-  const used = m.teams[team].cardUses;
-  if ((used[key] || 0) >= limit.n) return false;
-  used[key] = (used[key] || 0) + 1;
+  return (m.teams[team].cardUses[key] || 0) < limit.n;
+}
+
+function useCharge(m, team, key) {
+  if (!chargeLeft(m, team, key)) return false;
+  const { per } = cardEffects(m, team).uses[key];
+  if (per === 'match' || per === 'half') m.teams[team].cardUses[key] = (m.teams[team].cardUses[key] || 0) + 1;
   return true;
+}
+
+// Whether a goal of this kind ('penalty' or 'drop') would win `team` the
+// ball back: a kicking card with a use left, and time to play on.
+export function keepsBall(m, team, kind) {
+  return !timeUp(m) && (cardEffects(m, team).keepBall || []).includes(kind) && chargeLeft(m, team, 'keepBall');
 }
 
 // Half time refreshes the "once a half" uses and keeps the "once a match" ones.
@@ -504,7 +514,8 @@ function afterScore(m, ev, team, kind = null) {
     ev.push({ type: 'halftime' });
     return;
   }
-  const keep = kind !== null && (cardEffects(m, team).keepBall || []).includes(kind);
+  // With the clock out the ball goes dead anyway: nothing to win back.
+  const keep = kind !== null && keepsBall(m, team, kind) && useCharge(m, team, 'keepBall');
   if (keep) cardPlayed(ev, m, team, 'keepBall', fx => (fx.keepBall || []).includes(kind), { kick: kind });
   startPossession(m, ev, keep ? team : other(team), 'restart');
 }
@@ -753,7 +764,10 @@ function onPenaltyCheck(m, ev, rng) {
   m.roll = { dice: ['K', 'D'], faces: [cardFace, rangeFace], purpose: 'penalty', team };
 
   const O = m.teams[offender];
-  if (DICE.K.faces[cardFace].card) {
+  // Squeaky Clean (Rare up): the referee keeps the cards in their pocket.
+  const spared = DICE.K.faces[cardFace].card && cardEffects(m, offender).noCards;
+  if (spared) cardPlayed(ev, m, offender, 'noCard', fx => fx.noCards);
+  if (DICE.K.faces[cardFace].card && !spared) {
     O.yellows++;
     O.stats.cards++;
     if (O.yellows >= 2) {

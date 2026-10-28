@@ -23,7 +23,7 @@ const MUTANTS = [
   ['Injury from a single Big Hit', 'js/engine.js', 'injury: firstHit && secondHit', 'injury: firstHit || secondHit'],
   ['Try worth 4', 'js/engine.js', "addPoints(m, ev, team, 5, 'try')", "addPoints(m, ev, team, 4, 'try')"],
   ['Conversion worth 3', 'js/engine.js', "conversion: ['conversions', 'conversionAttempts', 2]", "conversion: ['conversions', 'conversionAttempts', 3]"],
-  ['Scorers keep the ball after a score', 'js/engine.js', "startPossession(m, ev, other(team), 'restart');\n}", "startPossession(m, ev, team, 'restart');\n}"],
+  ['Scorers keep the ball after a score', 'js/engine.js', "startPossession(m, ev, keep ? team : other(team), 'restart');", "startPossession(m, ev, team, 'restart');"],
   ['No conversion: straight to restart', 'js/engine.js', "m.step = { type: 'roll', purpose: 'range', dice: ['D'], team, kick: 'conversion' };", 'afterScore(m, ev, team);'],
   ['Kick must beat the range, not equal it', 'js/engine.js', 'const good = distance >= range;', 'const good = distance > range;'],
   ['Video ref counts as no try', 'js/engine.js', "if (face.result === 'video') {", "if (face.result === 'never') {"],
@@ -67,10 +67,10 @@ const MUTANTS = [
   ['Rush Defence against big moves', 'js/engine.js', 'const n = (special ? cardEffects(m, def).tackleBonus?.special : cardEffects(m, def).tackleBonus?.hitUp) || 0;', 'const n = cardEffects(m, def).tackleBonus?.hitUp || 0;'],
   ['Second-die ruck for everyone', 'js/engine.js', "else if (secondHit && canRuck && ruckOnSecond) outcome = 'ruck';", "else if (secondHit && canRuck) outcome = 'ruck';"],
   ['Jackal: video ref does not win the ruck', 'js/engine.js', 'const byCard = (cardEffects(m, def).ruckAlsoWins || []).includes(result);', 'const byCard = false;'],
-  ['Limited cards never run out', 'js/engine.js', 'if ((used[key] || 0) >= limit.n) return false;', 'if ((used[key] || 0) > 99) return false;'],
+  ['Limited cards never run out', 'js/engine.js', "return (m.teams[team].cardUses[key] || 0) < limit.n;", "return (m.teams[team].cardUses[key] || 0) < 99;"],
   ['Once-a-match cards refreshed at half time', 'js/engine.js', "if (limits[key]?.per !== 'match') used[key] = 0;", 'used[key] = 0;'],
   ['Set-Piece Kings ignored at resets', 'js/engine.js', 'const kings = [0, 1].find(t => cardEffects(m, t).setPieceTies);', 'const kings = undefined;'],
-  ['Set-piece advantage for three runs', 'js/cards.js', 'setPieceTies: true, setPieceAdvantage: 1 } }', 'setPieceTies: true, setPieceAdvantage: 3 } }'],
+  ['Set-piece advantage for three runs', 'js/cards.js', 'setPieceTies: true, setPieceAdvantage: 2 } }', 'setPieceTies: true, setPieceAdvantage: 3 } }'],
   ['Squeaky Clean on the other side\'s feed', 'js/engine.js', "useCharge(m, team, 'ownFeedPenalty')", "useCharge(m, other(team), 'ownFeedPenalty')"],
   ['Toss winner picks first', 'js/engine.js', "(DRAFT_ORDER[pick] === 'winner' ? match.firstReceiver : other(match.firstReceiver))", "(DRAFT_ORDER[pick] === 'winner' ? other(match.firstReceiver) : match.firstReceiver)"],
   ['Second pick may take the same card', 'js/engine.js', 'const rest = step.options.filter(id => id !== value);', 'const rest = step.options;'],
@@ -86,8 +86,10 @@ const MUTANTS = [
   // The CPU.
   ['Pro CPU kicks at long odds', 'js/ai.js', 'return chance >= threshold - 1e-9;', 'return chance >= 0.3;'],
   ['Boot it no keener to kick', 'js/ai.js', 'dropAt: 1 / 3,\n    penaltyAt: 1 / 3,', 'dropAt: 0.5,\n    penaltyAt: 0.5,'],
-  ['Draft ignores the CPU style', 'js/ai.js', 'return (cardTier(id, rarity).value || 0) + (personality.cards[id] || 0);', 'return cardTier(id, rarity).value || 0;'],
-  ['CPU drafts as if every card were Common', 'js/ai.js', 'const worth = id => cardValue(id, personality, dealtRarity(match, id));', 'const worth = id => cardValue(id, personality);'],
+  ['Draft ignores the CPU style', 'js/ai.js', 'return cardWorth(cardTier(id, rarity), format) + (personality.cards[id] || 0);', 'return cardWorth(cardTier(id, rarity), format);'],
+  ['CPU drafts as if every card were Common', 'js/ai.js', 'const worth = id => cardValue(id, personality, dealtRarity(match, id), match.format);', "const worth = id => cardValue(id, personality, 'common', match.format);"],
+  ['CPU drafts by race values on the clock', 'js/ai.js', 'const worth = id => cardValue(id, personality, dealtRarity(match, id), match.format);', 'const worth = id => cardValue(id, personality, dealtRarity(match, id));'],
+  ['The meter uses race values on the clock', 'js/cards.js', "export const cardWorth = (card, format = 'points') => (format === 'rolls' ? card.clock ?? card.value : card.value) || 0;", "export const cardWorth = card => card.value || 0;"],
   ['Win model forgets the second-half kick-off', 'js/winprob.js', 'const shr = match.firstReceiver === null ? 0 : (1 - match.firstReceiver === team ? 0 : 1);', 'const shr = 0;'],
 
   // Tournaments.
@@ -197,6 +199,14 @@ const MUTANTS = [
   ['Phones compare who controls what', 'js/online.js', 'const { controllers, ...shared } = match;', 'const shared = match;'],
   ['Team names not cut to length', 'js/online.js', "name: String(team?.name || 'Visitors').slice(0, 14),", "name: String(team?.name || 'Visitors'),"],
   ['Kits from the other phone not checked', 'js/online.js', 'kit: sanitiseKit(team?.kit),', 'kit: team?.kit ?? null,'],
+
+  // Kicking cards win the ball back; Squeaky Clean keeps the cards away.
+  ['Kicking cards keep the ball after any score', 'js/engine.js', "return !timeUp(m) && (cardEffects(m, team).keepBall || []).includes(kind) && chargeLeft(m, team, 'keepBall');", "return !timeUp(m) && (cardEffects(m, team).keepBall || []).length > 0 && chargeLeft(m, team, 'keepBall');"],
+  ['Keeping the ball never runs out', 'js/engine.js', "const keep = kind !== null && keepsBall(m, team, kind) && useCharge(m, team, 'keepBall');", 'const keep = kind !== null && keepsBall(m, team, kind);'],
+  ['The ball kept with the clock out', 'js/engine.js', "return !timeUp(m) && (cardEffects(m, team).keepBall", "return (cardEffects(m, team).keepBall"],
+  ['Squeaky Clean shown cards anyway', 'js/engine.js', "const spared = DICE.K.faces[cardFace].card && cardEffects(m, offender).noCards;", 'const spared = false;'],
+  ['The meter forgets the ball comes back', 'js/winprob.js', 'const after = kind => (keepsBall(match, att, kind) ? att : 1 - att);', 'const after = () => 1 - att;'],
+  ['The CPU kicks at evens with the ball to come back', 'js/ai.js', "if (keepsBall(match, team, kick)) return chance >= 1 / 3;", ''],
 
   // The clock, sudden death and the decision timer.
   ['The clock never runs out', 'js/engine.js', 'match.clock >= halfRolls(match);', 'match.clock > halfRolls(match) * 10;'],

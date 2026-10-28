@@ -123,6 +123,11 @@ test('tries, kicks, ranges, rucks and the penalty check', () => {
   assert.deepEqual(t.faces.map(f => f.caption), ['TRY', 'TRY', 'TRY', 'No try', 'Video ref', 'Held up']);
   const k = rollGuide(stateAt({ step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 4, kicker: 'B' } }));
   assert.deepEqual(tones(k), DICE.K.faces.map(f => (f.kick >= 4 ? 'good' : 'bad')));
+  // With Golden Boot's use left, a penalty goal wins the ball back.
+  const boot = stateAt({ step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 4, kicker: 'B' } });
+  boot.teams[0].cards = [{ id: 'golden-boot', rarity: 'common' }];
+  const over = rollGuide(boot).faces.filter(f => f.tone === 'good');
+  assert.ok(over.length && over.every(f => f.note === 'ball back' && /wins the restart back/.test(f.text)));
   const r = rollGuide(stateAt({ step: { type: 'roll', purpose: 'range', dice: ['D'], team: 0, kick: 'conversion' }, scores: [5, 0] }));
   assert.deepEqual(r.faces.map(f => f.caption), DICE.D.faces.map(f => `${f.value * 10} m`));
   const ruck = rollGuide(stateAt({ step: { type: 'roll', purpose: 'ruck', dice: ['K'], team: 1 } }));

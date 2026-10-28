@@ -6,8 +6,8 @@
 // for the live win meter and as the Expert CPU's judge at the end of each
 // look-ahead.
 
-import { halfRolls, kickBonus, kickChance, rollsLeft, timeUp, tryChance } from './engine.js';
-import { teamCards } from './cards.js';
+import { halfRolls, keepsBall, kickBonus, kickChance, rollsLeft, timeUp, tryChance } from './engine.js';
+import { cardWorth, teamCards } from './cards.js';
 
 // How a possession ends: points the attackers scored, and who has the next
 // one. Measured over 4,000 simulated matches, both formats, cards on and off.
@@ -190,10 +190,19 @@ export function winProbability(match, team) {
     // Whatever happens, the other side has the ball next.
     return p * (conv * at(7, 1 - att) + (1 - conv) * at(5, 1 - att)) + (1 - p) * at(0, 1 - att);
   }
+  // After a goal the other side has the ball, unless a kicking card wins it back.
+  const after = kind => (keepsBall(match, att, kind) ? att : 1 - att);
   if (step.purpose === 'kick') {
     const p = kickChance(step.range, kickBonus(match, att, step.kick));
     const points = step.kick === 'conversion' ? 2 : 3;
-    return p * at(points, 1 - att) + (1 - p) * at(0, 1 - att);
+    return p * at(points, after(step.kick)) + (1 - p) * at(0, 1 - att);
+  }
+  // A shot at goal on offer: the side with the ball takes whichever is better.
+  if (step.type === 'choose' && (step.purpose === 'penalty' || step.purpose === 'drop')) {
+    const p = kickChance(step.range, kickBonus(match, att, step.purpose));
+    const kick = p * at(3, after(step.purpose)) + (1 - p) * at(0, 1 - att);
+    const play = winFromPossession(match, team);
+    return team === att ? Math.max(kick, play) : Math.min(kick, play);
   }
   return winFromPossession(match, team);
 }
@@ -202,19 +211,55 @@ export function winProbability(match, team) {
 // value, the win rate it adds from the kick-off against no card) as log-odds,
 // added up for the side's two cards.
 const logit = p => Math.log(p / (1 - p));
-export const cardsEdge = (match, team) => teamCards(match, team).reduce((sum, card) => sum + logit(0.5 + (card.value || 0)), 0);
+export const cardsEdge = (match, team) => teamCards(match, team).reduce((sum, card) => sum + logit(0.5 + cardWorth(card, match.format)), 0);
 
-// The live meter: the model above, plus the team cards. The difference in the
-// sides' card edges counts in full at the kick-off and fades as the match
-// runs out. The Expert CPU judges by the model alone, since both sides'
-// cards are already in its look-ahead.
+// What a sin bin (for a whole half), a red card and an injury (for the whole
+// match) cost the side that has them, as win rate given away from the
+// kick-off. Over 3,000 matches each: the other side sin-binned won 58.5% on
+// the clock and 60.9% in a race, red-carded 69.0% and 74.9%; an injury costs
+// about 12 points in a hundred per point of injury, times the share of runs
+// that player carries (Forwards −1: −4.5 and −3.8).
+const CONDITIONS = {
+  rolls: { sinBin: 0.085, red: 0.19 },
+  points: { sinBin: 0.121, red: 0.261 },
+};
+const INJURY = 0.12;
+const CARRIES = { S: 0.1, F: 0.34, C: 0.2, W: 0.2, B: 0.16 };
+
+// How much of the match, and of this half, is still to play: 1 at the start, 0 at the end.
+function stillToPlay(match) {
+  const top = Math.max(...match.teams.map(t => t.score));
+  if (clocked(match)) {
+    const match_ = Math.min(1, possessionsAfter(match) * ROLLS_PER_POSSESSION / match.target.rolls);
+    return { match: match_, half: match.suddenDeath ? 1 : rollsLeft(match) / halfRolls(match) };
+  }
+  const { half, full } = match.target;
+  return {
+    match: Math.max(0, 1 - top / full),
+    half: match.half === 1 ? Math.max(0, 1 - top / half) : Math.min(1, Math.max(0, (full - top) / (full - half))),
+  };
+}
+
+// What a side's sin bin, red card and injuries cost it now, as log-odds.
+function setbacks(match, team, left) {
+  const t = match.teams[team];
+  const c = CONDITIONS[match.format === 'rolls' ? 'rolls' : 'points'];
+  let cost = t.yellows >= 2 ? logit(0.5 + c.red) * left.match : t.sinBin ? logit(0.5 + c.sinBin) * left.half : 0;
+  for (const [pos, n] of Object.entries(t.injuries || {})) if (n) cost += logit(0.5 + Math.min(0.4, INJURY * CARRIES[pos] * n)) * left.match;
+  return cost;
+}
+
+// The live meter: the model above, plus what the model can't see: the team
+// cards, sin bins, red cards and injuries. The difference in the sides' card
+// edges counts in full at the kick-off and fades as the match runs out; a
+// sin bin fades with the half. The Expert CPU judges by the model alone,
+// since all of these are already in its look-ahead.
 export function winMeter(match, team) {
   const p = winProbability(match, team);
   if (p <= 0 || p >= 1) return p;
-  const diff = cardsEdge(match, team) - cardsEdge(match, 1 - team);
+  const left = stillToPlay(match);
+  const cards = cardsEdge(match, team) - cardsEdge(match, 1 - team);
+  const diff = cards * left.match + setbacks(match, 1 - team, left) - setbacks(match, team, left);
   if (!diff) return p;
-  const left = clocked(match)
-    ? Math.min(1, possessionsAfter(match) * ROLLS_PER_POSSESSION / match.target.rolls)
-    : Math.max(0, 1 - Math.max(...match.teams.map(t => t.score)) / match.target.full);
-  return 1 / (1 + Math.exp(-(logit(p) + diff * left)));
+  return 1 / (1 + Math.exp(-(logit(p) + diff)));
 }
