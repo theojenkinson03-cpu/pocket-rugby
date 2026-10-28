@@ -26,9 +26,9 @@ function finished({ scores = [30, 10], winner = scores[0] > scores[1] ? 0 : 1, l
 const ctx = (over = {}) => ({ mode: '1p', level: 'pro', tournament: null, ...over });
 const unlocks = (match, tracker = newTracker(0), context = ctx(), career = newCareer()) => recordMatch(career, match, tracker, context);
 
-test('29 achievements, each with a name and a description', () => {
-  assert.equal(ACHIEVEMENTS.length, 29);
-  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 29);
+test('31 achievements, each with a name and a description', () => {
+  assert.equal(ACHIEVEMENTS.length, 31);
+  assert.equal(new Set(ACHIEVEMENTS.map(a => a.id)).size, 31);
   for (const a of ACHIEVEMENTS) assert.ok(a.name && a.text.endsWith('.') && typeof a.check === 'function', a.id);
   assert.equal(ACHIEVEMENT_BY_ID['first-win'].name, 'First Win');
 });
@@ -84,6 +84,8 @@ const CASES = {
   'hat-trick': [() => finished({ players: [{ W: { tries: 3 } }, {}] }), () => finished({ players: [{ W: { tries: 2 }, C: { tries: 2 } }, {}] })],
   'try-fest': [() => finished({ stats: [{ tries: 6 }, {}] }), () => finished({ stats: [{ tries: 5 }, { tries: 6 }] })],
   'shut-out': [() => finished({ scores: [30, 0] }), () => finished({ scores: [30, 3] })],
+  'hundred-metres': [() => finished({ players: [{ F: { metres: 100 } }, {}] }), () => finished({ players: [{ F: { metres: 99 }, W: { metres: 99 } }, { C: { metres: 140 } }] })],
+  'gain-line': [() => finished({ stats: [{ metres: 250 }, {}] }), () => finished({ stats: [{ metres: 249 }, { metres: 300 }] })],
   'mr-reliable': [() => finished({ stats: [{ conversions: 4, conversionAttempts: 4 }, {}] }), () => finished({ stats: [{ conversions: 4, conversionAttempts: 5 }, {}] })],
   'boot-camp': [() => finished({ stats: [{ conversions: 3, penaltyGoals: 2 }, {}] }), () => finished({ stats: [{ conversions: 1, penaltyGoals: 3 }, {}] })],
   'brick-wall': [() => finished({ stats: [{ tackles: 25 }, {}] }), () => finished({ stats: [{ tackles: 24 }, { tackles: 30 }] })],

@@ -23,15 +23,19 @@ export function potmCard(match, potm = playerOfTheMatch(match)) {
   return box;
 }
 
+// The last column (errors) is the only one where more is worse.
 const COLUMNS = [
   ['Tries', 'TRY', p => p.tries],
+  ['Metres made', 'M', p => p.metres || 0],
   ['Carries', 'RUN', p => p.carries],
   ['Line breaks', 'LB', p => p.lineBreaks],
   ['Tackles', 'TKL', p => p.tackles],
+  ['Missed tackles', 'MT', p => p.missed || 0],
   ['Turnovers won', 'TO', p => p.turnovers],
   ['Kicking points', 'KCK', p => p.points],
   ['Errors', 'ERR', p => p.errors],
 ];
+const WORSE = new Set(['MT', 'ERR']);
 
 // One table per side: each player's numbers, best in each column marked.
 export function playersTables(match, potm = playerOfTheMatch(match)) {
@@ -54,7 +58,7 @@ export function playersTables(match, potm = playerOfTheMatch(match)) {
     const thead = el('thead');
     thead.append(head);
     const body = el('tbody');
-    const best = COLUMNS.map(([, , get], i) => (i === COLUMNS.length - 1 ? null : Math.max(1, ...POSITIONS.map(p => get(team.players[p])))));
+    const best = COLUMNS.map(([, short, get]) => (WORSE.has(short) ? null : Math.max(1, ...POSITIONS.map(p => get(team.players[p])))));
     for (const pos of POSITIONS) {
       const p = team.players[pos];
       const row = el('tr');

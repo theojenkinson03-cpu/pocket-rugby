@@ -38,10 +38,11 @@ Three of twelve cards are dealt after the coin toss. Each card bends one rule fo
 ## Players, stats and your record
 
 - **Named players.** Every side has five named players (edit them, or shuffle new ones, on the team sheet). Commentary uses their names: "TRY! Webb (Outside Back) dots it down!"
-- **Player of the Match** after every match, with a spotlight scene, and a table of every player's tries, carries, line breaks, tackles, turnovers, kicking points and errors.
+- **Run metres.** Every carry makes ground, read from the dice: tackled, a carrier makes twice the run's intensity less the tackle total (never below 0), so a Hit Up 5 stopped by a 5 makes 5 m and one stopped by a 9 makes 1 m; a Big Hit or a ruck contest stops it dead. A line break makes 10 m and 5 m more for each point the tackle fell short, and a try adds 10 m for the run-in. The pitch's gain line moves with the metres made. A standard match comes to about 150 m a side, 7 m a carry.
+- **Player of the Match** after every match, with a spotlight scene, and a table of every player's tries, metres, carries, line breaks, tackles, missed tackles, turnovers, kicking points and errors. The team report adds metres per carry and tackle success.
 - **Win meter.** A live bar under the scoreboard shows each side's chance of winning, from a model of how possessions end (it agrees with simulated matches to within a few points), with each side's team card counted as an edge worth its measured lift. The full-time report charts it through the match as a momentum graph, with every score marked.
 - **Career.** Your record against each CPU level and online, streaks, points, tries, biggest win, trophies, and the team cards you've won with, each at the rarest you've had.
-- **29 achievements**, from Hat-trick and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert), Mythic (win with a Mythic card) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
+- **31 achievements**, from Hat-trick, Hundred Metres and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert), Mythic (win with a Mythic card) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
 
 ## Presentation
 

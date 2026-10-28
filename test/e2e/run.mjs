@@ -386,7 +386,7 @@ const SCENARIOS = {
     await page.click('#btn-career');
     const got = await page.$$eval('.ach.got', li => li.map(x => x.textContent));
     check(got.some(t => t.includes('Graduate')), 'career screen shows Graduate');
-    check((await page.$$('.ach')).length === 29, 'all 29 achievements listed');
+    check((await page.$$('.ach')).length === 31, 'all 31 achievements listed');
     return { errors, ...result, actions: result.actions + tips };
   },
   async 'nations-cup'(browser, base) {

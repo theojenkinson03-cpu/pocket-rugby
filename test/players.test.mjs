@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, emptyPlayer, migrate, newMatch, seededRng, VERSION } from '../js/engine.js';
+import { act, carryMetres, emptyPlayer, migrate, newMatch, seededRng, TRY_RUN_IN, VERSION } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { POSITIONS } from '../js/dice.js';
 import { fullName, playerOfTheMatch, playerRatings, possessive, randomRoster, rating, statLine, surname, SURNAMES, who } from '../js/players.js';
@@ -40,10 +40,12 @@ test('names in commentary, with and without a roster', () => {
 test('ratings reward tries, breaks, tackles and turnovers, and errors cost', () => {
   const base = rating(emptyPlayer());
   assert.equal(base, 0);
-  for (const key of ['tries', 'lineBreaks', 'carries', 'tackles', 'bigHits', 'turnovers', 'points']) {
+  for (const key of ['tries', 'lineBreaks', 'carries', 'metres', 'tackles', 'bigHits', 'turnovers', 'passes', 'points']) {
     assert.ok(rating({ ...emptyPlayer(), [key]: 1 }) > 0, key);
   }
   assert.ok(rating({ ...emptyPlayer(), errors: 1 }) < 0);
+  assert.ok(rating({ ...emptyPlayer(), missed: 1 }) < 0);
+  assert.equal(rating({ ...emptyPlayer(), metres: 10 }), rating({ ...emptyPlayer(), tackles: 1 }), 'every 10 m is worth a tackle');
   assert.ok(rating({ ...emptyPlayer(), tries: 1 }) > rating({ ...emptyPlayer(), tackles: 3 }), 'a try beats three tackles');
 });
 
@@ -68,6 +70,7 @@ test('possessives and stat lines read naturally', () => {
   assert.equal(statLine({ ...emptyPlayer(), tries: 1, tackles: 2 }), '1 try · 2 tackles');
   assert.equal(statLine({ ...emptyPlayer(), tries: 2, lineBreaks: 1, points: 4, tackles: 1, carries: 9 }), '2 tries · 1 line break · 4 kicking points · 1 tackle');
   assert.equal(statLine(emptyPlayer()), 'A quiet day');
+  assert.equal(statLine({ ...emptyPlayer(), tries: 1, metres: 42, carries: 6 }), '1 try · 42 m · 6 carries');
 });
 
 test('every player\'s numbers add up to the team\'s, over hundreds of matches', () => {
@@ -85,6 +88,9 @@ test('every player\'s numbers add up to the team\'s, over hundreds of matches', 
       const label = `match ${g} team ${i}`;
       assert.equal(sum(t, 'tries'), s.tries, `${label} tries`);
       assert.equal(sum(t, 'carries'), s.runs, `${label} carries`);
+      assert.equal(sum(t, 'metres'), s.metres, `${label} metres`);
+      assert.equal(sum(t, 'missed'), s.missedTackles, `${label} missed tackles`);
+      assert.ok(s.metres >= s.lineBreaks * 15 + s.tries * TRY_RUN_IN, `${label}: every line break makes 15 m or more, every try 10 more`);
       assert.equal(sum(t, 'lineBreaks'), s.lineBreaks, `${label} line breaks`);
       assert.equal(sum(t, 'tackles'), s.tackles, `${label} tackles`);
       assert.equal(sum(t, 'bigHits'), s.bigHits, `${label} big hits`);
@@ -119,6 +125,36 @@ test('a match saved before players and cards existed still loads and plays', () 
     state = act(state, a, rng).state;
   }
   assert.ok(state.seq > 0);
+});
+
+test('run metres: twice the intensity less the tackle total, 10 m and 5 m a point for a line break, and the run-in', () => {
+  // The rule itself.
+  assert.deepEqual([[5, 5], [5, 7], [5, 9], [4, 8], [4, 9], [8, 8]].map(([i, t]) => carryMetres('tackle', i, t)), [5, 3, 1, 0, 0, 8]);
+  assert.deepEqual([[5, 4], [5, 3], [8, 2]].map(([i, t]) => carryMetres('break', i, t)), [15, 20, 40]);
+  assert.equal(carryMetres('bighit', 5, 6), 0, 'a Big Hit stops the carry dead');
+  assert.equal(carryMetres('ruck', 4, 5), 0);
+  assert.equal(TRY_RUN_IN, 10);
+
+  // A Hit Up 4 tackled with 2 + 3: 3 m.
+  let m = roll(stateAt({ carrier: 'W' }), dice(0)).state;
+  const tackled = roll(m, dice(1, 2));
+  assert.equal(tackled.events.find(e => e.type === 'tackle').metres, 3);
+  assert.deepEqual([tackled.state.teams[0].players.W.metres, tackled.state.teams[0].stats.metres, tackled.state.gained], [3, 3, 3]);
+  // The same Hit Up through a 1 + 1 tackle: a line break of 20 m, then the try's 10.
+  const broke = roll(m, dice(0, 0));
+  assert.equal(broke.events.find(e => e.type === 'lineBreak').metres, 20);
+  assert.equal(broke.state.teams[1].players.W.missed, 1, 'the missed tackle is the opposite number\'s');
+  const scored = roll(broke.state, dice(0));
+  assert.deepEqual([scored.state.teams[0].players.W.metres, scored.events.find(e => e.type === 'try').metres], [30, 10]);
+  // A Big Hit on the second die: no ground.
+  assert.equal(roll(m, dice(2, 5)).events.find(e => e.type === 'tackle').metres, 0);
+  // Passes: the Scrum Half's named pass, and a chosen one.
+  const sh = roll(stateAt({ carrier: 'S' }), dice(1));
+  assert.equal(sh.state.teams[0].players.S.passes, 1);
+  const open = roll(stateAt({ carrier: 'W' }), dice(3)).state;
+  assert.equal(choose(open, 'C').state.teams[0].players.W.passes, 1);
+  // A new possession starts back at the gain line.
+  assert.equal(roll(stateAt({ carrier: 'C', step: undefined }), dice(5)).state.gained, 0, 'an interception starts a new possession');
 });
 
 test('each number goes to the player who earned it', () => {

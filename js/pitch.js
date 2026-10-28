@@ -138,9 +138,8 @@ export function createPitch(root) {
       ballAt = [X(kx + 5), 77];
       if (step.range) focus = { x: (X(kx) + X(TRY_LINE)) / 2, y: 75, zoom: Math.min(2.2, W / (TRY_LINE - kx + 90)) };
     } else {
-      // Open play: the gain line creeps forward with each phase.
-      const phase = Math.max(1, match.phase || 1);
-      gain = 150 + Math.min(phase - 1, 8) * 14;
+      // Open play: the gain line moves up with the metres made this possession.
+      gain = 150 + Math.min((match.gained || 0) * PX_PER_M, 180);
       for (const pos of POSITIONS) {
         const [dx, y] = FORMATION[pos];
         spots[att][pos] = [X(gain + dx), y];

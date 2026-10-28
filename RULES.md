@@ -68,6 +68,17 @@ Every rule on the printed Pocket Sports Rugby sheet, how this game applies it, a
 | The advantage ends after 3 completed tackles or an attacking error | Each completed tackle uses one run (ruck contests included). An error or any change of possession ends it | `countTackle`, `setPiece`, `startPossession` | `exhaustive`; mutations "Quick tap never runs out" and "Errors do not end quick tap" |
 | Another penalty during quick tap resets it to 3 runs | Any new quick tap starts at 3 | `onChoose` | `exhaustive` |
 
+## Run metres (a stat, not a rule)
+
+The printed game has no field position, so metres change nothing about who wins; they measure how far each carry got, from the same dice. Code: `carryMetres` and `TRY_RUN_IN`; tested by `players` ("run metres") and `invariants` (every tackle's metres from its dice, metres only from carries and tries, every player's metres adding up to the team's).
+
+| Roll | Metres |
+| --- | --- |
+| Tackled | Twice the intensity less the tackle total, never below 0 |
+| Big Hit on the second die, or a ruck contest | 0 |
+| Line break | 10, and 5 more for each point the tackle total fell short |
+| Try | 10 more for the run-in |
+
 ## House rules: team cards
 
 Team cards aren't on the printed sheet. They're an optional extra, on by default, and every effect is a small change at one named point in the engine, so the printed rules underneath are untouched. Each card's text in the game is the whole of its effect.

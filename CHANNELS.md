@@ -5,7 +5,7 @@ The game is published as two claude.ai artifacts:
 | Channel | Artifact | Built from |
 | --- | --- | --- |
 | **Real** | https://claude.ai/artifact/X7GPTEeuMFYFDnVSyiuKFL | commit `b64bce4` (card rarities, real leagues) |
-| **Dev** | published from the branch as it is built | the latest commit on `claude/digital-pocket-rugby` |
+| **Dev** | https://claude.ai/artifact/58EujGM35rJk24GvmtS1PF | the latest commit on `claude/digital-pocket-rugby` |
 
 Real is what people play. Dev is where the next build takes shape: it shows a **Dev** badge and the commit it was built from on the title screen, and keeps its saves and career apart from Real (each artifact has its own storage).
 

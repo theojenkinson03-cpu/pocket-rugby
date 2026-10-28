@@ -58,9 +58,10 @@ export function fullName(match, team, pos) {
   return match.teams[team].roster?.[pos] || `${match.teams[team].name} ${PLAYERS[pos].one}`;
 }
 
-// One number for a player's match: tries and turnovers count most, errors cost.
+// One number for a player's match: tries and turnovers count most, every
+// 10 m made is worth a tackle, and errors and missed tackles cost.
 export function rating(p) {
-  return p.tries * 6 + p.lineBreaks * 2.5 + p.carries * 0.6 + p.tackles + p.bigHits * 1.5 + p.turnovers * 3 + p.points * 0.8 - p.errors * 1.5;
+  return p.tries * 6 + p.lineBreaks * 2.5 + p.carries * 0.3 + (p.metres || 0) * 0.1 + p.tackles + p.bigHits * 1.5 + p.turnovers * 3 + (p.passes || 0) * 0.1 + p.points * 0.8 - p.errors * 1.5 - (p.missed || 0);
 }
 
 export function playerRatings(match) {
@@ -87,6 +88,7 @@ export function statLine(p) {
   const parts = [];
   const add = (n, one, many) => n && parts.push(`${n} ${n === 1 ? one : many}`);
   add(p.tries, 'try', 'tries');
+  if (p.metres) parts.push(`${p.metres} m`);
   add(p.lineBreaks, 'line break', 'line breaks');
   add(p.points, 'kicking point', 'kicking points');
   add(p.tackles, 'tackle', 'tackles');

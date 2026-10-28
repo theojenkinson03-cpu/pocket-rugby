@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, breakChance, draftRarity, isLegal, kickChance, migrate, newMatch, receiverOdds, seededRng } from '../js/engine.js';
+import { act, breakChance, draftRarity, isLegal, kickChance, migrate, newMatch, receiverOdds, seededRng, VERSION } from '../js/engine.js';
 import { CARD_BY_ID, CARD_IDS, CARDS, cardEffects, cardTier, catchUp, DEAL_SIZE, RARITIES, RARITY_IDS, rollRarity, teamCard } from '../js/cards.js';
 import { DICE } from '../js/dice.js';
 import { choose, dice, OUTSIDE_BACKS, roll, stateAt } from './helpers.mjs';
@@ -655,7 +655,7 @@ test('a saved match from before rarities loads with Common cards', () => {
     t.cardUses = { tryRerolls: 0, ownFeedPenalty: 1 };
   }
   const m = migrate(old);
-  assert.equal(m.version, 3);
+  assert.equal(m.version, VERSION);
   assert.deepEqual(m.dealRarity, { jackal: 'common', fortress: 'common', clinical: 'common' });
   assert.deepEqual(m.teams.map(t => t.cardRarity), ['common', 'common']);
   assert.deepEqual(m.teams[0].cardUses, { tryRerolls: 0, ownFeedPenalty: 1, theirFeedPenalty: 0 });

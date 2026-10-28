@@ -167,15 +167,19 @@ export function narrate(events, match) {
           head('Big hit!', 'A Big Hit on the second die always completes the tackle.');
           out.moments.push({ kind: 'bighit', team: e.team, title: 'Big hit', sub: 'Tackle made', player: fullName(match, e.team, e.pos) });
         } else {
-          say(pick([`Tackled by ${tackler}. ${sum}.`, `${name(e.team)} hold firm. ${sum}.`, `${cap(tackler)} brings them down. ${sum}.`]), e.team);
-          head('Tackled', `Tackle total ${sum}. Back to the Scrum Half.`);
+          const carrier = player(1 - e.team, e.pos);
+          const gained = e.metres ?? 0;
+          say(gained
+            ? pick([`${cap(carrier)} makes ${gained} m before ${tackler} brings them down. ${sum}.`, `${gained} m for ${carrier}, then ${tackler} makes the tackle. ${sum}.`])
+            : pick([`${cap(tackler)} stops ${carrier} on the gain line. ${sum}.`, `No ground for ${carrier}: ${tackler} holds firm. ${sum}.`]), e.team);
+          head(gained ? `Tackled · ${gained} m` : 'Tackled', `Tackle total ${sum}. Back to the Scrum Half.`);
         }
         break;
       }
 
       case 'lineBreak':
-        say(pick([`LINE BREAK! ${cap(player(e.team, e.pos))} is through!`, `They can't hold ${player(e.team, e.pos)}! LINE BREAK!`]), e.team, 'big');
-        head('Line break!', `Tackle total ${tackleSum({ ...e, team: 1 - e.team }, match)} couldn't reach ${e.need}. Roll the black die for the try.`);
+        say(pick([`LINE BREAK! ${cap(player(e.team, e.pos))} is through, ${e.metres ?? 0} m!`, `They can't hold ${player(e.team, e.pos)}! LINE BREAK, ${e.metres ?? 0} m!`]), e.team, 'big');
+        head(`Line break · ${e.metres ?? 0} m`, `Tackle total ${tackleSum({ ...e, team: 1 - e.team }, match)} couldn't reach ${e.need}. Roll the black die for the try.`);
         out.moments.push({ kind: 'break', team: e.team, pos: e.pos, title: 'Line break', sub: `${fullName(match, e.team, e.pos)} is away`, player: fullName(match, e.team, e.pos) });
         break;
 

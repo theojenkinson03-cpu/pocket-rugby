@@ -1323,13 +1323,19 @@ function bindCoach() {
 
 // ---------- Break screens ----------
 
+const perCarry = s => (s.runs ? s.metres / s.runs : 0);
+const tackleRate = s => (s.tackles + s.missedTackles ? s.tackles / (s.tackles + s.missedTackles) : 0);
 const STAT_ROWS = [
   ['Tries', s => s.tries],
   ['Conversions', s => `${s.conversions}/${s.conversionAttempts}`, s => s.conversions],
   ['Penalty goals', s => `${s.penaltyGoals}/${s.penaltyAttempts}`, s => s.penaltyGoals],
   ['Drop goals', s => `${s.dropGoals}/${s.dropAttempts}`, s => s.dropGoals],
+  ['Metres made', s => `${s.metres || 0} m`, s => s.metres || 0],
+  ['Carries', s => s.runs],
+  ['Metres per carry', s => `${perCarry(s).toFixed(1)} m`, perCarry],
   ['Line breaks', s => s.lineBreaks],
   ['Tackles made', s => s.tackles],
+  ['Tackle success', s => `${Math.round(tackleRate(s) * 100)}%`, tackleRate],
   ['Big hits', s => s.bigHits],
   ['Turnovers won', s => s.turnoversWon],
   ['Errors', s => s.errors, s => -s.errors],
@@ -1420,7 +1426,7 @@ function openBreak() {
 
   const table = $('#break-stats');
   table.innerHTML = '';
-  const rows = full ? STAT_ROWS : STAT_ROWS.filter(([label]) => ['Tries', 'Line breaks', 'Tackles made', 'Turnovers won', 'Penalties conceded', 'Cards'].includes(label));
+  const rows = full ? STAT_ROWS : STAT_ROWS.filter(([label]) => ['Tries', 'Metres made', 'Line breaks', 'Tackles made', 'Turnovers won', 'Penalties conceded', 'Cards'].includes(label));
   for (const [label, show, rank = show] of rows) {
     const tr = el('tr');
     const [ra, rb] = [rank(a.stats), rank(b.stats)];

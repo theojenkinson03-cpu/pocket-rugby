@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, controllerOf, defenceModifier, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, seededRng } from '../js/engine.js';
+import { act, carryMetres, controllerOf, defenceModifier, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, seededRng, TRY_RUN_IN } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { CARD_BY_ID, CARD_IDS, catchUp, RARITY_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
@@ -41,7 +41,7 @@ function pickAction(m, rng, style) {
 
 // A side's card effects at its rarity, read straight from the card list.
 const fx = (m, team) => CARD_BY_ID[m.teams[team].card]?.tiers[m.teams[team].cardRarity || 'common'].effects || {};
-const PLAYER_SUMS = [['tries', 'tries'], ['carries', 'runs'], ['lineBreaks', 'lineBreaks'], ['tackles', 'tackles'], ['bigHits', 'bigHits'], ['turnovers', 'turnoversWon'], ['errors', 'errors']];
+const PLAYER_SUMS = [['tries', 'tries'], ['carries', 'runs'], ['metres', 'metres'], ['lineBreaks', 'lineBreaks'], ['tackles', 'tackles'], ['missed', 'missedTackles'], ['bigHits', 'bigHits'], ['turnovers', 'turnoversWon'], ['errors', 'errors']];
 
 function checkCards(m, label) {
   const drafted = m.teams.map(t => t.card);
@@ -194,6 +194,17 @@ function checkEvents(before, after, events, label) {
     assert.equal(brokeThrough, want.result === 'break', `${label}: tackle outcome`);
     assert.equal(after.step.purpose === 'ruck', want.result === 'ruck', `${label}: ruck`);
   }
+
+  // Run metres: from the tackle dice, and the run-in for a try.
+  for (const e of events.filter(x => x.type === 'tackle' || x.type === 'lineBreak')) {
+    const outcome = e.type === 'lineBreak' ? 'break' : e.outcome;
+    assert.equal(e.metres, carryMetres(outcome, e.need, e.total), `${label}: metres for a ${outcome}`);
+  }
+  const metresEvents = events.reduce((n, e) => n + (['tackle', 'lineBreak', 'try'].includes(e.type) ? e.metres : 0), 0);
+  const metresMade = after.teams.reduce((n, t, i) => n + t.stats.metres - before.teams[i].stats.metres, 0);
+  assert.equal(metresMade, metresEvents, `${label}: metres only from carries and tries`);
+  for (const e of events.filter(x => x.type === 'try')) assert.equal(e.metres, TRY_RUN_IN);
+  if (events.some(e => e.type === 'possession')) assert.equal(after.gained, 0, `${label}: a new possession starts at the gain line`);
 
   // A run's intensity: the die, quick tap, cards and injuries, never below 1.
   for (const e of events.filter(x => x.type === 'run')) {

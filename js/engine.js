@@ -4,7 +4,7 @@
 import { DICE, POSITIONS } from './dice.js';
 import { CARD_IDS, cardEffects, catchUp, DEAL_SIZE, rollRarity } from './cards.js';
 
-export const VERSION = 3;
+export const VERSION = 4;
 
 export const MATCH_LENGTHS = {
   quick: { half: 10, full: 20, label: 'Quick' },
@@ -37,13 +37,28 @@ function emptyStats() {
     cards: 0,
     possessions: 0,
     phases: 0,
+    metres: 0,
   };
 }
 
-// What each of the five players did. Tackles go to the defender's opposite
-// number (their Outside Backs tackle yours); place kicks are the Fly Half's.
+// What each of the five players did. Tackles (and missed tackles) go to the
+// defender's opposite number (their Outside Backs tackle yours); place kicks
+// are the Fly Half's.
 export function emptyPlayer() {
-  return { carries: 0, lineBreaks: 0, tries: 0, tackles: 0, bigHits: 0, turnovers: 0, points: 0, errors: 0 };
+  return { carries: 0, metres: 0, lineBreaks: 0, tries: 0, tackles: 0, missed: 0, bigHits: 0, turnovers: 0, passes: 0, points: 0, errors: 0 };
+}
+
+// Run metres: how far a carry gets, read from the dice. Tackled, the carrier
+// makes twice the intensity less the tackle total, never below 0, so a tackle
+// that only just stops a Hit Up 5 (total 5) gives up 5 m and a crushing one
+// none. A Big Hit or a ruck contest stops the carry dead. A line break makes
+// 10 m and 5 m more for each point the tackle fell short, and a try adds the
+// run-in.
+export const TRY_RUN_IN = 10;
+export function carryMetres(outcome, intensity, total) {
+  if (outcome === 'break') return 10 + 5 * (intensity - total);
+  if (outcome === 'tackle') return Math.max(0, 2 * intensity - total);
+  return 0;
 }
 
 const NO_EFFECTS = Object.freeze({});
@@ -121,6 +136,8 @@ export function newMatch({
     firstReceiver: null,
     carrier: 'S',
     phase: 0,
+    // Metres made in this possession, for the pitch's gain line.
+    gained: 0,
     quickTap: 0,
     // Where the +1 runs came from: a quick tap ('tap') or a team card ('card').
     quickTapFrom: null,
@@ -142,12 +159,14 @@ export function migrate(match) {
   m.dealRarity ??= Object.fromEntries(m.deal.map(id => [id, 'common']));
   m.cpuPersonality ??= 'balanced';
   m.quickTapFrom ??= m.quickTap ? 'tap' : null;
+  m.gained ??= 0;
   for (const t of m.teams) {
     t.roster ??= null;
     t.card ??= null;
     t.cardRarity ??= t.card ? 'common' : null;
     t.cardUses = { ...freshUses(), ...t.cardUses };
-    t.players ??= emptyPlayers();
+    t.players = Object.fromEntries(POSITIONS.map(p => [p, { ...emptyPlayer(), ...t.players?.[p] }]));
+    t.stats = { ...emptyStats(), ...t.stats };
   }
   m.version = VERSION;
   return m;
@@ -273,6 +292,7 @@ function startPossession(m, ev, team, reason) {
   m.attacker = team;
   m.carrier = 'S';
   m.phase = 1;
+  m.gained = 0;
   m.quickTap = 0;
   m.teams[team].stats.possessions++;
   ev.push({ type: 'possession', team, reason, changed });
@@ -369,6 +389,7 @@ function onAttack(m, ev, rng) {
     }
     case 'pass':
       if (face.to) {
+        player(m, team, pos).passes++;
         ev.push({ type: 'pass', team, from: pos, to: face.to });
         m.carrier = face.to;
         m.step = attackStep(team, face.to);
@@ -418,11 +439,17 @@ function onTackle(m, ev, rng) {
     ev.push({ type: 'injury', team: att, pos: carrier, penalty: A.injuries[carrier] });
   }
 
+  const metres = carryMetres(result.outcome, intensity, result.total);
+  A.stats.metres += metres;
+  player(m, att, carrier).metres += metres;
+  m.gained += metres;
+
   if (result.outcome === 'break') {
     A.stats.lineBreaks++;
     D.stats.missedTackles++;
     player(m, att, carrier).lineBreaks++;
-    ev.push({ type: 'lineBreak', team: att, pos: carrier, total: result.total, values: result.values, need: intensity, modifier, bonus });
+    player(m, def, carrier).missed++;
+    ev.push({ type: 'lineBreak', team: att, pos: carrier, total: result.total, values: result.values, need: intensity, modifier, bonus, metres });
     m.step = { type: 'roll', purpose: 'try', dice: ['K'], team: att, carrier, videos: 0 };
     return;
   }
@@ -443,6 +470,7 @@ function onTackle(m, ev, rng) {
     need: intensity,
     modifier,
     bonus,
+    metres,
   });
   countTackle(m, ev);
   if (result.outcome === 'ruck') {
@@ -484,7 +512,10 @@ function onTry(m, ev, rng) {
   if (face.result === 'try') {
     m.teams[team].stats.tries++;
     player(m, team, m.step.carrier).tries++;
-    ev.push({ type: 'try', team, pos: m.step.carrier });
+    m.teams[team].stats.metres += TRY_RUN_IN;
+    player(m, team, m.step.carrier).metres += TRY_RUN_IN;
+    m.gained += TRY_RUN_IN;
+    ev.push({ type: 'try', team, pos: m.step.carrier, metres: TRY_RUN_IN });
     addPoints(m, ev, team, 5, 'try');
     if (reachedFullTime(m, ev, team)) return;
     m.quickTap = 0;
@@ -633,6 +664,7 @@ function onChoose(m, ev, value) {
   const step = m.step;
   switch (step.purpose) {
     case 'pass':
+      player(m, step.team, step.from).passes++;
       ev.push({ type: 'pass', team: step.team, from: step.from, to: value, chosen: true });
       m.carrier = value;
       m.step = attackStep(step.team, value);

@@ -16,6 +16,7 @@ export function newCareer() {
     pointsFor: 0,
     pointsAgainst: 0,
     tries: 0,
+    metres: 0,
     byLevel: { rookie: { played: 0, won: 0 }, pro: { played: 0, won: 0 }, expert: { played: 0, won: 0 } },
     twoPlayer: 0,
     online: { played: 0, won: 0 },
@@ -91,6 +92,8 @@ export const ACHIEVEMENTS = [
   { id: 'mr-reliable', name: 'Mr Reliable', text: 'Kick four conversions in a match without missing.', check: (m, me) => m.teams[me].stats.conversions >= 4 && m.teams[me].stats.conversions === m.teams[me].stats.conversionAttempts },
   { id: 'so-close', name: 'So Close', text: 'Hit the post.', check: (m, me, t) => t.postHits > 0 },
   { id: 'boot-camp', name: 'Boot Camp', text: 'Score 12 kicking points in a match.', check: (m, me) => m.teams[me].stats.conversions * 2 + (m.teams[me].stats.penaltyGoals + m.teams[me].stats.dropGoals) * 3 >= 12 },
+  { id: 'hundred-metres', name: 'Hundred Metres', text: 'One player makes 100 m in a match.', check: (m, me) => maxPlayer(m, me, 'metres') >= 100 },
+  { id: 'gain-line', name: 'Gain Line Kings', text: 'Make 250 m as a team in a match.', check: (m, me) => (m.teams[me].stats.metres || 0) >= 250 },
   { id: 'brick-wall', name: 'Brick Wall', text: 'Make 25 tackles in a match.', check: (m, me) => m.teams[me].stats.tackles >= 25 },
   { id: 'big-hitter', name: 'Big Hitter', text: 'Land four big hits in a match.', check: (m, me) => m.teams[me].stats.bigHits >= 4 },
   { id: 'ball-thief', name: 'Ball Thief', text: 'Win two turnovers at the ruck in a match.', check: (m, me, t) => t.rucksWon >= 2 },
@@ -131,6 +134,7 @@ export function recordMatch(career, match, tracker, context) {
   c.pointsFor += mine.score;
   c.pointsAgainst += theirs.score;
   c.tries += mine.stats.tries;
+  c.metres = (c.metres || 0) + (mine.stats.metres || 0);
   if (context.mode === 'online') {
     c.online.played++;
     if (won) c.online.won++;
