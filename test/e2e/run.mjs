@@ -84,7 +84,7 @@ const ROLL_LABELS = {
   attack: s => new RegExp(`Roll (Scrum Half|Forwards|Centres|Outside Backs|Fly Half)`),
   tackle: () => /Tackle!/,
   ruck: () => /Contest the ruck/,
-  try: () => /Go for the line|Video ref/,
+  try: s => (s.videos ? /Video ref: roll again/ : s.rerolled ? /Clinical: roll again/ : /Go for the line/),
   range: () => /range/,
   penalty: () => /Card check/,
   kick: () => /Kick! Need \d+ m/,
@@ -114,7 +114,7 @@ function verify(snap, label) {
   if (step.type === 'roll') {
     const main = snap.buttons[0];
     check(snap.buttons.length === 1, `${label}: one roll button`);
-    check(ROLL_LABELS[step.purpose]().test(main.text), `${label}: button "${main.text}" for ${step.purpose}`);
+    check(ROLL_LABELS[step.purpose](step).test(main.text), `${label}: button "${main.text}" for ${step.purpose}`);
     if (step.purpose === 'attack') check(main.text.includes(NAMES[step.dice[0]]), `${label}: rolls the ${NAMES[step.dice[0]]}`);
     if (['attack', 'tackle', 'try', 'ruck'].includes(step.purpose)) {
       const holder = step.purpose === 'attack' ? m.carrier : step.purpose === 'ruck' ? 'S' : step.carrier;
