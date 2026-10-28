@@ -3,7 +3,7 @@
 // mirrored for the team that attacks the other way.
 
 import { inkFor } from './color.js';
-import { POSITIONS } from './dice.js';
+import { PLAYERS, POSITIONS } from './dice.js';
 
 const W = 400;
 const H = 150;
@@ -61,7 +61,7 @@ export function createPitch(root) {
       svg('circle', { r: 9.5, class: 'halo' }, g);
       svg('circle', { r: 7, class: 'body' }, g);
       const label = svg('text', { class: 'tok-label', 'text-anchor': 'middle', 'dominant-baseline': 'central', y: 0.5 }, g);
-      label.textContent = pos;
+      label.textContent = PLAYERS[pos].short;
       map[pos] = g;
     }
     return map;
@@ -128,7 +128,7 @@ export function createPitch(root) {
         ballAt = [X(200), 6];
       }
     } else if (kicking || (purpose === 'range' && step.kick === 'conversion')) {
-      // Drop goals come off the boot of whoever has the ball; the Back takes the place kicks.
+      // Drop goals come off the boot of whoever has the ball; the Fly Half takes the place kicks.
       const kicker = step.kick === 'drop' || purpose === 'drop' ? carrier : 'B';
       const kx = step.range ? kickSpot(step.range) : TRY_LINE - 22 * PX_PER_M;
       POSITIONS.forEach((pos, i) => {

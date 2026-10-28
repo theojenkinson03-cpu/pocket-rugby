@@ -34,7 +34,7 @@ export const PERSONALITIES = {
   },
   pack: {
     name: 'Forward-heavy',
-    blurb: 'Keeps it tight through the Forward',
+    blurb: 'Keeps it tight through the Forwards',
     dropAt: 0.5,
     penaltyAt: 0.5,
     pass: { F: 0.3 },

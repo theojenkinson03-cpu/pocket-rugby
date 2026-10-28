@@ -3,12 +3,16 @@
 
 export const POSITIONS = ['S', 'F', 'C', 'W', 'B'];
 
+// The five attacking dice. Their ids follow the printed rules sheet (Scrum
+// Half, Forward, Centre, Wing, Back); the game calls them by rugby's
+// position groups. `name` is the group, `one` a single player in it, and
+// `short` the letters on chips and the pitch.
 export const PLAYERS = {
-  S: { name: 'Scrum Half', short: 'S' },
-  F: { name: 'Forward', short: 'F' },
-  C: { name: 'Centre', short: 'C' },
-  W: { name: 'Wing', short: 'W' },
-  B: { name: 'Back', short: 'B' },
+  S: { name: 'Scrum Half', one: 'Scrum Half', short: 'SH' },
+  F: { name: 'Forwards', one: 'Forward', short: 'FW' },
+  C: { name: 'Centres', one: 'Centre', short: 'C' },
+  W: { name: 'Outside Backs', one: 'Outside Back', short: 'OB' },
+  B: { name: 'Fly Half', one: 'Fly Half', short: 'FH' },
 };
 
 const hitUp = value => ({ kind: 'run', label: 'Hit Up', value });
@@ -28,19 +32,19 @@ export const DICE = {
     faces: [hitUp(4), passTo('F'), passTo('C'), passTo('W'), passTo('B'), passTo('F')],
   },
   F: {
-    name: 'Forward',
+    name: 'Forwards',
     faces: [hitUp(5), hitUp(5), hitUp(4), special('Line Break', 6), pass(), knockOn()],
   },
   C: {
-    name: 'Centre',
+    name: 'Centres',
     faces: [hitUp(4), hitUp(5), special('Thru the Gap', 7), drop(), pass(), intercept()],
   },
   W: {
-    name: 'Wing',
+    name: 'Outside Backs',
     faces: [hitUp(4), hitUp(5), special('Into the Corner', 8), pass(), touch(), knockOn()],
   },
   B: {
-    name: 'Back',
+    name: 'Fly Half',
     faces: [hitUp(3), hitUp(4), special('High Ball', 6), drop(), pass(), touch()],
   },
   // Brown. Two rolls make a tackle; one roll sets a kick's range.

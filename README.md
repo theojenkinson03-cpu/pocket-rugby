@@ -1,26 +1,39 @@
 # Pocket Rugby
 
-A digital version of the Pocket Sports Rugby dice game, built for phones. Play the CPU, pass one phone between two players, or play a friend on two phones. Take a nation through the Nations Cup or a club through the League.
+A digital version of the Pocket Sports Rugby dice game, built for phones. Play the CPU, pass one phone between two players, or play a friend on two phones. Take a nation through the Nations Cup, or a real club through a season of Super Rugby Pacific, Prem Rugby, the United Rugby Championship or the Top 14.
 
-Each team is five dice: Scrum Half, Forward, Centre, Wing and Back. The defence, referee and scoring dice settle tackles, scrums, lineouts, penalties, tries and kicks. First to 30 wins, and half time is called at 15.
+Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly Half (the printed set calls the last four the Forward, Centre, Wing and Back). The defence, referee and scoring dice settle tackles, scrums, lineouts, penalties, tries and kicks. First to 30 wins, and half time is called at 15.
 
 ## Ways to play
 
 - **1 player against the CPU.** Three levels: Rookie plays on instinct, Pro plays the odds, Expert plays out hundreds of continuations before each decision. Four styles: Balanced, Boot it (kicks at every chance), Run it (taps penalties and spreads it wide) and Forwards (keeps it tight).
 - **2 players** on one phone, taking turns.
 - **Online, on two phones.** One player hosts and gets a six-letter code; the other joins with it. See [Online play](#online-play) for what it needs.
-- **Nations Cup**: eight nations in two pools of four, then semi-finals and a final. **League**: eight clubs play each other once, then a top-four play-off. Tables use 4 points for a win and bonus points for 4 tries or losing by 7 or fewer. Other fixtures are played out by the engine, CPU against CPU, with each side's own level and style.
+- **Nations Cup**: eight nations in two pools of four, then semi-finals and a final.
+- **Four real leagues**, each with its real teams and its own play-offs (see [Leagues](#leagues)). Play a short season of six rounds or a full one where everyone meets once.
+- Tables use 4 points for a win and bonus points for 4 tries or losing by 7 or fewer. Other fixtures are played out by the engine, CPU against CPU, with each side's own level and style.
 - **Learn to play**: a guided first match against a Rookie, with a coach who explains each part of the game the first time it comes up. New players see it first on the title screen.
+
+## Leagues
+
+| League | Teams | Play-offs |
+| --- | --- | --- |
+| **Super Rugby Pacific** (2026) | Blues, Chiefs, Crusaders, Highlanders, Hurricanes, Brumbies, Queensland Reds, NSW Waratahs, Western Force, Fijian Drua, Moana Pasifika | Top six. Qualifying finals 1 v 6, 2 v 5 and 3 v 4; the three winners and the best-placed loser are re-seeded into the semi-finals, then the Grand final |
+| **Prem Rugby** (2026–27) | Bath, Bristol Bears, Exeter Chiefs, Gloucester, Harlequins, Leicester Tigers, Newcastle Red Bulls, Northampton Saints, Sale Sharks, Saracens | Top four. Semi-finals 1 v 4 and 2 v 3, then the final |
+| **United Rugby Championship** (2026–27) | Leinster, Munster, Ulster, Connacht, Cardiff, Dragons, Ospreys, Scarlets, Glasgow Warriors, Edinburgh, Benetton, Zebre Parma, Bulls, Lions, Sharks, Stormers | Top eight. Quarter-finals 1 v 8, 4 v 5, 2 v 7 and 3 v 6 on a fixed bracket, then the Grand Final |
+| **Top 14** (2026–27) | Toulouse, Bordeaux Bègles, Toulon, La Rochelle, Clermont, Racing 92, Stade Français, Castres, Montpellier, Pau, Bayonne, Lyon, Perpignan, Vannes | Top six. Barrages 3 v 6 and 4 v 5 while the top two wait; 1st meets the 4 v 5 winner and 2nd the 3 v 6 winner in the semi-finals, then the final |
+
+The better seed is at home in every knockout tie, the final included (in the real competitions some finals are at a neutral ground). With an odd number of teams, as in Super Rugby Pacific, one side sits out each round. Each side has its own colours, a change strip for clashes, and a CPU level and style. The club names are real; the players are made up.
 
 ## Team cards
 
-Three of twelve cards are dealt after the coin toss. The side that **lost** the toss picks first, from all three; the toss winner, who receives the kick-off, picks from the two left. Each card bends one rule for the whole match: Sure Hands (the Wing never loses it), Jackal (wins rucks on the video ref), Golden Boot (+20 m on place kicks), Fortress (the other side's big moves are 2 lower) and so on. The draft screen shows all three cards; the scoreboard shows each side's card, and tapping it shows what it does. When a card changes a roll, a short scene says so.
+Three of twelve cards are dealt after the coin toss. The side that **lost** the toss picks first, from all three; the toss winner, who receives the kick-off, picks from the two left. Each card bends one rule for the whole match: Sure Hands (the Outside Backs never lose it), Jackal (wins rucks on the video ref), Golden Boot (+20 m on place kicks), Fortress (the other side's big moves are 2 lower) and so on. The draft screen shows all three cards; the scoreboard shows each side's card, and tapping it shows what it does. When a card changes a roll, a short scene says so.
 
 Every card was balanced over 5,000 simulated matches against a side with no card: each lifts the win rate by 6.8 to 9.7 points, inside the simulation's noise of each other. Over 10,000 full drafts the side picking first won 49.9%, so losing the toss and picking first evens out receiving the kick-off. Cards can be turned off on the team sheet. [RULES.md](RULES.md) lists every card's exact effect.
 
 ## Players, stats and your record
 
-- **Named players.** Every side has five named players (edit them, or shuffle new ones, on the team sheet). Commentary uses their names: "TRY! Webb (Wing) dots it down!"
+- **Named players.** Every side has five named players (edit them, or shuffle new ones, on the team sheet). Commentary uses their names: "TRY! Webb (Outside Back) dots it down!"
 - **Player of the Match** after every match, with a spotlight scene, and a table of every player's tries, carries, line breaks, tackles, turnovers, kicking points and errors.
 - **Win meter.** A live bar under the scoreboard shows each side's chance of winning, from a model of how possessions end (it agrees with simulated matches to within a few points). The full-time report charts it through the match as a momentum graph, with every score marked.
 - **Career.** Your record against each CPU level and online, streaks, points, tries, biggest win, trophies, and the team cards you've won with.
@@ -81,7 +94,7 @@ The rules engine is checked from several directions. [RULES.md](RULES.md) maps e
 ```sh
 npm test               # 150+ tests: rules, cards, players, tournaments, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 85 bugs; every one must be caught
+npm run test:mutation  # plants 95 bugs; every one must be caught
 npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match
 npm run check          # all of the above
 ```
@@ -118,7 +131,7 @@ A standard match averages about 5 tries and 2 drop goals, and the kick-off recei
 | `js/ai.js` | CPU levels and styles, including Expert's look-ahead |
 | `js/winprob.js` | Win model for the meter, the momentum chart and Expert |
 | `js/players.js` | Player names, ratings and Player of the Match |
-| `js/tournament.js` | Nations Cup and League: fixtures, tables, knockouts |
+| `js/tournament.js` | Nations Cup and the four leagues: teams, fixtures, tables, play-offs |
 | `js/career.js` | Career record and achievements |
 | `js/coach.js` | The coach's tips |
 | `js/online.js` | Online protocol: moves, checks and the room session |
@@ -135,4 +148,4 @@ No build step and no runtime dependencies. It's plain HTML, CSS and ES modules. 
 
 ---
 
-An unofficial, fan-made adaptation. Not affiliated with or endorsed by Pocket Sports.
+An unofficial, fan-made adaptation. Not affiliated with or endorsed by Pocket Sports, or by any league, union or club. Team names are used only to name the sides; every player is made up.

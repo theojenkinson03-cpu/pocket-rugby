@@ -155,12 +155,12 @@ export function narrate(events, match) {
       case 'lineBreak':
         say(pick([`LINE BREAK! ${cap(player(e.team, e.pos))} is through!`, `They can't hold ${player(e.team, e.pos)}! LINE BREAK!`]), e.team, 'big');
         head('Line break!', `Tackle total ${tackleSum({ ...e, team: 1 - e.team }, match)} couldn't reach ${e.need}. Roll the black die for the try.`);
-        out.moments.push({ kind: 'break', team: e.team, pos: e.pos, title: 'Line break', sub: `${fullName(match, e.team, e.pos)} is away` });
+        out.moments.push({ kind: 'break', team: e.team, pos: e.pos, title: 'Line break', sub: `${fullName(match, e.team, e.pos)} is away`, player: fullName(match, e.team, e.pos) });
         break;
 
       case 'injury':
         say(`${cap(player(e.team, e.pos))} is hurt after two big hits. −${e.penalty} on their runs for the match.`, e.team, 'bad');
-        out.moments.push({ kind: 'injury', team: e.team, pos: e.pos, penalty: e.penalty, title: 'Injury', sub: `${fullName(match, e.team, e.pos)} −${e.penalty} for the match` });
+        out.moments.push({ kind: 'injury', team: e.team, pos: e.pos, penalty: e.penalty, title: 'Injury', sub: `${fullName(match, e.team, e.pos)} −${e.penalty} for the match`, player: fullName(match, e.team, e.pos) });
         break;
 
       case 'ruck':

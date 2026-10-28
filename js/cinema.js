@@ -170,19 +170,19 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
       });
     },
 
-    linebreak({ team, pos }) {
+    linebreak({ team, pos, player = null }) {
       return run({ tone: 'clear', duration: 1500, color: team.color }, (scene, later) => {
         scene.classList.add('linebreak');
         scene.append(el('div', 'speedlines'));
         const slab = el('div', 'slab');
-        slab.append(title('Line break'), sub(`${team.name} ${PLAYERS[pos].name} is through`));
+        slab.append(title('Line break'), sub(`${player || `${team.name} ${PLAYERS[pos].one}`} is through`));
         scene.append(slab);
         play('whoosh');
         later(250, () => play('cheer'));
       });
     },
 
-    try({ team, pos, scoreline }) {
+    try({ team, pos, scoreline, player = null }) {
       return run({ tone: 'team', duration: 2700, color: team.color }, (scene, later, k) => {
         scene.classList.add('try');
         scene.append(el('div', 'rays'));
@@ -196,7 +196,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
             shake(7 + i * 3, 260);
           });
         });
-        scene.append(word, sub(`${team.name} ${PLAYERS[pos].name} · +5`, 'late'), sub(scoreline, 'late score'));
+        scene.append(word, sub(`${player ? `${player}, ${team.name}` : `${team.name} ${PLAYERS[pos].one}`} · +5`, 'late'), sub(scoreline, 'late score'));
         play('whistle');
         later(380, () => play('roar'));
         later(500, () => confetti(scene, [team.color, '#ffffff', '#f5cf1d', inkFor(team.color)]));
@@ -387,10 +387,10 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
       });
     },
 
-    injury({ team, pos, penalty }) {
+    injury({ team, pos, penalty, player = null }) {
       return run({ duration: 1500 }, scene => {
         scene.classList.add('injury');
-        scene.append(el('div', 'cross'), title('Injury', 'small'), sub(`${team.name} ${PLAYERS[pos].name} runs at −${penalty} for the rest of the match`));
+        scene.append(el('div', 'cross'), title('Injury', 'small'), sub(`${player || `${team.name} ${PLAYERS[pos].one}`} runs at −${penalty} for the rest of the match`));
         play('groan');
       });
     },

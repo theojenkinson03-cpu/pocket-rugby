@@ -8,7 +8,7 @@ jobs:
   rules:
     name: Rules, fuzzing and mutation tests
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,7 +40,7 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Build the single-file version
         run: npm run build
-      - name: Play matches in the browser (CPU, two players, guided match, Nations Cup, online on two phones)
+      - name: Play matches in the browser (CPU, two players, guided match, Nations Cup, league season, online on two phones)
         run: node test/e2e/run.mjs
         env:
           E2E_SKIP: unskipped

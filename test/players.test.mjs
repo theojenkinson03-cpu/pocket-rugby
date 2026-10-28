@@ -29,7 +29,7 @@ test('names in commentary, with and without a roster', () => {
   m.teams[0].roster = { S: 'T. Harris', F: 'Jonny', C: 'A. B. Price', W: 'K. Lowe', B: 'M. Webb' };
   assert.equal(surname(m, 0, 'S'), 'Harris');
   assert.equal(surname(m, 0, 'F'), 'Jonny', 'a single name stays as it is');
-  assert.equal(who(m, 0, 'W'), 'Lowe (Wing)');
+  assert.equal(who(m, 0, 'W'), 'Lowe (Outside Back)');
   assert.equal(fullName(m, 0, 'B'), 'M. Webb');
   m.teams[1].name = 'Foxes';
   assert.equal(surname(m, 1, 'S'), null);

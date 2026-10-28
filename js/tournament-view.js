@@ -1,7 +1,7 @@
 // Tournament screens: picking a competition and team, then the hub with the
 // next match, the tables, the knockout bracket and every result.
 
-import { CLUBS, currentRound, NATIONS, POINTS, STAGE_NAMES, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
+import { currentRound, isUserFixture, LEAGUES, NATIONS, POINTS, QUALIFY, roundName, SHORT_SEASON, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
 import { LEVELS, PERSONALITIES } from './ai.js';
 import { MATCH_LENGTHS } from './engine.js';
 import { button, el, tallButton } from './dom.js';
@@ -37,11 +37,47 @@ function seg(legend, name, options, value, onChange) {
 
 // ---- Setup ---------------------------------------------------------------------
 
+// What each play-off format means, in a sentence.
+export const PLAYOFF_TEXT = {
+  top4: 'The top four go to the semi-finals.',
+  top6: 'The top six go to the play-offs: the top two go straight into the semi-finals, the next four play barrages.',
+  top8: 'The top eight go to the quarter-finals.',
+  super6: 'The top six go to the qualifying finals; the three winners and the best-placed loser reach the semi-finals.',
+};
+
+const COMPETITIONS = [
+  { id: 'cup', name: 'Nations Cup', note: '8 nations · two pools, then knockouts' },
+  { id: 'super', name: LEAGUES.super.name, note: `${LEAGUES.super.teams.length} teams · top six to the finals`, season: LEAGUES.super.season },
+  { id: 'prem', name: LEAGUES.prem.name, note: `${LEAGUES.prem.teams.length} clubs · top four to the semi-finals`, season: LEAGUES.prem.season },
+  { id: 'urc', name: LEAGUES.urc.name, note: `${LEAGUES.urc.teams.length} teams · top eight to the quarter-finals`, season: LEAGUES.urc.season },
+  { id: 'top14', name: LEAGUES.top14.name, note: `${LEAGUES.top14.teams.length} clubs · top six to the play-offs`, season: LEAGUES.top14.season },
+];
+
+// Rounds in a full season: everyone plays everyone once (plus a bye each with an odd number of teams).
+const fullRounds = n => (n % 2 ? n : n - 1);
+
 export function tournamentSetup(state, { onChange, onStart }) {
   const page = el('div', 'page-inner');
-  page.append(seg('Competition', 't-kind', [['cup', 'Nations Cup', 'Two pools, then knockouts'], ['league', 'League', 'Eight clubs, then play-offs']], state.kind, v => onChange({ kind: v, team: null })));
+  const comps = el('fieldset', 'comp-list');
+  comps.append(el('legend', null, 'Competition'));
+  for (const c of COMPETITIONS) {
+    const lab = el('label', 'comp');
+    const input = el('input');
+    input.type = 'radio';
+    input.name = 't-comp';
+    input.value = c.id;
+    input.checked = c.id === state.comp;
+    input.addEventListener('change', () => onChange({ comp: c.id, team: null }));
+    const text = el('span', 'comp-text');
+    text.append(el('b', null, c.name), el('small', null, c.note));
+    if (c.season) text.append(el('small', 'comp-season', c.season));
+    lab.append(input, text);
+    comps.append(lab);
+  }
+  page.append(comps);
 
-  const roster = state.kind === 'cup' ? NATIONS : CLUBS;
+  const league = LEAGUES[state.comp];
+  const roster = league ? league.teams : NATIONS;
   const team = state.team && roster.some(r => r.id === state.team) ? state.team : roster[0].id;
   const pick = el('div', 'pick');
   pick.append(el('h3', 'page-h', 'Pick your team'));
@@ -63,6 +99,10 @@ export function tournamentSetup(state, { onChange, onStart }) {
   pick.append(grid);
   page.append(pick);
 
+  const full = league ? fullRounds(league.teams.length) : 0;
+  if (league) {
+    page.append(seg('Season', 't-season', [['short', 'Short', `${SHORT_SEASON} rounds`], ['full', 'Full', `${full} rounds · everyone once`]], state.season, v => onChange({ season: v })));
+  }
   page.append(seg('Match length', 't-length', Object.entries(MATCH_LENGTHS).map(([k, v]) => [k, v.label, `HT ${v.half} · FT ${v.full}`]), state.length, v => onChange({ length: v })));
 
   const cards = el('label', 'toggle toggle-card');
@@ -76,21 +116,26 @@ export function tournamentSetup(state, { onChange, onStart }) {
   cards.querySelector('i').setAttribute('aria-hidden', 'true');
   page.append(cards);
 
-  const games = state.kind === 'cup' ? 'Up to 5 matches: 3 in your pool, then a semi-final and the final.' : 'Up to 9 matches: 7 in the season, then a semi-final and the final.';
-  page.append(el('p', 'page-note', `${games} Win 4 points, plus a bonus point for 4 tries and one for losing by ${POINTS.losingBonusWithin} or fewer.`));
-  page.append(button(state.kind === 'cup' ? 'Start the Nations Cup' : 'Start the League', () => onStart({ ...state, team }), 'btn btn-primary btn-wide', { primary: true }));
+  const rounds = league ? (state.season === 'full' ? full : SHORT_SEASON) : 3;
+  const what = league
+    ? `${rounds} rounds${league.teams.length % 2 ? ' (one side sits out each round)' : ''}. ${PLAYOFF_TEXT[league.playoff]}`
+    : 'Up to 5 matches: 3 in your pool, then a semi-final and the final.';
+  page.append(el('p', 'page-note', `${what} A win is worth 4 points, with a bonus point for 4 tries and one for losing by ${POINTS.losingBonusWithin} or fewer.`));
+  const name = league ? league.short : 'Nations Cup';
+  page.append(button(`Start the ${name}`, () => onStart({ ...state, team }), 'btn btn-primary btn-wide', { primary: true }));
+  if (league) page.append(el('p', 'fineprint', 'Real team names, made-up players. Not affiliated with or endorsed by any league, union or club.'));
   return page;
 }
 
 // ---- Hub -----------------------------------------------------------------------
 
-const ROUND_NAMES = { semi: 'Semi-final', final: 'Final' };
-
 export function fixtureLabel(t, f) {
   if (f.stage === 'pool') return `Pool ${f.group} · Round ${f.round + 1} of 3`;
-  if (f.stage === 'league') return `Round ${f.round + 1} of 7`;
-  return ROUND_NAMES[f.stage];
+  if (f.stage === 'league') return `Round ${f.round + 1} of ${t.rounds || 7}`;
+  return roundName(t, f.stage);
 }
+
+const tName = t => t.short || t.name;
 
 function nextMatchCard(t, handlers) {
   const card = el('section', 'next-card');
@@ -100,28 +145,46 @@ function nextMatchCard(t, handlers) {
     kitVars(card, champ);
     card.classList.add('champions');
     const mine = t.champion === t.userTeam;
-    card.append(el('p', 'nc-kicker', `${t.name} · Final whistle`), el('h3', 'nc-title', mine ? 'Champions!' : `${champ.name} win the ${t.name}`));
+    card.append(el('p', 'nc-kicker', `${tName(t)} · Final whistle`), el('h3', 'nc-title', mine ? 'Champions!' : `${champ.name} win the ${tName(t)}`));
     const rec = userRecord(t);
     card.append(el('p', 'nc-meta', `Your record: won ${rec.won}, lost ${rec.lost}.`));
     card.append(button('New tournament', handlers.onNew, 'btn btn-primary', { primary: true }));
     return card;
   }
+  const me = teamOf(t, t.userTeam);
+  if (!f && userAlive(t)) {
+    // A bye: a round off in a league with an odd number of teams, or a top-two
+    // finish straight into the semi-finals.
+    kitVars(card, me);
+    card.classList.add('bye');
+    const round = currentRound(t);
+    const knockout = t.stage !== 'league' && t.stage !== 'pool';
+    card.append(
+      el('p', 'nc-kicker', `${tName(t)} · ${knockout ? stageName(t) : `Round ${round + 1} of ${t.rounds || 7}`}`),
+      el('h3', 'nc-title', knockout ? 'Straight into the semi-finals' : 'Bye this round'),
+      el('p', 'nc-meta', knockout ? `${me.name} finished in the top two. Play out the ${stageName(t).toLowerCase()} to meet your semi-final opponent.` : `${me.name} sit this round out while the others play.`),
+    );
+    card.append(button(knockout ? `Play out the ${stageName(t).toLowerCase()}` : `Play out round ${round + 1}`, handlers.onSimRound, 'btn btn-primary', { primary: true }));
+    return card;
+  }
   if (!userAlive(t) || !f) {
     card.classList.add('out');
-    const out = t.stage === 'final' ? 'Out in the semi-finals' : t.kind === 'league' ? 'Missed the play-offs' : 'Out in the pool stage';
-    card.append(el('p', 'nc-kicker', `${t.name} · ${STAGE_NAMES[t.stage]}`), el('h3', 'nc-title', out));
+    // Where it ended: the last knockout tie the user played, if any.
+    const last = t.fixtures.filter(x => x.result && isUserFixture(t, x) && x.stage !== 'pool' && x.stage !== 'league').pop();
+    const out = last ? `Out in the ${roundName(t, last.stage, true).toLowerCase()}` : t.kind === 'league' ? 'Missed the play-offs' : 'Out in the pool stage';
+    card.append(el('p', 'nc-kicker', `${tName(t)} · ${stageName(t)}`), el('h3', 'nc-title', out));
     card.append(el('p', 'nc-meta', 'Play out the rest to see who lifts the trophy.'));
     card.append(button('Play out the rest', handlers.onSimRest, 'btn btn-primary', { primary: true }));
     return card;
   }
-  const me = teamOf(t, t.userTeam);
   const them = teamOf(t, f.home === t.userTeam ? f.away : f.home);
   kitVars(card, me);
   card.append(el('p', 'nc-kicker', `Next · ${fixtureLabel(t, f)}`));
   const vs = el('div', 'nc-vs');
   const side = (team, mine) => {
     const s = el('div', `nc-side${mine ? ' mine' : ''}`);
-    s.append(kitChip(team, 'nc-kit'), el('b', null, team.name), el('small', null, mine ? 'You' : `${LEVELS[team.level].name} · ${PERSONALITIES[team.personality].name}`));
+    const where = f.home === team.id ? 'Home' : 'Away';
+    s.append(kitChip(team, 'nc-kit'), el('b', null, team.name), el('small', null, mine ? `You · ${where}` : `${LEVELS[team.level].name} · ${PERSONALITIES[team.personality].name}`));
     return s;
   };
   vs.append(side(me, true), el('span', 'nc-v', 'v'), side(them, false));
@@ -133,9 +196,9 @@ function nextMatchCard(t, handlers) {
 
 function table(t, group) {
   const rows = standings(t, group);
-  const qualify = group === 'L' ? 4 : 2;
+  const qualify = group === 'L' ? QUALIFY[t.playoff || 'top4'] : 2;
   const wrap = el('section', 'standings');
-  wrap.append(el('h3', 'page-h', group === 'L' ? 'League table' : `Pool ${group}`));
+  wrap.append(el('h3', 'page-h', group === 'L' ? `${tName(t)} table` : `Pool ${group}`));
   const tbl = el('table', 'table');
   const head = el('tr');
   for (const [h, title] of [['', ''], ['Team', ''], ['P', 'Played'], ['W', 'Won'], ['L', 'Lost'], ['PD', 'Points difference'], ['BP', 'Bonus points'], ['Pts', 'Table points']]) {
@@ -148,7 +211,7 @@ function table(t, group) {
   const body = el('tbody');
   rows.forEach((row, i) => {
     const team = teamOf(t, row.id);
-    const tr = el('tr', `${row.id === t.userTeam ? 'mine' : ''}${i === qualify - 1 ? ' cut' : ''}`.trim());
+    const tr = el('tr', `${row.id === t.userTeam ? 'mine' : ''}${i === qualify - 1 ? ' cut' : ''}${t.playoff === 'top6' && i === 1 ? ' cut2' : ''}`.trim());
     const name = el('td', 'tn');
     name.append(kitChip(team), el('span', 'tn-long', team.name), el('span', 'tn-short', team.short));
     const pd = row.for - row.against;
@@ -157,7 +220,7 @@ function table(t, group) {
   });
   tbl.append(thead, body);
   wrap.append(tbl);
-  wrap.append(el('p', 'table-note', group === 'L' ? 'Top four go to the play-offs.' : 'Top two go through to the semi-finals.'));
+  wrap.append(el('p', 'table-note', group === 'L' ? PLAYOFF_TEXT[t.playoff || 'top4'] : 'The top two go through to the semi-finals.'));
   return wrap;
 }
 
@@ -180,9 +243,7 @@ function fixtureRow(t, f) {
 function bracket(t) {
   const wrap = el('section', 'bracket');
   wrap.append(el('h3', 'page-h', 'Knockouts'));
-  const semis = t.fixtures.filter(f => f.stage === 'semi');
-  const final = t.fixtures.find(f => f.stage === 'final');
-  const col = (title, list) => {
+  const col = (title, list, note = null) => {
     const c = el('div', 'br-col');
     c.append(el('p', 'br-title', title));
     const ul = el('ul', 'fixtures');
@@ -193,13 +254,22 @@ function bracket(t) {
       ul.append(li);
     }
     c.append(ul);
+    if (note) c.append(el('p', 'table-note', note));
     return c;
   };
-  wrap.append(col('Semi-finals', semis), col('Final', final ? [final] : []));
+  const stage = name => t.fixtures.filter(f => f.stage === name);
+  const qf = stage('qf');
+  if (qf.length) {
+    const byes = t.playoff === 'top6' && t.seeds ? Object.entries(t.seeds).filter(([, n]) => n <= 2).map(([id]) => teamOf(t, id).name) : [];
+    const note = byes.length ? `${byes.join(' and ')} go straight into the semi-finals.` : t.playoff === 'super6' ? 'The best-placed loser also goes through.' : null;
+    wrap.append(col(roundName(t, 'qf', true), qf, note));
+  }
+  const final = t.fixtures.find(f => f.stage === 'final');
+  wrap.append(col(roundName(t, 'semi', true), stage('semi')), col(roundName(t, 'final'), final ? [final] : []));
   if (t.champion) {
     const champ = teamOf(t, t.champion);
     const trophy = el('p', 'br-champ');
-    trophy.append(kitChip(champ), document.createTextNode(`${champ.name} win the ${t.name}`));
+    trophy.append(kitChip(champ), document.createTextNode(`${champ.name} win the ${tName(t)}`));
     wrap.append(trophy);
   }
   return wrap;
@@ -212,7 +282,7 @@ function results(t) {
   wrap.append(el('h3', 'page-h', 'Results'));
   const groups = new Map();
   for (const f of played) {
-    const key = f.stage === 'pool' || f.stage === 'league' ? `Round ${f.round + 1}` : ROUND_NAMES[f.stage];
+    const key = f.stage === 'pool' || f.stage === 'league' ? `Round ${f.round + 1}` : roundName(t, f.stage, true);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(f);
   }
@@ -235,8 +305,8 @@ export function tournamentHub(t, handlers) {
   head.append(kitChip(me, 'hub-kit'));
   const text = el('div');
   const round = currentRound(t);
-  const stage = STAGE_NAMES[t.stage] + (round !== null && (t.stage === 'pool' || t.stage === 'league') ? ` · Round ${round + 1}` : '');
-  text.append(el('b', 'hub-name', me.name), el('small', null, `${t.name} · ${stage}`));
+  const stage = stageName(t) + (round !== null && (t.stage === 'pool' || t.stage === 'league') ? ` · Round ${round + 1}` : '');
+  text.append(el('b', 'hub-name', me.name), el('small', null, `${tName(t)} · ${stage}`));
   head.append(text);
   page.append(head);
   page.append(nextMatchCard(t, handlers));

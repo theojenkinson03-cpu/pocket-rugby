@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 import { act, MATCH_LENGTHS, newMatch, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import {
-  advance, clash, CLUBS, createCup, createLeague, currentRound, isUserFixture, kits, matchOptions, NATIONS, POINTS,
-  recordResult, resultFromMatch, roundRobin, simulateFixture, simulateRound, standings, teamOf, userAlive, userFixture, userRecord,
+  advance, clash, createCup, createLeague, currentRound, isUserFixture, kits, LEAGUES, matchOptions, NATIONS, POINTS, QUALIFY,
+  recordResult, resultFromMatch, roundName, roundRobin, SHORT_SEASON, simulateFixture, simulateRound, stageName, standings, teamOf,
+  userAlive, userFixture, userRecord,
 } from '../js/tournament.js';
 
 const pairKey = (a, b) => [a, b].sort().join('-');
@@ -56,13 +57,55 @@ test('the Nations Cup: eight nations in two pools of four, the user in one of th
   }
 });
 
-test('the League: all eight clubs, 28 fixtures over 7 rounds', () => {
-  const t = createLeague({ userTeam: 'foxes', rng: seededRng(3) });
-  assert.equal(t.teams.length, CLUBS.length);
-  assert.equal(t.fixtures.length, 28);
-  assert.equal(new Set(t.fixtures.map(f => f.round)).size, 7);
-  assert.equal(t.fixtures.filter(f => isUserFixture(t, f)).length, 7);
-  for (let r = 0; r < 7; r++) assert.equal(t.fixtures.filter(f => f.round === r).length, 4);
+// The real line-ups: Super Rugby Pacific 2026, and the 2026-27 Prem, URC and Top 14.
+const LINE_UPS = {
+  super: ['Blues', 'Chiefs', 'Crusaders', 'Highlanders', 'Hurricanes', 'Brumbies', 'Queensland Reds', 'NSW Waratahs', 'Western Force', 'Fijian Drua', 'Moana Pasifika'],
+  prem: ['Bath', 'Bristol Bears', 'Exeter Chiefs', 'Gloucester', 'Harlequins', 'Leicester Tigers', 'Newcastle Red Bulls', 'Northampton Saints', 'Sale Sharks', 'Saracens'],
+  urc: ['Leinster', 'Munster', 'Ulster', 'Connacht', 'Cardiff', 'Dragons', 'Ospreys', 'Scarlets', 'Glasgow Warriors', 'Edinburgh', 'Benetton', 'Zebre Parma', 'Bulls', 'Lions', 'Sharks', 'Stormers'],
+  top14: ['Toulouse', 'Bordeaux Bègles', 'Toulon', 'La Rochelle', 'Clermont', 'Racing 92', 'Stade Français', 'Castres', 'Montpellier', 'Pau', 'Bayonne', 'Lyon', 'Perpignan', 'Vannes'],
+};
+const FORMATS = { super: 'super6', prem: 'top4', urc: 'top8', top14: 'top6' };
+
+test('four real leagues with their real teams and play-off formats', () => {
+  assert.deepEqual(Object.keys(LEAGUES), ['super', 'prem', 'urc', 'top14']);
+  for (const [id, names] of Object.entries(LINE_UPS)) {
+    const L = LEAGUES[id];
+    assert.deepEqual(L.teams.map(x => x.name), names, id);
+    assert.equal(L.playoff, FORMATS[id]);
+    assert.equal(new Set(L.teams.map(x => x.id)).size, names.length, `${id}: unique ids`);
+    assert.equal(new Set(L.teams.map(x => x.short)).size, names.length, `${id}: unique short names`);
+    for (const team of L.teams) {
+      assert.match(team.color, /^#[0-9a-f]{6}$/);
+      assert.match(team.alt, /^#[0-9a-f]{6}$/);
+      assert.ok(['rookie', 'pro', 'expert'].includes(team.level) && ['balanced', 'boot', 'run', 'pack'].includes(team.personality), team.id);
+    }
+  }
+  // Ids never repeat across competitions, so saved tournaments can't mix them up.
+  const all = [...Object.values(LEAGUES).flatMap(L => L.teams.map(x => x.id)), ...NATIONS.map(n => n.id)];
+  assert.equal(new Set(all).size, all.length);
+});
+
+test('league seasons: short is six rounds, full is everyone once, with a bye each round for an odd number of teams', () => {
+  for (const [id, L] of Object.entries(LEAGUES)) {
+    const n = L.teams.length;
+    for (const season of ['short', 'full']) {
+      const t = createLeague({ league: id, userTeam: L.teams[0].id, season, rng: seededRng(n) });
+      const rounds = season === 'full' ? (n % 2 ? n : n - 1) : SHORT_SEASON;
+      assert.equal(t.rounds, rounds, `${id} ${season}`);
+      assert.equal(new Set(t.fixtures.map(f => f.round)).size, rounds);
+      assert.equal(t.fixtures.length, rounds * Math.floor(n / 2), `${id} ${season}: every round full`);
+      for (let r = 0; r < rounds; r++) {
+        const playing = t.fixtures.filter(f => f.round === r).flatMap(f => [f.home, f.away]);
+        assert.equal(new Set(playing).size, playing.length, `${id} round ${r}: nobody twice`);
+        assert.equal(playing.length, n - (n % 2), `${id} round ${r}: ${n % 2 ? 'one bye' : 'no byes'}`);
+      }
+      const pairs = new Set(t.fixtures.map(f => pairKey(f.home, f.away)));
+      assert.equal(pairs.size, t.fixtures.length, `${id} ${season}: no repeat fixtures`);
+      if (season === 'full') assert.equal(pairs.size, (n * (n - 1)) / 2, `${id}: everyone meets once`);
+      assert.equal(t.name, L.name);
+      assert.equal(t.short, L.short);
+    }
+  }
 });
 
 // A small hand-made pool to check the table exactly.
@@ -129,13 +172,107 @@ test('knockouts: pool winners meet the other pool\'s runners-up, then a final, t
   assert.throws(() => recordResult(t, 'F', { score: [1, 0], tries: [0, 0], winner: 'home' }), /not open/);
 });
 
-test('League play-offs: first v fourth and second v third', () => {
-  const t = createLeague({ userTeam: 'ravens', rng: seededRng(4) });
-  for (const f of t.fixtures) recordResult(t, f.id, { score: [30, 10], tries: [4, 1], winner: 'home' });
+// A league with the regular season played out so that the table order is
+// known, ready for its play-offs. Lower-seeded sides win when `upsets`.
+function seasonDone(league, seed = 4) {
+  const L = LEAGUES[league];
+  const t = createLeague({ league, userTeam: L.teams[0].id, season: 'full', rng: seededRng(seed) });
+  // The team listed first wins every match: the table follows the list.
+  const rank = id => L.teams.findIndex(x => x.id === id);
+  for (const f of t.fixtures) {
+    const homeWins = rank(f.home) < rank(f.away);
+    recordResult(t, f.id, { score: homeWins ? [30, 10] : [10, 30], tries: homeWins ? [4, 1] : [1, 4], winner: homeWins ? 'home' : 'away' });
+  }
+  const table = standings(t, 'L').map(r => r.id);
+  assert.deepEqual(table, L.teams.map(x => x.id), 'the table follows the results');
   advance(t);
-  const table = standings(t, 'L');
-  const semis = t.fixtures.filter(f => f.stage === 'semi');
-  assert.deepEqual(semis.map(f => [f.home, f.away]), [[table[0].id, table[3].id], [table[1].id, table[2].id]]);
+  return { t, seed: n => L.teams[n - 1].id };
+}
+
+const pairsOf = (t, stage) => t.fixtures.filter(f => f.stage === stage).map(f => [f.home, f.away]);
+const play = (t, id, winner) => {
+  const f = t.fixtures.find(x => x.id === id);
+  recordResult(t, id, { score: winner === f.home ? [20, 10] : [10, 20], tries: [2, 1], winner: winner === f.home ? 'home' : 'away' });
+};
+
+test('Prem play-offs: semi-finals 1 v 4 and 2 v 3, the better seed at home, then the final', () => {
+  const { t, seed } = seasonDone('prem');
+  assert.equal(t.stage, 'semi');
+  assert.deepEqual(pairsOf(t, 'semi'), [[seed(1), seed(4)], [seed(2), seed(3)]]);
+  play(t, 'SF1', seed(4));
+  play(t, 'SF2', seed(2));
+  advance(t);
+  assert.deepEqual(pairsOf(t, 'final'), [[seed(2), seed(4)]], 'the better seed hosts the final');
+  play(t, 'F', seed(4));
+  advance(t);
+  assert.equal(t.champion, seed(4));
+  assert.equal(roundName(t, 'final'), 'Final');
+});
+
+test('URC play-offs: quarter-finals 1v8, 4v5, 2v7, 3v6, then a fixed bracket', () => {
+  const { t, seed } = seasonDone('urc');
+  assert.equal(t.stage, 'qf');
+  assert.equal(stageName(t), 'Quarter-finals');
+  assert.deepEqual(pairsOf(t, 'qf'), [[seed(1), seed(8)], [seed(4), seed(5)], [seed(2), seed(7)], [seed(3), seed(6)]]);
+  play(t, 'QF1', seed(8));
+  play(t, 'QF2', seed(4));
+  play(t, 'QF3', seed(2));
+  play(t, 'QF4', seed(6));
+  advance(t);
+  assert.deepEqual(pairsOf(t, 'semi'), [[seed(4), seed(8)], [seed(2), seed(6)]], 'QF1 and QF2 winners meet; the better seed hosts');
+  play(t, 'SF1', seed(8));
+  play(t, 'SF2', seed(6));
+  advance(t);
+  assert.deepEqual(pairsOf(t, 'final'), [[seed(6), seed(8)]]);
+  assert.equal(roundName(t, 'final'), 'Grand Final');
+});
+
+test('Top 14 play-offs: barrages 3v6 and 4v5 while the top two wait, then 1 v the 4v5 winner and 2 v the 3v6 winner', () => {
+  const { t, seed } = seasonDone('top14');
+  assert.equal(t.stage, 'qf');
+  assert.equal(stageName(t), 'Barrages');
+  assert.equal(roundName(t, 'qf'), 'Barrage');
+  assert.deepEqual(pairsOf(t, 'qf'), [[seed(3), seed(6)], [seed(4), seed(5)]]);
+  assert.deepEqual(t.byes, [seed(1), seed(2)]);
+  // The user, top of the table, is still in it with no barrage to play.
+  assert.equal(t.userTeam, seed(1));
+  assert.equal(userFixture(t), null);
+  assert.ok(userAlive(t));
+  play(t, 'QF1', seed(6));
+  play(t, 'QF2', seed(4));
+  advance(t);
+  assert.deepEqual(pairsOf(t, 'semi'), [[seed(1), seed(4)], [seed(2), seed(6)]]);
+  assert.deepEqual(t.byes, []);
+  assert.ok(isUserFixture(t, userFixture(t)));
+});
+
+test('Super Rugby finals: 1v6, 2v5, 3v4, and the best-placed loser goes through as fourth seed', () => {
+  const { t, seed } = seasonDone('super');
+  assert.equal(stageName(t), 'Qualifying finals');
+  assert.deepEqual(pairsOf(t, 'qf'), [[seed(1), seed(6)], [seed(2), seed(5)], [seed(3), seed(4)]]);
+  // Upsets: 6 beats 1, 5 beats 2, 3 beats 4. Best-placed loser: 1st.
+  play(t, 'QF1', seed(6));
+  play(t, 'QF2', seed(5));
+  play(t, 'QF3', seed(3));
+  assert.equal(t.userTeam, seed(1));
+  advance(t);
+  // Winners ranked 3, 5, 6 become seeds 1-3; the lucky loser (1st) is seed 4 and plays away.
+  assert.deepEqual(pairsOf(t, 'semi'), [[seed(3), seed(1)], [seed(5), seed(6)]]);
+  assert.ok(userAlive(t), 'the lucky loser is still in it');
+  play(t, 'SF1', seed(1));
+  play(t, 'SF2', seed(6));
+  advance(t);
+  // As fourth seed the lucky loser plays the final away, even from first in the table.
+  assert.deepEqual(pairsOf(t, 'final'), [[seed(6), seed(1)]]);
+  assert.equal(roundName(t, 'final'), 'Grand final');
+});
+
+test('the play-offs take exactly the qualifiers', () => {
+  for (const league of Object.keys(LEAGUES)) {
+    const { t } = seasonDone(league);
+    const playing = new Set([...t.fixtures.filter(f => f.stage !== 'league').flatMap(f => [f.home, f.away]), ...(t.byes || [])]);
+    assert.equal(playing.size, QUALIFY[t.playoff], league);
+  }
 });
 
 test('kits never clash, and the user always plays as team 0 against the right CPU', () => {
@@ -155,13 +292,20 @@ test('kits never clash, and the user always plays as team 0 against the right CP
     assert.ok(!clash(opts.teams[0].color, opts.teams[1].color), 'colours tell apart');
     assert.deepEqual(opts.teams[0].roster, teamOf(t, 'fra').roster);
   }
-  // Every nation against every other: always two kits that tell apart.
-  for (const x of NATIONS) {
-    for (const y of NATIONS) {
-      if (x.id === y.id) continue;
-      const cup = { teams: [x, y], userTeam: x.id, length: 'quick', cards: true };
-      const opts = matchOptions(cup, { home: y.id, away: x.id });
-      assert.ok(!clash(opts.teams[0].color, opts.teams[1].color), `${x.id} v ${y.id}`);
+  // Every pairing in every competition, home or away: two kits that tell apart.
+  for (const roster of [NATIONS, ...Object.values(LEAGUES).map(L => L.teams)]) {
+    for (const x of roster) {
+      for (const y of roster) {
+        if (x.id === y.id) continue;
+        const comp = { teams: [x, y], userTeam: x.id, length: 'quick', cards: true };
+        for (const f of [{ home: y.id, away: x.id }, { home: x.id, away: y.id }]) {
+          const opts = matchOptions(comp, f);
+          assert.ok(!clash(opts.teams[0].color, opts.teams[1].color), `${x.id} v ${y.id}`);
+          assert.equal(opts.teams[0].color, x.color, 'the user always wears their own colours');
+          const [home, away] = kits(comp, f);
+          assert.ok(!clash(home.color, away.color), `sim ${f.home} v ${f.away}`);
+        }
+      }
     }
   }
 });
@@ -201,12 +345,14 @@ function playUser(t, rng) {
   return m.winner === 0;
 }
 
-test('whole tournaments play out to one champion, the user alive exactly while they have a match', () => {
-  for (let seed = 0; seed < 12; seed++) {
+test('whole tournaments play out to one champion, the user alive exactly while they have a match or a bye', () => {
+  const comps = ['cup', ...Object.keys(LEAGUES)];
+  for (let seed = 0; seed < 15; seed++) {
     const rng = seededRng(100 + seed);
-    const make = seed % 2 ? createLeague : createCup;
-    const roster = seed % 2 ? CLUBS : NATIONS;
-    const t = make({ userTeam: roster[seed % roster.length].id, length: 'quick', rng });
+    const comp = comps[seed % comps.length];
+    const roster = comp === 'cup' ? NATIONS : LEAGUES[comp].teams;
+    const userTeam = roster[(seed * 3) % roster.length].id;
+    const t = comp === 'cup' ? createCup({ userTeam, length: 'quick', rng }) : createLeague({ league: comp, userTeam, length: 'quick', season: seed < 10 ? 'short' : 'full', rng });
     let won = 0;
     let lost = 0;
     for (let guard = 0; t.stage !== 'done' && guard < 40; guard++) {
@@ -215,7 +361,9 @@ test('whole tournaments play out to one champion, the user alive exactly while t
         if (playUser(t, rng)) won++;
         else lost++;
       } else {
-        assert.ok(!userAlive(t) || t.stage === 'pool' || t.stage === 'league', 'no fixture means knocked out');
+        // No match: knocked out, a league bye, or a top-two wait in the Top 14.
+        const bye = t.stage === 'league' || (t.byes || []).includes(t.userTeam);
+        assert.equal(userAlive(t), bye, `${comp} ${t.stage}: alive only with a bye`);
       }
       simulateRound(t);
       advance(t);
@@ -228,6 +376,7 @@ test('whole tournaments play out to one champion, the user alive exactly while t
     assert.ok(t.fixtures.every(f => f.result));
     assert.equal(t.fixtures.filter(f => f.stage === 'semi').length, 2);
     assert.equal(t.fixtures.filter(f => f.stage === 'final').length, 1);
+    assert.equal(t.fixtures.filter(f => f.stage === 'qf').length, { cup: 0, super: 3, prem: 0, urc: 4, top14: 2 }[comp], comp);
     // Tournaments survive being saved and loaded.
     assert.deepEqual(JSON.parse(JSON.stringify(t)), t);
   }

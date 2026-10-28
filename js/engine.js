@@ -41,7 +41,7 @@ function emptyStats() {
 }
 
 // What each of the five players did. Tackles go to the defender's opposite
-// number (their Wing tackles your Wing); place kicks are the Back's.
+// number (their Outside Backs tackle yours); place kicks are the Fly Half's.
 export function emptyPlayer() {
   return { carries: 0, lineBreaks: 0, tries: 0, tackles: 0, bigHits: 0, turnovers: 0, points: 0, errors: 0 };
 }

@@ -9,7 +9,7 @@ import { playerOfTheMatch, possessive, randomRoster, statLine, surname } from '.
 import { winProbability } from './winprob.js';
 import { ACHIEVEMENT_BY_ID, newCareer, newTracker, recordMatch, track } from './career.js';
 import { tipFor, tipText } from './coach.js';
-import { advance, clash, createCup, createLeague, matchOptions, recordResult, resultFromMatch, simulateRound, STAGE_NAMES, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
+import { advance, clash, createCup, createLeague, LEAGUES, matchOptions, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
 import { applyRemote, encodeAction, hashState, makeCode, normaliseCode, OnlineSession, pendingEntries, recordingRng, startingMatch, strongRandom, validCode } from './online.js';
 import { $, button, el } from './dom.js';
 import { createDie, dieChip, faceTile, rollTo, setFace, wait } from './dice-view.js';
@@ -74,7 +74,7 @@ const ui = {
   coachSeen: load('coach', []),
   coach: null,
   tournament: load('tournament', null),
-  tsetup: { kind: 'cup', team: null, length: 'quick', cards: true },
+  tsetup: { comp: 'cup', team: null, length: 'quick', cards: true, season: 'short' },
   online: null,
   lobby: null,
   roomPromise: null,
@@ -113,7 +113,7 @@ function contextLabel(context) {
   if (context.kind === 'tournament') {
     const t = ui.tournament;
     const f = t?.fixtures.find(x => x.id === context.fixture);
-    return f ? `${t.name} · ${fixtureLabel(t, f)}` : null;
+    return f ? `${t.short || t.name} · ${fixtureLabel(t, f)}` : null;
   }
   return null;
 }
@@ -133,11 +133,11 @@ function renderHome() {
   $('#link-learn').hidden = newcomer;
   const t = ui.tournament;
   if (t && t.stage !== 'done') {
-    $('#tournament-label').textContent = `Continue the ${t.name}`;
-    $('#tournament-detail').textContent = `${teamOf(t, t.userTeam).name} · ${STAGE_NAMES[t.stage]}`;
+    $('#tournament-label').textContent = `Continue the ${t.short || t.name}`;
+    $('#tournament-detail').textContent = `${teamOf(t, t.userTeam).name} · ${stageName(t)}`;
   } else {
-    $('#tournament-label').textContent = 'Nations Cup & League';
-    $('#tournament-detail').textContent = 'Pools, knockouts and a trophy';
+    $('#tournament-label').textContent = 'Cups & leagues';
+    $('#tournament-detail').textContent = 'Nations Cup, Super Rugby, Prem, URC, Top 14';
   }
 }
 
@@ -290,7 +290,7 @@ function renderSquadList() {
     input.addEventListener('input', () => {
       ui.squad.roster[pos] = input.value;
     });
-    row.append(dieChip(pos, pos), el('span', 'squad-pos', PLAYERS[pos].name), input);
+    row.append(dieChip(pos), el('span', 'squad-pos', PLAYERS[pos].one), input);
     host.append(row);
   }
 }
@@ -550,7 +550,7 @@ function finishMatch() {
       advance(t);
       outcome.note = tournamentNote(t, f, m.winner === 0);
       if (t.stage === 'done' && t.champion === t.userTeam) {
-        outcome.champion = { title: `${t.name} winners` };
+        outcome.champion = { title: t.kind === 'cup' ? `${t.name} winners` : `${t.short || t.name} champions` };
         cup = { kind: t.kind, champion: true, lost: userRecord(t).lost };
       }
       save('tournament', t);
@@ -566,13 +566,21 @@ function finishMatch() {
 
 function tournamentNote(t, f, won) {
   const me = teamOf(t, t.userTeam).name;
-  if (f.stage === 'final') return won ? `${me} win the ${t.name}!` : `${me} are runners-up. ${teamOf(t, t.champion).name} win the ${t.name}.`;
-  if (f.stage === 'semi') return won ? `${me} are through to the final!` : `${me} are out in the semi-finals.`;
+  const name = t.short || t.name;
+  if (f.stage === 'final') return won ? `${me} win the ${name}!` : `${me} are runners-up. ${teamOf(t, t.champion).name} win the ${name}.`;
+  if (f.stage === 'semi') return won ? `${me} are through to the ${roundName(t, 'final').toLowerCase()}!` : `${me} are out in the ${roundName(t, 'semi', true).toLowerCase()}.`;
+  if (f.stage === 'qf') {
+    if (won) return `${me} are through to the semi-finals!`;
+    // Super Rugby: the best-placed losing side goes through too.
+    return userAlive(t) ? `${me} lose, but go through to the semi-finals as the best-placed loser.` : `${me} are out in the ${roundName(t, 'qf', true).toLowerCase()}.`;
+  }
   const rows = standings(t, f.group);
   const place = ordinal(rows.findIndex(r => r.id === t.userTeam) + 1);
-  const where = f.group === 'L' ? 'in the League' : `in Pool ${f.group}`;
-  if (t.stage === 'semi') {
-    return userAlive(t) ? `${me} finish ${place} ${where} and go through to the semi-finals!` : `${me} finish ${place} ${where}. That’s the end of the road.`;
+  const where = f.group === 'L' ? `in the ${name}` : `in Pool ${f.group}`;
+  if (t.stage !== f.stage) {
+    if (!userAlive(t)) return `${me} finish ${place} ${where}. That’s the end of the road.`;
+    if ((t.byes || []).includes(t.userTeam)) return `${me} finish ${place} ${where} and go straight into the semi-finals!`;
+    return `${me} finish ${place} ${where} and go through to the ${stageName(t).toLowerCase()}!`;
   }
   return `${me} are ${place} ${where}.`;
 }
@@ -592,10 +600,10 @@ function sceneFor(moment, after, events) {
   const team = moment.team === null || moment.team === undefined ? null : after.teams[moment.team];
   switch (moment.kind) {
     case 'try': return ['try', { team, pos: moment.pos, scoreline: scoreLine(after), player: moment.player }];
-    case 'break': return ['linebreak', { team, pos: moment.pos }];
+    case 'break': return ['linebreak', { team, pos: moment.pos, player: moment.player }];
     case 'bighit': return ['bighit', { team, ruck: !!moment.ruck }];
     case 'turnover': return ['turnover', { team, title: moment.title, sub: moment.sub }];
-    case 'injury': return ['injury', { team, pos: moment.pos, penalty: moment.penalty }];
+    case 'injury': return ['injury', { team, pos: moment.pos, penalty: moment.penalty, player: moment.player }];
     case 'yellow':
     case 'red': return ['card', { color: moment.kind, team }];
     case 'penalty': return ['penalty', { team }];
@@ -706,7 +714,7 @@ async function present(before, after, events, story) {
 async function fullTimeScenes(m) {
   const o = ui.outcome;
   if (o.potm && wantsScene('potm')) {
-    await ui.cinema.play('potm', { name: o.potm.name, team: m.teams[o.potm.team], position: PLAYERS[o.potm.pos].name, line: statLine(o.potm.stats) });
+    await ui.cinema.play('potm', { name: o.potm.name, team: m.teams[o.potm.team], position: PLAYERS[o.potm.pos].one, line: statLine(o.potm.stats) });
   }
   if (o.champion && wantsScene('trophy')) await ui.cinema.play('trophy', { team: m.teams[0], title: o.champion.title });
   if (o.unlocked.length && wantsScene('achievement')) {
@@ -1082,10 +1090,10 @@ const ROLL_TEXT = {
   setpiece: step => [step.piece === 'scrum' ? 'Feed the scrum' : 'Throw in', ['R']],
 };
 
-// "Harris (Wing)", or just "Wing" for a side without names.
+// "Harris (Outside Back)", or the position for a side without names.
 function playerName(m, team, pos) {
   const name = surname(m, team, pos);
-  return name ? `${name} (${PLAYERS[pos].name})` : PLAYERS[pos].name;
+  return name ? `${name} (${PLAYERS[pos].one})` : PLAYERS[pos].name;
 }
 
 function promptText(m) {
@@ -1094,15 +1102,15 @@ function promptText(m) {
   switch (step.purpose) {
     case 'toss': return 'Call the coin toss';
     case 'draft': return 'Pick a team card';
-    case 'attack': return `Phase ${m.phase} · ${playerName(m, team, step.dice[0])} has the ball`;
+    case 'attack': return `Phase ${m.phase} · ${playerName(m, team, step.dice[0])} on the ball`;
     case 'tackle': return `Defending · stop intensity ${step.intensity}`;
     case 'ruck': return 'Big hit · fight for the ball';
-    case 'try': return `${playerName(m, team, step.carrier)} is through`;
+    case 'try': return `Line break · ${playerName(m, team, step.carrier)}`;
     case 'range': return step.kick === 'conversion' ? 'Conversion' : `Drop goal chance · ${playerName(m, team, m.carrier)}`;
     case 'penalty': return 'Penalty awarded';
     case 'kick': return `${{ conversion: 'Conversion', penalty: 'Penalty kick', drop: 'Drop goal' }[step.kick]} · ${pct(kickChance(step.range, kickBonus(m, team, step.kick)))} to land`;
     case 'setpiece': return step.piece === 'scrum' ? 'Scrum feed' : 'Lineout throw';
-    case 'pass': return `${playerName(m, team, step.from)} passes · pick a receiver`;
+    case 'pass': return `Pass from ${playerName(m, team, step.from)} · pick a receiver`;
     case 'drop': return `${metres(step.range)} out · kick or pass?`;
   }
   return '';
@@ -1171,7 +1179,7 @@ function renderDock(m, locked) {
       btn.setAttribute('aria-label', `${name} is playing. Tap to hurry.`);
     } else {
       const chipRow = el('span', 'chips');
-      chips.forEach(id => chipRow.append(dieChip(id, POSITIONS.includes(id) ? id : '')));
+      chips.forEach(id => chipRow.append(dieChip(id)));
       btn.append(chipRow, el('span', null, label));
     }
     btn.disabled = locked && !cpuTurn;
@@ -1424,7 +1432,7 @@ function openBreak() {
   if (full) {
     const kind = ui.context?.kind;
     if (kind === 'tournament') {
-      actions.append(simpleButton(`Back to the ${ui.tournament?.name || 'tournament'}`, close(openTournament), 'btn btn-primary'));
+      actions.append(simpleButton(`Back to the ${ui.tournament?.short || ui.tournament?.name || 'tournament'}`, close(openTournament), 'btn btn-primary'));
       actions.append(button('Title screen', close(() => showView('home')), 'btn btn-quiet'));
     } else if (kind === 'learn') {
       actions.append(simpleButton('Play a full match', close(openSetup), 'btn btn-primary'));
@@ -1487,7 +1495,9 @@ function openTournament() {
 
 function renderTournament() {
   const t = ui.tournament;
-  $('#tournament-title').textContent = t ? t.name : 'Tournament';
+  const title = $('#tournament-title');
+  title.textContent = t ? t.name : 'Tournament';
+  title.classList.toggle('long', title.textContent.length > 16);
   const host = $('#tournament-body');
   if (!t) {
     host.replaceChildren(tournamentSetup(ui.tsetup, {
@@ -1501,6 +1511,13 @@ function renderTournament() {
   }
   host.replaceChildren(tournamentHub(t, {
     onPlay: playTournamentMatch,
+    // A bye: the user sits out while the rest of the round is played.
+    onSimRound: () => {
+      simulateRound(t);
+      advance(t);
+      save('tournament', t);
+      renderTournament();
+    },
     onSimRest: () => {
       for (let guard = 0; t.stage !== 'done' && guard < 40; guard++) {
         simulateRound(t);
@@ -1536,8 +1553,8 @@ function renderTournament() {
 
 function startTournament(state) {
   unlockAudio();
-  const make = state.kind === 'cup' ? createCup : createLeague;
-  ui.tournament = make({ userTeam: state.team, length: state.length, cards: state.cards });
+  const options = { userTeam: state.team, length: state.length, cards: state.cards };
+  ui.tournament = LEAGUES[state.comp] ? createLeague({ ...options, league: state.comp, season: state.season }) : createCup(options);
   ui.tsetup = { ...state };
   save('tournament', ui.tournament);
   renderTournament();
@@ -1980,7 +1997,7 @@ function buildDiceReference() {
   for (const id of ['S', 'F', 'C', 'W', 'B', 'D', 'K', 'R']) {
     const row = el('div', 'dice-ref-row');
     const h = el('h4');
-    h.append(dieChip(id, POSITIONS.includes(id) ? id : ''), el('span', null, DICE[id].name), el('small', null, DIE_NOTES[id]));
+    h.append(dieChip(id), el('span', null, DICE[id].name), el('small', null, DIE_NOTES[id]));
     const faces = el('div', 'dice-ref-faces');
     DICE[id].faces.forEach((_, i) => faces.append(faceTile(id, i)));
     row.append(h, faces);

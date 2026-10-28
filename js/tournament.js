@@ -1,6 +1,6 @@
 // Tournaments: a Nations Cup (two pools of four, then semi-finals and a
-// final) and a League (eight clubs, everyone plays everyone, then a top-four
-// play-off). Other fixtures are played out by the engine, CPU against CPU.
+// final) and four real leagues, each with its own play-off format. Other
+// fixtures are played out by the engine, CPU against CPU.
 
 import { act, newMatch } from './engine.js';
 import { cpuChoice } from './ai.js';
@@ -21,16 +21,113 @@ export const NATIONS = [
   { id: 'ita', name: 'Italy', short: 'ITA', color: '#0a5ec0', alt: '#f4f4f0', flavour: 'italian', personality: 'boot', level: 'rookie' },
 ];
 
-export const CLUBS = [
-  { id: 'ravens', name: 'Harbour Ravens', short: 'RAV', color: '#1d3577', alt: '#f4f4f0', flavour: 'english', personality: 'balanced', level: 'pro' },
-  { id: 'foxes', name: 'Valley Foxes', short: 'FOX', color: '#e8701c', alt: '#18191b', flavour: 'welsh', personality: 'run', level: 'pro' },
-  { id: 'stags', name: 'Northport Stags', short: 'STA', color: '#7b1e3c', alt: '#e3b31d', flavour: 'scottish', personality: 'pack', level: 'expert' },
-  { id: 'kestrels', name: 'Riverside Kestrels', short: 'KES', color: '#0f7a44', alt: '#f4f4f0', flavour: 'irish', personality: 'boot', level: 'pro' },
-  { id: 'wolves', name: 'Highland Wolves', short: 'WOL', color: '#4b5563', alt: '#f2c230', flavour: 'scottish', personality: 'pack', level: 'rookie' },
-  { id: 'bulls', name: 'Eastgate Bulls', short: 'BUL', color: '#c62a2f', alt: '#18191b', flavour: 'southern', personality: 'pack', level: 'expert' },
-  { id: 'gulls', name: 'Westcliff Gulls', short: 'GUL', color: '#4aa2df', alt: '#1d3577', flavour: 'pacific', personality: 'run', level: 'pro' },
-  { id: 'saints', name: 'Southbank Saints', short: 'SAI', color: '#18191b', alt: '#f4f4f0', flavour: 'any', personality: 'balanced', level: 'rookie' },
-];
+// The real leagues and their teams. Names identify the real clubs; kit
+// colours are approximations; level and style are this game's own flavour.
+// Line-ups: Super Rugby Pacific 2026, and the 2026-27 Prem, URC and Top 14.
+//
+// Play-off formats:
+//   top4    semi-finals 1v4 and 2v3, then the final (the Prem)
+//   top6    barrages 3v6 and 4v5; semi-finals 1 v the 4v5 winner and
+//           2 v the 3v6 winner (Top 14)
+//   top8    quarter-finals 1v8, 4v5, 2v7, 3v6; the first two winners meet in
+//           one semi-final, the last two in the other (URC)
+//   super6  qualifying finals 1v6, 2v5, 3v4; the three winners and the
+//           best-placed loser go through, the loser as fourth seed (Super Rugby)
+const team = (id, name, short, color, alt, flavour, personality, level) => ({ id, name, short, color, alt, flavour, personality, level });
+
+export const LEAGUES = {
+  super: {
+    name: 'Super Rugby Pacific',
+    short: 'Super Rugby',
+    season: '2026 season',
+    playoff: 'super6',
+    rounds: { qf: ['Qualifying final', 'Qualifying finals'], final: ['Grand final', 'Grand final'] },
+    teams: [
+      team('blues', 'Blues', 'BLU', '#1f4e9d', '#f4f4f0', 'kiwi', 'run', 'expert'),
+      team('chiefs', 'Chiefs', 'CHI', '#1b1b1d', '#f2c230', 'kiwi', 'run', 'expert'),
+      team('crusaders', 'Crusaders', 'CRU', '#c8102e', '#18191b', 'kiwi', 'balanced', 'expert'),
+      team('highlanders', 'Highlanders', 'HIG', '#1c2f6b', '#e3b31d', 'kiwi', 'balanced', 'pro'),
+      team('hurricanes', 'Hurricanes', 'HUR', '#f2c230', '#18191b', 'kiwi', 'run', 'expert'),
+      team('brumbies', 'Brumbies', 'BRU', '#0b2a5b', '#e3b31d', 'aussie', 'pack', 'pro'),
+      team('reds', 'Queensland Reds', 'RED', '#a6192e', '#f4f4f0', 'aussie', 'balanced', 'pro'),
+      team('waratahs', 'NSW Waratahs', 'WAR', '#4aa2df', '#1d3577', 'aussie', 'run', 'pro'),
+      team('force', 'Western Force', 'FOR', '#0f4c9c', '#e3b31d', 'aussie', 'pack', 'rookie'),
+      team('drua', 'Fijian Drua', 'DRU', '#f4f4f0', '#1d4f91', 'pacific', 'run', 'pro'),
+      team('moana', 'Moana Pasifika', 'MOA', '#00a19a', '#4b2b78', 'pacific', 'run', 'rookie'),
+    ],
+  },
+  prem: {
+    name: 'Prem Rugby',
+    short: 'Prem',
+    season: '2026–27 season',
+    playoff: 'top4',
+    rounds: {},
+    teams: [
+      team('bath', 'Bath', 'BAT', '#00508f', '#18191b', 'english', 'balanced', 'expert'),
+      team('bristol', 'Bristol Bears', 'BRI', '#13284b', '#c8102e', 'english', 'run', 'expert'),
+      team('exeter', 'Exeter Chiefs', 'EXE', '#18191b', '#f4f4f0', 'english', 'pack', 'pro'),
+      team('gloucester', 'Gloucester', 'GLO', '#c8102e', '#f4f4f0', 'english', 'pack', 'pro'),
+      team('harlequins', 'Harlequins', 'HAR', '#c4166b', '#6ec1e4', 'english', 'run', 'pro'),
+      team('leicester', 'Leicester Tigers', 'LEI', '#0f6b3a', '#c8102e', 'english', 'pack', 'expert'),
+      team('newcastle', 'Newcastle Red Bulls', 'NEW', '#d6001c', '#1d2c5e', 'english', 'balanced', 'rookie'),
+      team('northampton', 'Northampton Saints', 'NOR', '#18191b', '#0f7a44', 'english', 'run', 'expert'),
+      team('sale', 'Sale Sharks', 'SAL', '#1c4f9c', '#f4f4f0', 'english', 'boot', 'pro'),
+      team('saracens', 'Saracens', 'SAR', '#18191b', '#c8102e', 'english', 'boot', 'pro'),
+    ],
+  },
+  urc: {
+    name: 'United Rugby Championship',
+    short: 'URC',
+    season: '2026–27 season',
+    playoff: 'top8',
+    rounds: { final: ['Grand Final', 'Grand Final'] },
+    teams: [
+      team('leinster', 'Leinster', 'LNS', '#0a3d91', '#f4f4f0', 'irish', 'run', 'expert'),
+      team('munster', 'Munster', 'MUN', '#c8102e', '#18191b', 'irish', 'pack', 'pro'),
+      team('ulster', 'Ulster', 'ULS', '#f4f4f0', '#c8102e', 'irish', 'balanced', 'pro'),
+      team('connacht', 'Connacht', 'CON', '#0f7a44', '#18191b', 'irish', 'run', 'pro'),
+      team('cardiff', 'Cardiff', 'CAR', '#6ca9d8', '#18191b', 'welsh', 'balanced', 'pro'),
+      team('dragons', 'Dragons', 'DRA', '#c8102e', '#18191b', 'welsh', 'pack', 'rookie'),
+      team('ospreys', 'Ospreys', 'OSP', '#18191b', '#f4f4f0', 'welsh', 'balanced', 'pro'),
+      team('scarlets', 'Scarlets', 'SCA', '#b3102e', '#f4f4f0', 'welsh', 'run', 'pro'),
+      team('glasgow', 'Glasgow Warriors', 'GLA', '#1b2a57', '#c8102e', 'scottish', 'run', 'expert'),
+      team('edinburgh', 'Edinburgh', 'EDI', '#18191b', '#c8102e', 'scottish', 'pack', 'pro'),
+      team('benetton', 'Benetton', 'BEN', '#0f7a44', '#f4f4f0', 'italian', 'pack', 'pro'),
+      team('zebre', 'Zebre Parma', 'ZEB', '#18191b', '#f4f4f0', 'italian', 'balanced', 'rookie'),
+      team('bulls', 'Bulls', 'BUL', '#1d5fae', '#f4f4f0', 'southern', 'pack', 'expert'),
+      team('lions', 'Lions', 'LIO', '#c8102e', '#f4f4f0', 'southern', 'run', 'pro'),
+      team('sharks', 'Sharks', 'SHA', '#18191b', '#f4f4f0', 'southern', 'pack', 'pro'),
+      team('stormers', 'Stormers', 'STO', '#0e4c92', '#f4f4f0', 'southern', 'balanced', 'expert'),
+    ],
+  },
+  top14: {
+    name: 'Top 14',
+    short: 'Top 14',
+    season: '2026–27 season',
+    playoff: 'top6',
+    rounds: { qf: ['Barrage', 'Barrages'] },
+    teams: [
+      team('toulouse', 'Toulouse', 'TOU', '#c8102e', '#18191b', 'french', 'run', 'expert'),
+      team('bordeaux', 'Bordeaux Bègles', 'UBB', '#7b1e3c', '#4aa2df', 'french', 'run', 'expert'),
+      team('toulon', 'Toulon', 'RCT', '#c00020', '#18191b', 'french', 'pack', 'expert'),
+      team('larochelle', 'La Rochelle', 'LAR', '#f2c230', '#18191b', 'french', 'pack', 'pro'),
+      team('clermont', 'Clermont', 'ASM', '#f2c230', '#1d3577', 'french', 'balanced', 'pro'),
+      team('racing', 'Racing 92', 'R92', '#4aa2df', '#f4f4f0', 'french', 'run', 'pro'),
+      team('stadefrancais', 'Stade Français', 'SFP', '#e83e8c', '#1d3577', 'french', 'balanced', 'pro'),
+      team('castres', 'Castres', 'CAS', '#1d3577', '#f4f4f0', 'french', 'pack', 'pro'),
+      team('montpellier', 'Montpellier', 'MHR', '#1c2b4a', '#e8701c', 'french', 'pack', 'pro'),
+      team('pau', 'Pau', 'PAU', '#0f7a44', '#f4f4f0', 'french', 'balanced', 'pro'),
+      team('bayonne', 'Bayonne', 'BAY', '#5bb3e6', '#f4f4f0', 'french', 'pack', 'pro'),
+      team('lyon', 'Lyon', 'LYO', '#c8102e', '#18191b', 'french', 'run', 'pro'),
+      team('perpignan', 'Perpignan', 'PER', '#c8102e', '#f2c230', 'french', 'pack', 'rookie'),
+      team('vannes', 'Vannes', 'VAN', '#1d3577', '#f4f4f0', 'french', 'balanced', 'rookie'),
+    ],
+  },
+};
+
+// How many teams each play-off format takes.
+export const QUALIFY = { top4: 4, top6: 6, top8: 8, super6: 6 };
+export const SHORT_SEASON = 6;
 
 export const POINTS = { win: 4, tryBonus: 1, losingBonus: 1, tryBonusAt: 4, losingBonusWithin: 7 };
 
@@ -85,16 +182,39 @@ export function createCup({ userTeam, length = 'quick', cards = true, rng = Math
       fixtures.push(fixture(`${group}${round}${home}`, 'pool', round, home, away, group));
     }));
   }
-  return { kind: 'cup', name: 'Nations Cup', length, cards, userTeam, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null };
+  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, cards, userTeam, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
 }
 
-export function createLeague({ userTeam, length = 'quick', cards = true, rng = Math.random }) {
-  const field = CLUBS.map(c => c.id);
+// season: 'full' (everyone plays everyone once) or 'short' (the first
+// SHORT_SEASON rounds of that schedule). With an odd number of teams, one
+// side has a bye each round.
+export function createLeague({ league = 'prem', userTeam, length = 'quick', cards = true, season = 'short', rng = Math.random }) {
+  const L = LEAGUES[league];
+  const field = L.teams.map(c => c.id);
+  const schedule = roundRobin(shuffle(field, rng));
+  const rounds = season === 'full' ? schedule : schedule.slice(0, SHORT_SEASON);
   const fixtures = [];
-  roundRobin(shuffle(field, rng)).forEach((pairs, round) => pairs.forEach(([home, away]) => {
+  rounds.forEach((pairs, round) => pairs.forEach(([home, away]) => {
     fixtures.push(fixture(`L${round}${home}`, 'league', round, home, away, 'L'));
   }));
-  return { kind: 'league', name: 'League', length, cards, userTeam, teams: makeTeams(CLUBS, rng), pools: { L: field }, fixtures, stage: 'league', champion: null };
+  return {
+    kind: 'league',
+    league,
+    name: L.name,
+    short: L.short,
+    playoff: L.playoff,
+    season,
+    rounds: rounds.length,
+    length,
+    cards,
+    userTeam,
+    teams: makeTeams(L.teams, rng),
+    pools: { L: field },
+    fixtures,
+    stage: 'league',
+    champion: null,
+    byes: [],
+  };
 }
 
 export const teamOf = (t, id) => t.teams.find(team => team.id === id);
@@ -123,25 +243,31 @@ export function clash(a, b) {
   return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]) < 110;
 }
 
+// A side's colours for a match against `other`: first choice, then change
+// strip, then plain white or black, whichever tells apart.
+const NEUTRALS = ['#f4f4f0', '#18191b', '#e8701c'];
+function stripAgainst(team, other) {
+  return [team.color, team.alt, ...NEUTRALS].find(c => !clash(c, other)) || team.color;
+}
+
 // Kits for a fixture, home first. The away side changes strip on a clash.
 export function kits(t, f) {
   const home = teamOf(t, f.home);
   const away = teamOf(t, f.away);
-  const awayColor = clash(home.color, away.color) ? away.alt : away.color;
   return [
     { name: home.name, color: home.color, roster: home.roster },
-    { name: away.name, color: awayColor, roster: away.roster },
+    { name: away.name, color: stripAgainst(away, home.color), roster: away.roster },
   ];
 }
 
-// The user's match, with the user always as team 0.
+// The user's match, with the user always as team 0 in their first-choice
+// kit; the CPU side changes strip if need be.
 export function matchOptions(t, f) {
-  const [home, away] = kits(t, f);
   const userHome = f.home === t.userTeam;
+  const me = teamOf(t, t.userTeam);
   const opponent = teamOf(t, userHome ? f.away : f.home);
-  const mine = userHome ? home : away;
-  let theirs = userHome ? away : home;
-  if (clash(mine.color, theirs.color)) theirs = { ...theirs, color: clash(mine.color, opponent.alt) ? opponent.color : opponent.alt };
+  const mine = { name: me.name, color: me.color, roster: me.roster };
+  const theirs = { name: opponent.name, color: stripAgainst(opponent, me.color), roster: opponent.roster };
   return { mode: '1p', teams: [mine, theirs], length: t.length, cards: t.cards, cpuLevel: opponent.level, cpuPersonality: opponent.personality };
 }
 
@@ -231,6 +357,58 @@ export function standings(t, group) {
 }
 
 const winnerOf = f => (f.result.winner === 'home' ? f.home : f.away);
+const loserOf = f => (f.result.winner === 'home' ? f.away : f.home);
+const byId = (t, id) => t.fixtures.find(f => f.id === id);
+
+// A knockout tie with the better seed at home. `seeds` maps team -> seed (1 is best).
+function tie(t, id, stage, a, b) {
+  const [home, away] = t.seeds[a] <= t.seeds[b] ? [a, b] : [b, a];
+  return fixture(id, stage, 0, home, away);
+}
+
+// From the final league table to the first knockout round.
+function startPlayoffs(t) {
+  const table = standings(t, 'L').map(r => r.id);
+  t.seeds = Object.fromEntries(table.map((id, i) => [id, i + 1]));
+  const at = n => table[n - 1];
+  const format = t.playoff || 'top4';
+  if (format === 'top4') {
+    t.fixtures.push(tie(t, 'SF1', 'semi', at(1), at(4)), tie(t, 'SF2', 'semi', at(2), at(3)));
+    t.stage = 'semi';
+  } else if (format === 'top8') {
+    t.fixtures.push(tie(t, 'QF1', 'qf', at(1), at(8)), tie(t, 'QF2', 'qf', at(4), at(5)), tie(t, 'QF3', 'qf', at(2), at(7)), tie(t, 'QF4', 'qf', at(3), at(6)));
+    t.stage = 'qf';
+  } else if (format === 'top6') {
+    t.fixtures.push(tie(t, 'QF1', 'qf', at(3), at(6)), tie(t, 'QF2', 'qf', at(4), at(5)));
+    t.byes = [at(1), at(2)];
+    t.stage = 'qf';
+  } else if (format === 'super6') {
+    t.fixtures.push(tie(t, 'QF1', 'qf', at(1), at(6)), tie(t, 'QF2', 'qf', at(2), at(5)), tie(t, 'QF3', 'qf', at(3), at(4)));
+    t.stage = 'qf';
+  }
+}
+
+// From the quarter-finals (or barrages, or qualifying finals) to the semis.
+function startSemis(t) {
+  const format = t.playoff;
+  if (format === 'top8') {
+    const w = ['QF1', 'QF2', 'QF3', 'QF4'].map(id => winnerOf(byId(t, id)));
+    t.fixtures.push(tie(t, 'SF1', 'semi', w[0], w[1]), tie(t, 'SF2', 'semi', w[2], w[3]));
+  } else if (format === 'top6') {
+    const [first, second] = t.byes;
+    t.fixtures.push(tie(t, 'SF1', 'semi', first, winnerOf(byId(t, 'QF2'))), tie(t, 'SF2', 'semi', second, winnerOf(byId(t, 'QF1'))));
+    t.byes = [];
+  } else if (format === 'super6') {
+    // The three winners, best placed first, then the best-placed loser as fourth seed.
+    const qfs = ['QF1', 'QF2', 'QF3'].map(id => byId(t, id));
+    const winners = qfs.map(winnerOf).sort((a, b) => t.seeds[a] - t.seeds[b]);
+    const lucky = qfs.map(loserOf).sort((a, b) => t.seeds[a] - t.seeds[b])[0];
+    const order = [...winners, lucky];
+    t.seeds = { ...t.seeds, ...Object.fromEntries(order.map((id, i) => [id, i + 1])) };
+    t.fixtures.push(tie(t, 'SF1', 'semi', order[0], order[3]), tie(t, 'SF2', 'semi', order[1], order[2]));
+  }
+  t.stage = 'semi';
+}
 
 // Moves to the next stage once every fixture in this one is played.
 export function advance(t) {
@@ -240,26 +418,27 @@ export function advance(t) {
     t.fixtures.push(fixture('SF1', 'semi', 0, a[0].id, b[1].id), fixture('SF2', 'semi', 0, b[0].id, a[1].id));
     t.stage = 'semi';
   } else if (t.stage === 'league') {
-    const table = standings(t, 'L');
-    t.fixtures.push(fixture('SF1', 'semi', 0, table[0].id, table[3].id), fixture('SF2', 'semi', 0, table[1].id, table[2].id));
-    t.stage = 'semi';
+    startPlayoffs(t);
+  } else if (t.stage === 'qf') {
+    startSemis(t);
   } else if (t.stage === 'semi') {
-    const [s1, s2] = ['SF1', 'SF2'].map(id => t.fixtures.find(f => f.id === id));
-    t.fixtures.push(fixture('F', 'final', 0, winnerOf(s1), winnerOf(s2)));
+    const [w1, w2] = ['SF1', 'SF2'].map(id => winnerOf(byId(t, id)));
+    // League finals go to the better seed; the cup's to the first semi's winner.
+    t.fixtures.push(t.seeds ? tie(t, 'F', 'final', w1, w2) : fixture('F', 'final', 0, w1, w2));
     t.stage = 'final';
   } else if (t.stage === 'final') {
-    t.champion = winnerOf(t.fixtures.find(f => f.id === 'F'));
+    t.champion = winnerOf(byId(t, 'F'));
     t.stage = 'done';
   }
   return t;
 }
 
 // Whether the user is still in it: always in the group stage, and in the
-// knockouts only while they have a fixture in the current round.
+// knockouts while they have a fixture in the current round or a bye past it.
 export function userAlive(t) {
   if (t.stage === 'pool' || t.stage === 'league') return true;
   if (t.stage === 'done') return t.champion === t.userTeam;
-  return t.fixtures.some(f => f.stage === t.stage && isUserFixture(t, f));
+  return (t.byes || []).includes(t.userTeam) || t.fixtures.some(f => f.stage === t.stage && isUserFixture(t, f));
 }
 
 // The user's record in this tournament so far.
@@ -274,4 +453,16 @@ export function userRecord(t) {
   return { won, lost };
 }
 
-export const STAGE_NAMES = { pool: 'Pool stage', league: 'League season', semi: 'Semi-finals', final: 'Final', done: 'Finished' };
+export const STAGE_NAMES = { pool: 'Pool stage', league: 'Regular season', qf: 'Quarter-finals', semi: 'Semi-finals', final: 'Final', done: 'Finished' };
+
+// A knockout round's name in this competition: one tie, or the round.
+// Barrages in the Top 14, qualifying finals in Super Rugby, and so on.
+const ROUND_NAMES = { qf: ['Quarter-final', 'Quarter-finals'], semi: ['Semi-final', 'Semi-finals'], final: ['Final', 'Final'] };
+export function roundName(t, stage, many = false) {
+  const names = LEAGUES[t.league]?.rounds?.[stage] || ROUND_NAMES[stage];
+  return names ? names[many ? 1 : 0] : STAGE_NAMES[stage];
+}
+
+export function stageName(t, stage = t.stage) {
+  return ROUND_NAMES[stage] ? roundName(t, stage, true) : STAGE_NAMES[stage];
+}

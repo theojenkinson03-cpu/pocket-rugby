@@ -59,7 +59,7 @@ test('the card-played tip says which card did what', () => {
   const m = stateAt();
   m.teams[1].name = 'Gulls';
   const tip = tipText('card-played', [{ type: 'cardPlayed', team: 1, card: 'sure-hands', what: 'touch' }], m);
-  assert.match(tip.text, /^Gulls' Sure Hands: Your Wing never loses it/);
+  assert.match(tip.text, /^Gulls' Sure Hands: Your Outside Backs never lose it/);
   m.teams[1].name = 'Japan';
   assert.match(tipText('card-played', [{ type: 'cardPlayed', team: 1, card: 'jackal', what: 'ruck' }], m).text, /^Japan's Jackal/);
   assert.equal(tipText('tackle', [], m), TIPS.tackle);

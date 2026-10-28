@@ -3,7 +3,8 @@
 import { PLAYERS, POSITIONS } from './dice.js';
 
 // Common surnames, grouped by the flavour of a side. Picked at random, so any
-// match with a real person is a coincidence.
+// match with a real person is a coincidence; the most famous rugby surnames
+// are left out so that real clubs never seem to field real players.
 export const SURNAMES = {
   any: ['Harris', 'Walker', 'Morgan', 'Price', 'Hughes', 'Clarke', 'Ward', 'Turner', 'Baker', 'Bennett', 'Carter', 'Fletcher', 'Hayes', 'Lowe', 'Marsh', 'Nash', 'Pearce', 'Reid', 'Shaw', 'Webb', 'Young', 'Grant', 'Hale', 'Kerr', 'Lane', 'Moss', 'Pike', 'Rowe', 'Stone', 'Vance'],
   english: ['Ashworth', 'Barker', 'Cooper', 'Dawson', 'Ellis', 'Foster', 'Hodges', 'Kemp', 'Mills', 'Parsons', 'Saunders', 'Tolley'],
@@ -13,8 +14,8 @@ export const SURNAMES = {
   french: ['Dubois', 'Laurent', 'Moreau', 'Girard', 'Roux', 'Fournier', 'Mercier', 'Blanc', 'Garnier', 'Faure', 'Chevalier', 'Lambert'],
   italian: ['Rossi', 'Bianchi', 'Ferrari', 'Esposito', 'Ricci', 'Marino', 'Greco', 'Bruno', 'Gallo', 'Conti', 'Costa', 'Fontana'],
   southern: ['Botha', 'Naidoo', 'Pretorius', 'Steyn', 'Mokoena', 'Fourie', 'Visser', 'Dlamini', 'Coetzee', 'Smit', 'Nel', 'Kruger'],
-  pacific: ['Tuilagi', 'Vunipola', 'Naivalu', 'Ravouvou', 'Tamani', 'Koroi', 'Seru', 'Waqa', 'Lomani', 'Vatuvei', 'Fonua', 'Moala'],
-  kiwi: ['Ngata', 'Parata', 'Tane', 'Walker', 'Rangi', 'Hohaia', 'Paewai', 'Kingi', 'Reweti', 'Tipene', 'Te Huia', 'Mason'],
+  pacific: ['Leota', 'Mahe', 'Naivalu', 'Ravouvou', 'Tamani', 'Koroi', 'Seru', 'Waqa', 'Lomani', 'Tuala', 'Fonua', 'Moala'],
+  kiwi: ['Ngata', 'Parata', 'Tane', 'Walker', 'Rangi', 'Hohaia', 'Paewai', 'Kingi', 'Reweti', 'Tipene', 'Herewini', 'Mason'],
   aussie: ['Murray', 'Kelly', 'Brown', 'Wilson', 'Mitchell', 'Gibson', 'Holloway', 'Kennedy', 'Lucas', 'Sutton', 'Tobin', 'Kerr'],
   latin: ['Fernández', 'González', 'Rodríguez', 'Martínez', 'Sánchez', 'Romero', 'Álvarez', 'Benítez', 'Correa', 'Ledesma', 'Medina', 'Sosa'],
   japanese: ['Sato', 'Suzuki', 'Takahashi', 'Tanaka', 'Watanabe', 'Ito', 'Yamamoto', 'Nakamura', 'Kobayashi', 'Kato', 'Yoshida', 'Matsuda'],
@@ -47,14 +48,14 @@ export function surname(match, team, pos) {
   return full ? full.replace(/^[A-Z]\.\s*/, '') : null;
 }
 
-// How commentary names a player: "Harris (Wing)", or "the Ravens Wing".
+// How commentary names a player: "Harris (Outside Back)", or "the Ravens Outside Back".
 export function who(match, team, pos) {
   const name = surname(match, team, pos);
-  return name ? `${name} (${PLAYERS[pos].name})` : `the ${match.teams[team].name} ${PLAYERS[pos].name}`;
+  return name ? `${name} (${PLAYERS[pos].one})` : `the ${match.teams[team].name} ${PLAYERS[pos].one}`;
 }
 
 export function fullName(match, team, pos) {
-  return match.teams[team].roster?.[pos] || `${match.teams[team].name} ${PLAYERS[pos].name}`;
+  return match.teams[team].roster?.[pos] || `${match.teams[team].name} ${PLAYERS[pos].one}`;
 }
 
 // One number for a player's match: tries and turnovers count most, errors cost.

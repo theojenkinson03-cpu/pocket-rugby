@@ -81,7 +81,7 @@ async function snapshot(page) {
 }
 
 const ROLL_LABELS = {
-  attack: s => new RegExp(`Roll (Scrum Half|Forward|Centre|Wing|Back)`),
+  attack: s => new RegExp(`Roll (Scrum Half|Forwards|Centres|Outside Backs|Fly Half)`),
   tackle: () => /Tackle!/,
   ruck: () => /Contest the ruck/,
   try: () => /Go for the line|Video ref/,
@@ -90,7 +90,7 @@ const ROLL_LABELS = {
   kick: () => /Kick! Need \d+ m/,
   setpiece: () => /Feed the scrum|Throw in/,
 };
-const NAMES = { S: 'Scrum Half', F: 'Forward', C: 'Centre', W: 'Wing', B: 'Back' };
+const NAMES = { S: 'Scrum Half', F: 'Forwards', C: 'Centres', W: 'Outside Backs', B: 'Fly Half' };
 
 // Everything on screen must agree with the saved state while the game waits.
 function verify(snap, label) {
@@ -405,6 +405,60 @@ const SCENARIOS = {
     await page.click('#btn-tournament');
     check((await page.textContent('.next-card .nc-kicker')).includes('Round 2 of 3'), 'next is round 2');
     return { errors, ...result };
+  },
+  async 'league-season'(browser, base) {
+    const { page, errors } = await newPage(browser, { prefs: { cinema: 'off', fast: true } });
+    await page.goto(base);
+    await page.click('#btn-tournament');
+    // Every league lists its real teams.
+    for (const [comp, count, first] of [['Super Rugby Pacific', 11, 'Blues'], ['Prem Rugby', 10, 'Bath'], ['United Rugby Championship', 16, 'Leinster'], ['Top 14', 14, 'Toulouse']]) {
+      await page.click(`.comp >> text=${comp}`);
+      const tiles = await page.$$eval('.team-tile .tt-name', x => x.map(n => n.textContent));
+      check(tiles.length === count && tiles[0] === first, `${comp}: ${tiles.length} teams, first ${tiles[0]}`);
+    }
+    await page.click('.comp >> text=Super Rugby Pacific');
+    await page.click('.team-tile >> text=Fijian Drua');
+    await page.click('#tournament-body .btn-primary');
+    check((await page.$$('.standings tbody tr')).length === 11, 'eleven sides in the table');
+    check((await page.textContent('#tournament-title')) === 'Super Rugby Pacific', 'the hub is named after the league');
+    // Eleven sides: one sits out each round. A bye plays the round out without the user.
+    if (await page.isVisible('.next-card.bye')) {
+      await page.click('.next-card.bye .btn-primary');
+      check((await page.textContent('.next-card .nc-kicker')).includes('Round 2 of 6'), 'after a bye, round 2');
+    }
+    await page.click('.next-card .btn-primary');
+    const label = await page.textContent('#period');
+    check(/^Super Rugby · Round \d of 6/.test(label), `match label "${label}"`);
+    const result = await playOn(page, { label: 'league' });
+    const note = await page.textContent('#break-note');
+    check(/^Fijian Drua are \d+(st|nd|rd|th) in the Super Rugby\.$/.test(note), `league note "${note}"`);
+    await page.click('#break-actions .btn-primary');
+    check(await page.isVisible('#view-tournament'), 'back to the hub');
+
+    // A Top 14 season over, the user top: straight into the semi-finals while the barrages are played.
+    await page.evaluate(async () => {
+      const T = await import('./js/tournament.js');
+      const t = T.createLeague({ league: 'top14', userTeam: 'toulouse', season: 'short' });
+      for (const f of t.fixtures) {
+        const homeWins = f.home === 'toulouse' || (f.away !== 'toulouse' && f.home < f.away);
+        f.result = { score: homeWins ? [24, 17] : [12, 22], tries: homeWins ? [4, 2] : [1, 3], winner: homeWins ? 'home' : 'away' };
+      }
+      T.advance(t);
+      localStorage.setItem('pocket-rugby:tournament', JSON.stringify(t));
+    });
+    await page.reload();
+    await page.click('#btn-tournament');
+    check((await page.textContent('.next-card.bye .nc-title')) === 'Straight into the semi-finals', 'a top-two finish waits out the barrages');
+    const columns = await page.$$eval('.bracket .br-col', cols => cols.map(c => [c.querySelector('.br-title').textContent, c.querySelectorAll('.fx:not(.tbd)').length]));
+    check(JSON.stringify(columns) === JSON.stringify([['Barrages', 2], ['Semi-finals', 0], ['Final', 0]]), `the bracket: ${JSON.stringify(columns)}`);
+    check((await page.textContent('.bracket .table-note')).includes('go straight into the semi-finals'), 'the top two are named');
+    await page.click('.next-card.bye .btn-primary');
+    check((await page.textContent('.next-card .nc-kicker')).includes('Semi-final'), 'then the semi-final');
+    await page.click('.next-card .btn-primary');
+    const semi = await playOn(page, { label: 'top14-semi' });
+    const out = await page.textContent('#break-note');
+    check(/^Toulouse are (through to the final!|out in the semi-finals\.)$/.test(out), `semi-final note "${out}"`);
+    return { errors, title: `${result.title} / ${semi.title}`, checks: result.checks + semi.checks, actions: result.actions + semi.actions, seen: result.seen };
   },
   async 'online-two-phones'(browser, base) {
     const relay = [];

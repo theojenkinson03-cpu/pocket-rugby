@@ -13,7 +13,7 @@ export const TIPS = {
   try: { title: 'Go for the line', text: 'Black die: TRY scores 5 points, VIDEO REF means roll again, and anything else is a changeover.' },
   conversion: { title: 'Conversion', text: 'Every try earns a kick for 2 more points. First the brown die sets the range: each pip is 10 metres.' },
   kick: { title: 'Kick at goal', text: "The black die's number, in tens of metres, must reach the range. Watch the gauge fill on the kick cam." },
-  'drop-range': { title: 'Drop-goal chance', text: 'The Centre and Back can drop goal for 3 points. Roll the brown die for the range, then decide.' },
+  'drop-range': { title: 'Drop-goal chance', text: 'The Centres and Fly Half can drop goal for 3 points. Roll the brown die for the range, then decide.' },
   drop: { title: 'Kick or keep it?', text: 'Kick for 3 points now, or pass and keep the attack going. The percentage is your chance of landing it.' },
   penalty: { title: 'Penalty', text: 'One roll does two jobs: the black die checks for a yellow card (the yellow dot) and the brown die sets the range for a kick.' },
   'penalty-choice': { title: 'Kick or tap?', text: 'Kick at goal for 3 points, or quick tap for +1 intensity on your next 3 runs. The advantage ends after 3 tackles or an error.' },

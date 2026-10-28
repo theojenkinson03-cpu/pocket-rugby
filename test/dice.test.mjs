@@ -11,9 +11,14 @@ test('there are eight dice and each has six faces', () => {
   for (const [id, die] of Object.entries(DICE)) assert.equal(die.faces.length, 6, `${id} has six faces`);
 });
 
-test('the five positions are Scrum Half, Forward, Centre, Wing and Back', () => {
+test('the five positions: Scrum Half, Forwards, Centres, Outside Backs and Fly Half', () => {
   assert.deepEqual(POSITIONS, ['S', 'F', 'C', 'W', 'B']);
-  assert.deepEqual(POSITIONS.map(p => PLAYERS[p].name), ['Scrum Half', 'Forward', 'Centre', 'Wing', 'Back']);
+  // The ids follow the printed sheet's Scrum Half, Forward, Centre, Wing and Back.
+  assert.deepEqual(POSITIONS, ['S', 'F', 'C', 'W', 'B']);
+  assert.deepEqual(POSITIONS.map(p => PLAYERS[p].name), ['Scrum Half', 'Forwards', 'Centres', 'Outside Backs', 'Fly Half']);
+  assert.deepEqual(POSITIONS.map(p => PLAYERS[p].one), ['Scrum Half', 'Forward', 'Centre', 'Outside Back', 'Fly Half']);
+  assert.deepEqual(POSITIONS.map(p => PLAYERS[p].short), ['SH', 'FW', 'C', 'OB', 'FH']);
+  for (const p of POSITIONS) assert.equal(DICE[p].name, PLAYERS[p].name);
 });
 
 test('each outside player has exactly the one big move the rules name', () => {
@@ -36,7 +41,7 @@ test('big moves are harder to stop than any Hit Up', () => {
   }
 });
 
-test('only the Centre and Back can drop goal', () => {
+test('only the Centres and Fly Half can drop goal', () => {
   for (const pos of POSITIONS) {
     const hasDrop = DICE[pos].faces.some(f => f.kind === 'drop');
     assert.equal(hasDrop, RULES.dropGoalKickers.includes(pos), `${pos} drop goal face`);

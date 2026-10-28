@@ -18,7 +18,7 @@ export function potmCard(match, potm = playerOfTheMatch(match)) {
   const head = el('div', 'potm-head');
   head.append(el('span', 'potm-kicker', 'Player of the Match'), el('b', 'potm-name', potm.name));
   const meta = el('div', 'potm-meta');
-  meta.append(dieChip(potm.pos, potm.pos), el('span', null, `${PLAYERS[potm.pos].name} · ${team.name}`));
+  meta.append(dieChip(potm.pos), el('span', null, `${PLAYERS[potm.pos].one} · ${team.name}`));
   box.append(head, meta, el('p', 'potm-line', statLine(potm.stats)));
   return box;
 }
@@ -60,7 +60,7 @@ export function playersTables(match, potm = playerOfTheMatch(match)) {
       const row = el('tr');
       const name = el('th', 'pl-name');
       name.scope = 'row';
-      name.append(dieChip(pos, pos), el('span', null, surname(match, t, pos) || PLAYERS[pos].name));
+      name.append(dieChip(pos), el('span', null, surname(match, t, pos) || PLAYERS[pos].name));
       if (potm && potm.team === t && potm.pos === pos) {
         const star = el('span', 'pl-star', '★');
         star.title = 'Player of the Match';

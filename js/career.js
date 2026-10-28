@@ -101,7 +101,7 @@ export const ACHIEVEMENTS = [
   { id: 'on-a-roll', name: 'On a Roll', text: 'Win five matches in a row against the CPU.', check: (m, me, t, c, career) => career.streak >= 5 },
   { id: 'card-sharp', name: 'Card Sharp', text: 'Win with six different team cards.', check: (m, me, t, c, career) => career.cardsWon.length >= 6 },
   { id: 'cup-winners', name: 'Nations Cup Winners', text: 'Win the Nations Cup.', check: (m, me, t, c) => c.tournament?.kind === 'cup' && c.tournament.champion },
-  { id: 'champions', name: 'League Champions', text: 'Win the League.', check: (m, me, t, c) => c.tournament?.kind === 'league' && c.tournament.champion },
+  { id: 'champions', name: 'League Champions', text: 'Win a league: Super Rugby, the Prem, the URC or the Top 14.', check: (m, me, t, c) => c.tournament?.kind === 'league' && c.tournament.champion },
   { id: 'invincibles', name: 'Invincibles', text: 'Win a tournament without losing a match.', check: (m, me, t, c) => !!c.tournament?.champion && c.tournament.lost === 0 },
   { id: 'online-win', name: 'Long-Distance Win', text: 'Win an online match.', check: (m, me, t, c) => c.mode === 'online' && m.winner === me },
   { id: 'graduate', name: 'Graduate', text: 'Finish the guided first match.', check: (m, me, t, c) => c.mode === 'learn' },

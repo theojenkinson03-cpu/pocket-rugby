@@ -46,7 +46,7 @@ export function faceHTML(dieId, index) {
         : `<span class="fl">Hit Up</span><span class="fv">${f.value}</span>`;
     case 'pass':
       return f.to
-        ? `<span class="fl">Pass</span><span class="fto">${PLAYERS[f.to].name}</span>`
+        ? `<span class="fl">Pass</span><span class="fto${PLAYERS[f.to].name.length > 9 ? ' long' : ''}">${PLAYERS[f.to].name}</span>`
         : '<span class="fpass">&lsaquo;Pass&rsaquo;</span>';
     case 'drop':
       return '<span class="fl">Drop goal</span><span class="fs">&lsaquo;Pass&rsaquo;</span>';
@@ -156,7 +156,7 @@ export function faceTile(dieId, index, extraClass = '') {
   return tile;
 }
 
-export function dieChip(dieId, text = dieId) {
+export function dieChip(dieId, text = PLAYERS[dieId]?.short ?? '') {
   const chip = document.createElement('span');
   chip.className = 'die-chip';
   paint(chip, dieId);
