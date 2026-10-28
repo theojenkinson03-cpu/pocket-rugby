@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en" class="standalone">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pocket Rugby</title>
+<meta name="description" content="A dice rugby game for one or two players. Pass, run, tackle and kick your way to 30 points.">
+<meta name="theme-color" content="#0f1a14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pocket Rugby">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<!-- build:head -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&family=Big+Shoulders+Display:wght@700;800;900&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<!-- /build:head -->
+</head>
+<body>
+<!-- build:body -->
+<div id="app">
+
+  <section class="view view-home" id="view-home" aria-labelledby="home-title">
+    <div class="home-inner">
+      <div class="hero-dice" id="hero-dice" aria-hidden="true"></div>
+      <h1 class="wordmark" id="home-title"><span class="wm-small">Pocket</span> Rugby</h1>
+      <p class="tagline">Eight dice, five positions, first to 30.</p>
+      <div class="home-actions">
+        <button type="button" class="btn btn-primary btn-resume" id="btn-resume" hidden>
+          <span>Resume match</span><small id="resume-detail"></small>
+        </button>
+        <button type="button" class="btn btn-learn" id="btn-learn" hidden><span>Learn to play</span><small>A guided first match with a coach at your side</small></button>
+        <button type="button" class="btn btn-primary" data-start="1p"><span>1 player</span><small>You against the CPU</small></button>
+        <div class="home-grid">
+          <button type="button" class="btn" data-start="2p"><span>2 players</span><small>One phone, take turns</small></button>
+          <button type="button" class="btn" id="btn-online"><span>Online</span><small>Two phones</small></button>
+          <button type="button" class="btn btn-span btn-cup" id="btn-tournament"><span id="tournament-label">Cups &amp; leagues</span><small id="tournament-detail">Nations Cup, Super Rugby, Prem, URC, Top 14</small></button>
+          <button type="button" class="btn btn-daily" id="btn-daily"><span id="daily-label">Daily challenge</span><small id="daily-detail">A new situation every day</small></button>
+          <button type="button" class="btn" id="btn-friends"><span>Friends league</span><small id="friends-detail">Your league, several phones</small></button>
+        </div>
+      </div>
+      <div class="home-links">
+        <button type="button" class="link-btn" id="link-learn" hidden>Guided match</button>
+        <button type="button" class="link-btn" id="btn-career">Career</button>
+        <button type="button" class="link-btn" data-open="dlg-rules">How to play</button>
+        <button type="button" class="link-btn" data-open="dlg-settings">Settings</button>
+      </div>
+      <p class="build-tag" id="build-tag" hidden></p>
+      <p class="fineprint">An unofficial, fan-made digital version of the Pocket Sports Rugby dice game. Not affiliated with or endorsed by Pocket Sports, or by any league, union or club.</p>
+    </div>
+  </section>
+
+  <section class="view view-setup" id="view-setup" hidden aria-labelledby="setup-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" id="btn-setup-back" aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="setup-title">Team sheet</h2>
+    </header>
+    <form class="setup-form" id="setup-form" novalidate>
+      <fieldset class="seg" id="seg-mode">
+        <legend>Players</legend>
+        <label><input type="radio" name="mode" value="1p" id="mode-1p"><span>1 player</span></label>
+        <label><input type="radio" name="mode" value="2p" id="mode-2p"><span>2 players</span></label>
+      </fieldset>
+
+      <div class="team-editors">
+        <div class="team-editor" data-team="0">
+          <label class="team-tag" for="team0-name" id="team0-tag">You</label>
+          <input class="team-name" id="team0-name" maxlength="14" autocomplete="off" spellcheck="false">
+          <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team0-kits"></div>
+          <div class="patterns" role="radiogroup" aria-label="Kit pattern" id="team0-patterns"></div>
+          <button type="button" class="squad-btn" data-squad="0"><span class="squad-names" id="team0-squad"></span><span class="squad-edit">Squad</span></button>
+        </div>
+        <div class="team-vs" aria-hidden="true">v</div>
+        <div class="team-editor" data-team="1">
+          <label class="team-tag" for="team1-name" id="team1-tag">CPU</label>
+          <input class="team-name" id="team1-name" maxlength="14" autocomplete="off" spellcheck="false">
+          <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team1-kits"></div>
+          <div class="patterns" role="radiogroup" aria-label="Kit pattern" id="team1-patterns"></div>
+          <button type="button" class="squad-btn" data-squad="1"><span class="squad-names" id="team1-squad"></span><span class="squad-edit">Squad</span></button>
+        </div>
+      </div>
+
+      <fieldset class="seg seg-3" id="seg-length">
+        <legend>Match length</legend>
+        <label><input type="radio" name="length" value="quick" id="len-quick"><span>Quick<small>HT 10 · FT 20</small></span></label>
+        <label><input type="radio" name="length" value="standard" id="len-standard"><span>Standard<small>HT 15 · FT 30</small></span></label>
+        <label><input type="radio" name="length" value="long" id="len-long"><span>Marathon<small>HT 25 · FT 50</small></span></label>
+      </fieldset>
+
+      <fieldset class="seg seg-3" id="seg-cpu">
+        <legend>CPU skill</legend>
+        <label><input type="radio" name="cpu" value="rookie" id="cpu-rookie"><span>Rookie<small>Plays on instinct</small></span></label>
+        <label><input type="radio" name="cpu" value="pro" id="cpu-pro"><span>Pro<small>Plays the odds</small></span></label>
+        <label><input type="radio" name="cpu" value="expert" id="cpu-expert"><span>Expert<small>Thinks ahead</small></span></label>
+      </fieldset>
+
+      <fieldset class="seg seg-grid" id="seg-style">
+        <legend>CPU style</legend>
+        <label><input type="radio" name="style" value="balanced" id="style-balanced"><span>Balanced<small>Takes the points on offer</small></span></label>
+        <label><input type="radio" name="style" value="boot" id="style-boot"><span>Boot it<small>Kicks at every chance</small></span></label>
+        <label><input type="radio" name="style" value="run" id="style-run"><span>Run it<small>Taps and spreads it wide</small></span></label>
+        <label><input type="radio" name="style" value="pack" id="style-pack"><span>Forwards<small>Keeps it tight</small></span></label>
+      </fieldset>
+
+      <label class="toggle toggle-card" for="setup-cards"><span><b>Team cards</b><small>Three cards are dealt after the toss. The toss loser picks first.</small></span><input type="checkbox" id="setup-cards"><i aria-hidden="true"></i></label>
+      <label class="toggle toggle-card" for="setup-bench"><span><b>Bench</b><small>One replacement a half clears an injured player’s penalty.</small></span><input type="checkbox" id="setup-bench"><i aria-hidden="true"></i></label>
+      <label class="toggle toggle-card" for="setup-weather"><span><b>Weather</b><small>Rain makes the Forwards and Centres knock on; wind adds or takes 10 m off every kick.</small></span><input type="checkbox" id="setup-weather"><i aria-hidden="true"></i></label>
+
+      <button type="submit" class="btn btn-primary btn-wide">To the coin toss</button>
+    </form>
+  </section>
+
+  <section class="view view-page" id="view-tournament" hidden aria-labelledby="tournament-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="tournament-title">Tournament</h2>
+    </header>
+    <div class="page-body" id="tournament-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-daily" hidden aria-labelledby="daily-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="daily-title">Daily challenge</h2>
+    </header>
+    <div class="page-body" id="daily-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-friends" hidden aria-labelledby="friends-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="friends-title">Friends league</h2>
+    </header>
+    <div class="page-body" id="friends-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-career" hidden aria-labelledby="career-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="career-title">Career</h2>
+    </header>
+    <div class="page-body" id="career-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-online" hidden aria-labelledby="online-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" id="btn-online-back" aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="online-title">Online</h2>
+    </header>
+    <div class="page-body" id="online-body"></div>
+  </section>
+
+  <section class="view view-match" id="view-match" hidden aria-label="Match">
+    <header class="topbar">
+      <button type="button" class="icon-btn" id="btn-menu" aria-label="Match menu">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="period" id="period"></div>
+      <span class="net" id="net" role="status" hidden></span>
+      <button type="button" class="icon-btn" id="btn-sound" aria-label="Sound" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-on"><path d="M4 10v4h4l5 4V6L8 10H4z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="ico-off"><path d="M4 10v4h4l5 4V6L8 10H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>
+      </button>
+      <button type="button" class="icon-btn" data-open="dlg-rules" aria-label="How to play">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-1 .6-1.5 1.2-1.5 2.5M12 17h.01"/></svg>
+      </button>
+    </header>
+
+    <div class="board" id="board">
+      <div class="side" data-team="0">
+        <div class="side-head"><span class="kit"></span><span class="side-name"></span><span class="poss" aria-label="In possession" hidden></span></div>
+        <div class="side-score" aria-live="polite"></div>
+        <div class="side-bar"><i></i></div>
+        <button type="button" class="side-card" hidden></button>
+        <div class="side-status"></div>
+      </div>
+      <div class="board-mid">
+        <span class="board-half" id="board-half"></span>
+        <span class="board-target" id="board-target"></span>
+      </div>
+      <div class="side" data-team="1">
+        <div class="side-head"><span class="kit"></span><span class="side-name"></span><span class="poss" aria-label="In possession" hidden></span></div>
+        <div class="side-score" aria-live="polite"></div>
+        <div class="side-bar"><i></i></div>
+        <button type="button" class="side-card" hidden></button>
+        <div class="side-status"></div>
+      </div>
+      <div class="meter" id="meter" hidden>
+        <span class="meter-num" id="meter-0"></span>
+        <span class="meter-bar" role="img" id="meter-bar"><i id="meter-fill"></i></span>
+        <span class="meter-num" id="meter-1"></span>
+      </div>
+    </div>
+
+    <section class="draft" id="draft" hidden aria-labelledby="draft-title">
+      <p class="draft-kicker">Team cards</p>
+      <h2 class="draft-title" id="draft-title"></h2>
+      <p class="draft-sub" id="draft-sub"></p>
+      <div class="draft-cards" id="draft-cards"></div>
+      <p class="draft-status" id="draft-status"></p>
+    </section>
+
+    <div class="pitch-wrap">
+      <svg class="pitch" id="pitch" role="img" aria-label="Pitch showing both teams and the ball"></svg>
+      <div class="rain" id="rain" hidden aria-hidden="true"></div>
+      <div class="situation" id="situation"></div>
+      <div class="conditions" id="conditions"></div>
+    </div>
+
+    <div class="tray" id="tray">
+      <div class="tray-dice" id="tray-dice"></div>
+      <div class="tray-text">
+        <p class="headline" id="headline"></p>
+        <p class="detail" id="detail"></p>
+      </div>
+      <div class="moment" id="moment" hidden></div>
+    </div>
+
+    <div class="feed" id="feed">
+      <ol class="feed-list" id="feed-list"></ol>
+      <button type="button" class="feed-more" data-open="dlg-log">Match log</button>
+    </div>
+    <div class="sr-only" aria-live="polite" id="announcer"></div>
+
+    <aside class="coach" id="coach" hidden aria-live="polite" aria-labelledby="coach-title">
+      <span class="coach-badge" aria-hidden="true">Coach</span>
+      <b class="coach-title" id="coach-title"></b>
+      <p class="coach-text" id="coach-text"></p>
+      <div class="coach-actions">
+        <button type="button" class="coach-off" id="coach-off">Turn tips off</button>
+        <button type="button" class="coach-ok" id="coach-ok">Got it</button>
+      </div>
+    </aside>
+
+    <footer class="dock" id="dock">
+      <p class="prompt" id="prompt"></p>
+      <div class="actions" id="actions"></div>
+    </footer>
+    <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+    <div class="cinema" id="cinema" hidden></div>
+  </section>
+</div>
+
+<dialog class="sheet" id="dlg-menu" aria-labelledby="menu-title">
+  <h2 id="menu-title">Match paused</h2>
+  <div class="menu-list">
+    <button type="button" class="btn btn-primary" data-close>Resume</button>
+    <button type="button" class="btn" data-open="dlg-log">Match log</button>
+    <button type="button" class="btn" data-open="dlg-rules">How to play</button>
+    <button type="button" class="btn" data-open="dlg-settings">Settings</button>
+    <button type="button" class="btn" id="btn-restart">Restart match</button>
+    <button type="button" class="btn btn-quiet" id="btn-quit">Save and quit to title</button>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="dlg-confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">Restart this match?</h2>
+  <p>The score goes back to 0–0 and the coin is tossed again.</p>
+  <div class="menu-list">
+    <button type="button" class="btn btn-danger" id="btn-confirm-restart">Restart</button>
+    <button type="button" class="btn" data-close>Keep playing</button>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="dlg-settings" aria-labelledby="settings-title">
+  <h2 id="settings-title">Settings</h2>
+  <div class="settings">
+    <label class="toggle select-row" for="set-cinema"><span><b>Cinematics</b><small>Replays, slow motion and the kick cam</small></span>
+      <select id="set-cinema"><option value="full">Full</option><option value="short">Short</option><option value="off">Off</option></select></label>
+    <label class="toggle"><span><b>Sound</b><small>Dice, whistles and the crowd</small></span><input type="checkbox" id="set-sound"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Show odds</b><small>Chances next to every decision</small></span><input type="checkbox" id="set-odds"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Win meter</b><small>Each side's chance of winning, live</small></span><input type="checkbox" id="set-meter"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Coach tips</b><small>Explains each part of the game the first time it comes up</small></span><input type="checkbox" id="set-coach"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Fast dice</b><small>Shorter rolls and CPU turns</small></span><input type="checkbox" id="set-fast"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Auto-tackle</b><small>1 player: roll your defence for you</small></span><input type="checkbox" id="set-autodef"><i aria-hidden="true"></i></label>
+    <label class="toggle"><span><b>Vibration</b><small>On phones that support it</small></span><input type="checkbox" id="set-haptics"><i aria-hidden="true"></i></label>
+  </div>
+  <div class="menu-list"><button type="button" class="btn btn-primary" data-close>Done</button></div>
+</dialog>
+
+<dialog class="sheet sheet-tall" id="dlg-log" aria-labelledby="log-title">
+  <div class="sheet-head"><h2 id="log-title">Match log</h2><button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <ol class="log-list" id="log-list"></ol>
+</dialog>
+
+<dialog class="sheet sheet-tall" id="dlg-rules" aria-labelledby="rules-title">
+  <div class="sheet-head"><h2 id="rules-title">How to play</h2><button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div class="rules" id="rules">
+    <section>
+      <h3>The aim</h3>
+      <p>Be first to 30 points. Half time is called when either side reaches 15. Shorter and longer matches change both numbers. The match ends the moment a side reaches the full-time score, even before a conversion.</p>
+      <dl class="points">
+        <div><dt>Try</dt><dd>5</dd></div>
+        <div><dt>Conversion</dt><dd>2</dd></div>
+        <div><dt>Penalty goal</dt><dd>3</dd></div>
+        <div><dt>Drop goal</dt><dd>3</dd></div>
+      </dl>
+    </section>
+    <section>
+      <h3>Attacking</h3>
+      <p>Your team is five dice. The <b>Scrum Half</b> always rolls first, after the kick-off, after every tackle and whenever you win the ball. Most of its faces pass to a named player, who rolls their own die next.</p>
+      <p>A <b>&lsaquo;Pass&rsaquo;</b> face lets you choose the Forwards, Centres, Outside Backs or Fly Half. A run shows an <b>intensity</b> number: the higher it is, the harder it is to stop. Each has one big move: Forwards <i>Line Break 6</i>, Centres <i>Thru the Gap 7</i>, Outside Backs <i>Into the Corner 8</i>, Fly Half <i>High Ball 6</i>. (The printed game calls them the Forward, Centre, Wing and Back.)</p>
+    </section>
+    <section>
+      <h3>Tackling</h3>
+      <p>The defence rolls the brown die twice and adds the numbers. Reach the intensity and the tackle is made; play goes back to the Scrum Half. Fall short and it's a <b>line break</b>: the attacker rolls the black die. <b>TRY</b> scores 5, <b>NO TRY</b> is a changeover (so is <b>RUCK WIN</b>: held up over the line), <b>VIDEO REF</b> means roll again.</p>
+      <p><b>Big Hit</b> on the first brown die against a plain Hit Up of 3 or 4 (not a big move) sets up a ruck contest: the defence rolls the black die and steals the ball on <b>RUCK WIN</b>. Big Hit on the second die always completes the tackle. Two Big Hits injure the ball carrier: that position runs at −1 for the rest of the match.</p>
+    </section>
+    <section>
+      <h3>Kicking</h3>
+      <p>Roll the brown die for the range, then the black die's number for the kick. The kick must be at least the range. Each number is 10 metres on the pitch.</p>
+      <p>Every try is followed by a conversion, taken by the Fly Half. The Centres and Fly Half can try a <b>drop goal</b>: check the range first, then decide whether to kick or pass. A missed drop goal or penalty kick hands the ball over.</p>
+    </section>
+    <section>
+      <h3>Errors and set pieces</h3>
+      <p>A <b>Knock On</b> gives the other side a scrum; <b>Into Touch</b> gives them a lineout. They roll the white die: a green light wins the ball, red loses it. A collapsed scrum is reset and rolled again. A lineout that's not straight passes the throw to the other side. <b>Intercepted</b> turns the ball over straight away.</p>
+    </section>
+    <section>
+      <h3>Penalties and cards</h3>
+      <p>The white die can award a penalty either way. The black die then checks for a card: the yellow dot sends a player to the sin bin and the offenders take −1 off each brown die they roll in a tackle for the rest of the half. A second yellow makes it −2 a die for the rest of the match.</p>
+      <p>The range for the kick is rolled at the same time, so you know the distance before you choose: kick for goal (3 points), or <b>quick tap</b> for +1 intensity on your next 3 runs. The advantage ends after 3 tackles or an error.</p>
+    </section>
+    <section>
+      <h3>Restarts</h3>
+      <p>After any score the team that scored receives the kick-off. The coin toss decides who receives first; the other side receives at the start of the second half.</p>
+    </section>
+    <section>
+      <h3>Team cards</h3>
+      <p>With team cards on, three of the twelve cards are dealt after the coin toss. The side that <b>lost</b> the toss picks first, from all three; the side that won the toss receives the kick-off and picks from the two left, and <b>catches up</b>: if the first pick is rarer than the card they take, theirs goes up one rarity. Each card lasts the whole match.</p>
+      <p>Every card is dealt at a <b>rarity</b>: Common (55% of cards), Rare (28%), Epic (13%) or Mythic (4%, about one deal in nine). The rarer the card, the stronger it is: each rarity keeps everything below it and adds more. Within a rarity the cards were balanced over thousands of simulated matches, so pick the one that suits your style, or the rarest one on the table.</p>
+      <div class="rarity-tabs" id="rules-rarity" role="group" aria-label="Show the cards at a rarity"></div>
+      <div class="rules-cards" id="rules-cards"></div>
+    </section>
+    <section>
+      <h3>Weather and the bench</h3>
+      <p>Two optional rules, switched on or off like the team cards.</p>
+      <p><b>Weather</b>: every match gets its own conditions. In the <b>rain</b> the ball is slippery: the Forwards' and Centres' free ‹Pass› face is a knock-on. Their runs, and the Scrum Half's passes, are as normal. <b>Wind</b> is worth 10 m on every kick: further with it at your back, shorter into it. The ends change at half time, so the wind swaps sides.</p>
+      <p><b>The bench</b>: once a half, each side can bring on a replacement for an injured player, which clears the injury. You choose when someone is hurt (any injured player can come off then) and at half time, when each side gets a fresh replacement. Use it now, or keep it in case someone more important gets hurt; an unused one is gone at half time.</p>
+    </section>
+    <section>
+      <h3>The CPU</h3>
+      <p><b>Rookie</b> plays on instinct. <b>Pro</b> plays the odds. <b>Expert</b> plays out hundreds of continuations before every decision and picks the one that wins most often. In a dice game the dice decide most matches, so Expert is only a little stronger than Pro, but it rarely makes a poor call. The CPU's <b>style</b> flavours its choices: Boot it kicks at every chance, Run it taps penalties and spreads the ball wide, Forwards keeps it tight.</p>
+    </section>
+    <section>
+      <h3>Tournaments</h3>
+      <p>The <b>Nations Cup</b> has two pools of four; the top two in each go through to the semi-finals, played with the final at the host nation's ground. Or take a club through a real league, each with its real play-offs:</p>
+      <ul class="rules-list">
+        <li><b>Super Rugby Pacific</b>: 11 teams, one sitting out each round. The top six play qualifying finals; the three winners and the best-placed loser reach the semi-finals.</li>
+        <li><b>Prem Rugby</b>: 10 clubs. The top four play semi-finals; the final is at Twickenham.</li>
+        <li><b>United Rugby Championship</b>: 16 teams. The top eight play quarter-finals.</li>
+        <li><b>Top 14</b>: 14 clubs. Third to sixth play barrages; the top two wait in the semi-finals, in Bordeaux, and the final is at the Stade de France.</li>
+      </ul>
+      <p>The <b>Champions Cup</b> has the 24 clubs from the 2026–27 draw in four pools of six. Each plays the four clubs in its pool from the other two leagues. The top three in each pool and the four best of the rest go into a round of 16, then quarter-finals, semi-finals and a final in Lyon.</p>
+      <p>Everyone plays at their real home ground, except the neutral finals. When a league season ends you can carry on with your club into the next, squad and all, building a trophy cabinet and a records book; the top eight in each European league qualify for the next Champions Cup. The hub keeps the season's top try and points scorers and a Team of the Season.</p>
+      <p>A short season is 6 rounds; a full season has everyone play everyone once. A win is worth 4 points, with a bonus point for scoring 4 tries and another for losing by 7 or fewer. Team names are the real clubs'; the players are made up.</p>
+    </section>
+    <section>
+      <h3>Online</h3>
+      <p>Play a friend on two phones. One of you hosts and shares a six-letter code; the other joins with it. Both of you need to open this same page signed in, with access to it. Each phone rolls its own dice and checks every move the other phone makes against the rules.</p>
+    </section>
+    <section>
+      <h3>The dice</h3>
+      <div class="dice-ref" id="dice-ref"></div>
+    </section>
+  </div>
+</dialog>
+
+<dialog class="sheet sheet-break" id="dlg-break" aria-labelledby="break-title">
+  <p class="break-kicker" id="break-kicker"></p>
+  <h2 id="break-title" tabindex="-1" autofocus></h2>
+  <div class="break-score" id="break-score"></div>
+  <p class="break-note" id="break-note" hidden></p>
+  <div class="potm" id="break-potm" hidden></div>
+  <div class="awards" id="break-awards" hidden></div>
+  <div class="tabs" role="tablist" aria-label="Match report" id="break-tabs">
+    <button type="button" role="tab" id="tab-team" aria-controls="panel-team" aria-selected="true">Team</button>
+    <button type="button" role="tab" id="tab-players" aria-controls="panel-players" aria-selected="false">Players</button>
+    <button type="button" role="tab" id="tab-momentum" aria-controls="panel-momentum" aria-selected="false">Momentum</button>
+  </div>
+  <div class="tab-panel" role="tabpanel" id="panel-team" aria-labelledby="tab-team"><table class="stats" id="break-stats"></table></div>
+  <div class="tab-panel" role="tabpanel" id="panel-players" aria-labelledby="tab-players" hidden></div>
+  <div class="tab-panel" role="tabpanel" id="panel-momentum" aria-labelledby="tab-momentum" hidden></div>
+  <div class="menu-list" id="break-actions"></div>
+</dialog>
+
+<dialog class="sheet" id="dlg-squad" aria-labelledby="squad-title">
+  <h2 id="squad-title">Squad</h2>
+  <p>Name your five players. Their names appear in the commentary and the match report.</p>
+  <div class="squad-list" id="squad-list"></div>
+  <div class="menu-list">
+    <button type="button" class="btn" id="btn-squad-shuffle">Shuffle names</button>
+    <button type="button" class="btn btn-primary" id="btn-squad-done">Done</button>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="dlg-card" aria-labelledby="card-title">
+  <p class="break-kicker" id="card-team"></p>
+  <h2 id="card-title">Team card</h2>
+  <div class="card-detail" id="card-detail"></div>
+  <div class="menu-list"><button type="button" class="btn btn-primary" data-close>Back to the match</button></div>
+</dialog>
+
+<dialog class="sheet" id="dlg-ask" aria-labelledby="ask-title">
+  <h2 id="ask-title"></h2>
+  <p id="ask-text"></p>
+  <div class="menu-list" id="ask-actions"></div>
+</dialog>
+<!-- /build:body -->
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

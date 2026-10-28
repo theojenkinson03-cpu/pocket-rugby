@@ -1,0 +1,17 @@
+{
+  "name": "pocket-rugby",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A digital version of a pocket rugby dice game for one or two players.",
+  "scripts": {
+    "start": "python3 -m http.server 8080",
+    "test": "node --test test/*.test.mjs",
+    "test:fuzz": "FUZZ_MATCHES=20000 node --test test/invariants.test.mjs",
+    "test:mutation": "node scripts/mutate.mjs",
+    "test:e2e": "node test/e2e/run.mjs",
+    "check": "npm test && npm run test:mutation && npm run build && npm run test:e2e",
+    "simulate": "node scripts/simulate.mjs",
+    "build": "node scripts/build-single.mjs"
+  }
+}
