@@ -22,7 +22,10 @@ export const TIPS = {
   halftime: { title: 'Half time', text: "Sin-binned players come back. The side that didn't receive first gets the second-half kick-off." },
   'line-break': { title: 'Line break!', text: 'The tackle total fell short of the intensity. The black die decides whether it ends in a try.' },
   'sin-bin': { title: 'Sin bin', text: 'A yellow card means −1 on each brown die that side rolls in a tackle, for the rest of the half. A second yellow makes it −2 for the match.' },
-  injury: { title: 'Injury', text: 'Two Big Hits in one tackle hurt the ball carrier: that player runs at −1 for the rest of the match.' },
+  injury: { title: 'Injury', text: 'Two Big Hits in one tackle hurt the ball carrier: that player runs at −1 for the rest of the match, unless a replacement comes on.' },
+  bench: { title: 'The bench', text: 'One replacement a half clears an injured player’s penalty. Use it now, or keep it in case someone who carries more (the Forwards) gets hurt. An unused one is gone at half time.' },
+  rain: { title: 'Rain', text: 'A wet ball: the Forwards’ and Centres’ ‹Pass› face is a knock-on in the rain. Their Hit Ups are as good as ever; the Scrum Half’s passes are safe.' },
+  wind: { title: 'Wind', text: 'Kicks with the wind at your back go 10 m further, and 10 m shorter into it. The ends change at half time, so the wind swaps sides.' },
   'card-played': { title: 'Team card in play', text: '' },
   'quick-tap': { title: 'Quick-tap advantage', text: 'Every run gets +1 intensity until the defence makes 3 tackles or you make an error.' },
 };
@@ -36,6 +39,7 @@ export function tipFor(match, events, seen, humanTurn) {
       lineBreak: 'line-break',
       card: 'sin-bin',
       injury: 'injury',
+      wetBall: 'rain',
       cardPlayed: 'card-played',
       quickTap: 'quick-tap',
     }[e.type];
@@ -58,6 +62,10 @@ export function tipFor(match, events, seen, humanTurn) {
     ruck: 'ruck',
   }[step.purpose];
   if (step.type === 'halftime') return fresh('halftime');
+  if (step.purpose === 'bench') return fresh('bench');
+  // The wind matters the first time you line up a kick in it.
+  const kicking = step.purpose === 'kick' || (step.type === 'choose' && (step.purpose === 'penalty' || step.purpose === 'drop'));
+  if (kicking && match.weather?.wind != null && fresh('wind')) return 'wind';
   return byStep ? fresh(byStep) : null;
 }
 

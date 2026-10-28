@@ -56,6 +56,20 @@ const cardLine = e => {
 // "Golden Boot", or "Golden Boot (Mythic)" above Common.
 const cardLabel = (id, rarity) => `${CARD_BY_ID[id].name}${rarity && rarity !== 'common' ? ` (${RARITY_BY_ID[rarity].name})` : ''}`;
 
+// The weather in a sentence, for the toss and the setup screens.
+export function weatherText(match) {
+  const w = match.weather;
+  if (!w) return null;
+  const parts = [];
+  parts.push(w.rain ? 'Rain: the Forwards and Centres knock on with their ‹Pass› face' : 'Dry');
+  if (w.wind === null || w.wind === undefined) parts.push('no wind');
+  else parts.push(`the wind is at ${possessive(match.teams[w.wind].name)} backs for the first half (+10 m on their kicks, −10 m into it), then the ends change`);
+  return `${parts.join(', ')}.`;
+}
+
+// "−10 m into the wind" / "+10 m wind": the wind's share of a kick.
+const windNote = wind => (wind > 0 ? `+${metres(wind)} wind` : wind < 0 ? `−${metres(-wind)} into the wind` : '');
+
 // Returns { lines: [{text, team, tone}], headline, detail, moments: [{kind, team, title, sub}] }
 export function narrate(events, match) {
   const name = team => match.teams[team].name;
@@ -73,6 +87,11 @@ export function narrate(events, match) {
     switch (e.type) {
       case 'toss':
         if (match.venue) say(`Welcome to ${match.venue.name}${match.venue.neutral ? ', a neutral ground for the big day' : ''}.`);
+        if (match.weather) {
+          const w = match.weather;
+          const wind = w.wind === null || w.wind === undefined ? '' : ` ${name(w.wind)} have the wind at their backs in the first half.`;
+          say(`${w.rain ? 'Rain is falling: a greasy ball for the Forwards and Centres.' : 'A dry day.'}${wind}`);
+        }
         say(`${name(e.caller)} call ${e.call}. It lands ${e.result}. ${name(e.winner)} receive the kick-off.`, e.winner);
         head(e.result === 'heads' ? 'Heads' : 'Tails', `${name(e.winner)} win the toss and receive.`);
         break;
@@ -144,9 +163,10 @@ export function narrate(events, match) {
 
       case 'error': {
         const other = 1 - e.team;
-        if (e.error === 'knockon') say(`Knock on by ${player(e.team, e.pos)}. Scrum, ${name(other)} feed.`, e.team, 'bad');
+        if (e.wet) say(`The wet ball squirts out of ${possessive(player(e.team, e.pos))} hands. Knock on. Scrum, ${name(other)} feed.`, e.team, 'bad');
+        else if (e.error === 'knockon') say(`Knock on by ${player(e.team, e.pos)}. Scrum, ${name(other)} feed.`, e.team, 'bad');
         else say(`${cap(player(e.team, e.pos))} puts it into touch. Lineout, ${name(other)} throw.`, e.team, 'bad');
-        head(e.error === 'knockon' ? 'Knock on' : 'Into touch', `${e.piece === 'scrum' ? 'Scrum' : 'Lineout'} to ${name(other)}.`);
+        head(e.wet ? 'Knock on · wet ball' : e.error === 'knockon' ? 'Knock on' : 'Into touch', `${e.wet ? 'In the rain a ‹Pass› face is a knock-on. ' : ''}${e.piece === 'scrum' ? 'Scrum' : 'Lineout'} to ${name(other)}.`);
         break;
       }
 
@@ -219,7 +239,9 @@ export function narrate(events, match) {
         break;
 
       case 'range': {
-        const boost = e.bonus ? ` with ${metres(e.bonus)} from ${cardName(match, e.team)}` : '';
+        const card = e.card ?? e.bonus;
+        const extras = [card ? `${metres(card)} from ${cardName(match, e.team)}` : '', windNote(e.wind || 0)].filter(Boolean);
+        const boost = extras.length ? ` with ${extras.join(' and ')}` : '';
         if (e.kick === 'conversion') say(`Conversion from ${metres(e.range)}.`, e.team);
         if (e.kick === 'drop') say(`Drop-goal range: ${metres(e.range)}.`, e.team);
         if (e.kick === 'penalty') say(`The posts are ${metres(e.range)} away.`, e.team);
@@ -240,7 +262,9 @@ export function narrate(events, match) {
       case 'kick': {
         const what = { conversion: 'Conversion', penalty: 'Penalty goal', drop: 'Drop goal' }[e.kick];
         const kicker = e.kicker ? player(e.team, e.kicker) : name(e.team);
-        const struck = e.bonus ? `${metres(e.distance)} (${metres(e.rolled)} ${signed(e.bonus * METRES_PER_POINT)} m ${cardName(match, e.team)})` : metres(e.distance);
+        const card = e.card ?? e.bonus;
+        const extras = [card ? `${signed(card * METRES_PER_POINT)} m ${cardName(match, e.team)}` : '', windNote(e.wind || 0)].filter(Boolean);
+        const struck = extras.length ? `${metres(e.distance)} (${metres(e.rolled)} ${extras.join(' ')})` : metres(e.distance);
         if (e.good) {
           say(`${what}! ${cap(kicker)} strikes it ${struck}, ${metres(e.range)} needed.`, e.team, 'score');
           head(`${what}!`, `Struck ${struck}, needed ${metres(e.range)}.`);
@@ -303,7 +327,22 @@ export function narrate(events, match) {
         out.moments.push({ kind: 'halftime', team: null, title: 'Half time', sub: scoreLine(match) });
         break;
       case 'secondHalf':
-        say('The second half is under way.', null);
+        say(e.wind === undefined ? 'The second half is under way.' : `The second half is under way. Ends changed: the wind is with ${name(e.wind)} now.`, null);
+        break;
+
+      case 'replacement': {
+        const off = player(e.team, e.pos);
+        const when = e.when === 'halftime' ? 'Half-time change' : 'Fresh legs';
+        say(`${when}: a replacement comes on for ${off}. The −${e.cleared} injury is gone.`, e.team, 'big');
+        head('Replacement', `${name(e.team)} clear the −${e.cleared} on the ${PLAYERS[e.pos].name}. No more replacements this half.`);
+        out.moments.push({ kind: 'replacement', team: e.team, pos: e.pos, title: 'Replacement', sub: `${pos(e.pos)}: fresh legs` });
+        break;
+      }
+      case 'playOn':
+        say(`${name(e.team)} play on, keeping their replacement for later${e.when === 'halftime' ? ' in the half' : ''}.`, e.team);
+        head('Playing on', `${name(e.team)} keep the replacement on the bench.`);
+        break;
+      case 'wetBall':
         break;
       case 'fulltime':
         say(`FULL TIME! ${name(e.winner)} win. ${scoreLine(match)}.`, e.winner, 'score');

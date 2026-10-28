@@ -2,7 +2,7 @@
 // rendering; app.js owns the session and passes the state in.
 
 import { MATCH_LENGTHS } from './engine.js';
-import { button, el } from './dom.js';
+import { button, el, toggleRow } from './dom.js';
 import { kitVars } from './color.js';
 
 function teamBadge(team, note) {
@@ -65,17 +65,12 @@ function settings(state, handlers) {
     lab.append(input, span);
     seg.append(lab);
   }
-  const cards = el('label', 'toggle toggle-card');
-  const text = el('span');
-  text.append(el('b', null, 'Team cards'), el('small', null, 'A draft after the toss'));
-  const box2 = el('input');
-  box2.type = 'checkbox';
-  box2.checked = state.cards;
-  box2.addEventListener('change', () => handlers.onSettings({ cards: box2.checked }));
-  const knob = el('i');
-  knob.setAttribute('aria-hidden', 'true');
-  cards.append(text, box2, knob);
-  box.append(seg, cards);
+  box.append(
+    seg,
+    toggleRow('Team cards', 'A draft after the toss', state.cards, on => handlers.onSettings({ cards: on })),
+    toggleRow('Bench', 'One replacement a half clears an injury', state.bench, on => handlers.onSettings({ bench: on })),
+    toggleRow('Weather', 'Rain and wind, different every match', state.weather, on => handlers.onSettings({ weather: on })),
+  );
   return box;
 }
 
@@ -107,7 +102,7 @@ export function lobbyPage(state, handlers) {
   if (state.phase === 'start') {
     page.append(teamEditor(state, handlers));
     const host = el('section', 'ol-card');
-    host.append(el('h3', 'page-h', 'Host a match'), el('p', null, 'Get a code to share. You choose the match length and whether to draft team cards.'), button('Host a match', handlers.onHost, 'btn btn-primary btn-wide'));
+    host.append(el('h3', 'page-h', 'Host a match'), el('p', null, 'Get a code to share. You choose the match length, team cards, the bench and the weather.'), button('Host a match', handlers.onHost, 'btn btn-primary btn-wide'));
     const join = el('section', 'ol-card');
     const form = el('form', 'ol-join');
     const code = el('input', 'ol-code-input');

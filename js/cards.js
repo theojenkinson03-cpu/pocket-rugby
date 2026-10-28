@@ -95,8 +95,8 @@ export const CARDS = [
     tiers: tiers(
       { value: 0.073, text: '+20 m on every conversion and penalty kick.', effects: { kickBonus: { conversion: 2, penalty: 2 } } },
       { value: 0.114, text: '+30 m on every conversion and penalty kick, and +10 m on drop goals.', effects: { kickBonus: { conversion: 3, penalty: 3, drop: 1 } } },
-      { value: 0.159, text: '+40 m on every conversion and penalty kick, so they never miss, and +30 m on drop goals.', effects: { kickBonus: { conversion: 4, penalty: 4, drop: 3 } } },
-      { value: 0.240, text: "Every kick is +40 m and never misses, and the Fly Half's and Centres' ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { conversion: 4, penalty: 4, drop: 4 }, passToDrop: ['B', 'C'] } },
+      { value: 0.159, text: '+40 m on every conversion and penalty kick, so they never miss in still air, and +30 m on drop goals.', effects: { kickBonus: { conversion: 4, penalty: 4, drop: 3 } } },
+      { value: 0.240, text: "Every kick is +40 m and never misses in still air, and the Fly Half's and Centres' ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { conversion: 4, penalty: 4, drop: 4 }, passToDrop: ['B', 'C'] } },
     ),
   },
   {
@@ -106,8 +106,8 @@ export const CARDS = [
     tiers: tiers(
       { value: 0.084, text: "+20 m on drop goals, and the Outside Backs' ‹Pass› face is a drop-goal chance too.", effects: { kickBonus: { drop: 2 }, passToDrop: ['W'] } },
       { value: 0.103, text: "+30 m on drop goals, and the Outside Backs' ‹Pass› face is a drop-goal chance too.", effects: { kickBonus: { drop: 3 }, passToDrop: ['W'] } },
-      { value: 0.163, text: "+40 m on drop goals, so they never miss, and the Outside Backs' and Fly Half's ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { drop: 4 }, passToDrop: ['W', 'B'] } },
-      { value: 0.257, text: 'Drop goals never miss (+40 m), and every ‹Pass› face is a drop-goal chance.', effects: { kickBonus: { drop: 4 }, passToDrop: ['F', 'C', 'W', 'B'] } },
+      { value: 0.163, text: "+40 m on drop goals, so they never miss in still air, and the Outside Backs' and Fly Half's ‹Pass› faces are drop-goal chances.", effects: { kickBonus: { drop: 4 }, passToDrop: ['W', 'B'] } },
+      { value: 0.257, text: 'Drop goals never miss in still air (+40 m), and every ‹Pass› face is a drop-goal chance.', effects: { kickBonus: { drop: 4 }, passToDrop: ['F', 'C', 'W', 'B'] } },
     ),
   },
   {

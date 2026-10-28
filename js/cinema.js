@@ -135,7 +135,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
   // ---------------------------------------------------------------- scenes
 
   const scenes = {
-    kickoff({ teams, half, target, label = null, venue = null }) {
+    kickoff({ teams, half, target, label = null, venue = null, conditions = null }) {
       return run({ duration: label || venue ? 2300 : 2000 }, (scene, later) => {
         scene.classList.add('kickoff');
         const sides = teams.map((t, i) => {
@@ -154,6 +154,7 @@ export function createCinema(stage, shakeTarget, { speed, haptics }) {
         );
         if (label) scene.append(el('div', 'ko-label', label));
         if (venue && half === 1) scene.append(el('div', `ko-venue${venue.neutral ? ' neutral' : ''}`, venue.neutral ? `${venue.name} · neutral ground` : venue.name));
+        if (conditions) scene.append(el('div', 'ko-conditions', conditions));
         later(550, () => play('whistle'));
       });
     },

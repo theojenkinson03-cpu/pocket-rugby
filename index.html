@@ -38,6 +38,8 @@
           <button type="button" class="btn" data-start="2p"><span>2 players</span><small>One phone, take turns</small></button>
           <button type="button" class="btn" id="btn-online"><span>Online</span><small>Two phones</small></button>
           <button type="button" class="btn btn-span btn-cup" id="btn-tournament"><span id="tournament-label">Cups &amp; leagues</span><small id="tournament-detail">Nations Cup, Super Rugby, Prem, URC, Top 14</small></button>
+          <button type="button" class="btn btn-daily" id="btn-daily"><span id="daily-label">Daily challenge</span><small id="daily-detail">A new situation every day</small></button>
+          <button type="button" class="btn" id="btn-friends"><span>Friends league</span><small id="friends-detail">Your league, several phones</small></button>
         </div>
       </div>
       <div class="home-links">
@@ -106,6 +108,8 @@
       </fieldset>
 
       <label class="toggle toggle-card" for="setup-cards"><span><b>Team cards</b><small>Three cards are dealt after the toss. The toss loser picks first.</small></span><input type="checkbox" id="setup-cards"><i aria-hidden="true"></i></label>
+      <label class="toggle toggle-card" for="setup-bench"><span><b>Bench</b><small>One replacement a half clears an injured player’s penalty.</small></span><input type="checkbox" id="setup-bench"><i aria-hidden="true"></i></label>
+      <label class="toggle toggle-card" for="setup-weather"><span><b>Weather</b><small>Rain makes the Forwards and Centres knock on; wind adds or takes 10 m off every kick.</small></span><input type="checkbox" id="setup-weather"><i aria-hidden="true"></i></label>
 
       <button type="submit" class="btn btn-primary btn-wide">To the coin toss</button>
     </form>
@@ -119,6 +123,26 @@
       <h2 id="tournament-title">Tournament</h2>
     </header>
     <div class="page-body" id="tournament-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-daily" hidden aria-labelledby="daily-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="daily-title">Daily challenge</h2>
+    </header>
+    <div class="page-body" id="daily-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-friends" hidden aria-labelledby="friends-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="friends-title">Friends league</h2>
+    </header>
+    <div class="page-body" id="friends-body"></div>
   </section>
 
   <section class="view view-page" id="view-career" hidden aria-labelledby="career-title">
@@ -193,7 +217,9 @@
 
     <div class="pitch-wrap">
       <svg class="pitch" id="pitch" role="img" aria-label="Pitch showing both teams and the ball"></svg>
+      <div class="rain" id="rain" hidden aria-hidden="true"></div>
       <div class="situation" id="situation"></div>
+      <div class="conditions" id="conditions"></div>
     </div>
 
     <div class="tray" id="tray">
@@ -321,18 +347,26 @@
       <div class="rules-cards" id="rules-cards"></div>
     </section>
     <section>
+      <h3>Weather and the bench</h3>
+      <p>Two optional rules, switched on or off like the team cards.</p>
+      <p><b>Weather</b>: every match gets its own conditions. In the <b>rain</b> the ball is slippery: the Forwards' and Centres' free ‹Pass› face is a knock-on. Their runs, and the Scrum Half's passes, are as normal. <b>Wind</b> is worth 10 m on every kick: further with it at your back, shorter into it. The ends change at half time, so the wind swaps sides.</p>
+      <p><b>The bench</b>: once a half, each side can bring on a replacement for an injured player, which clears the injury. You choose when someone is hurt (any injured player can come off then) and at half time, when each side gets a fresh replacement. Use it now, or keep it in case someone more important gets hurt; an unused one is gone at half time.</p>
+    </section>
+    <section>
       <h3>The CPU</h3>
       <p><b>Rookie</b> plays on instinct. <b>Pro</b> plays the odds. <b>Expert</b> plays out hundreds of continuations before every decision and picks the one that wins most often. In a dice game the dice decide most matches, so Expert is only a little stronger than Pro, but it rarely makes a poor call. The CPU's <b>style</b> flavours its choices: Boot it kicks at every chance, Run it taps penalties and spreads the ball wide, Forwards keeps it tight.</p>
     </section>
     <section>
       <h3>Tournaments</h3>
-      <p>The <b>Nations Cup</b> has two pools of four; the top two in each go through to the semi-finals. Or take a club through a real league, each with its real play-offs:</p>
+      <p>The <b>Nations Cup</b> has two pools of four; the top two in each go through to the semi-finals, played with the final at the host nation's ground. Or take a club through a real league, each with its real play-offs:</p>
       <ul class="rules-list">
         <li><b>Super Rugby Pacific</b>: 11 teams, one sitting out each round. The top six play qualifying finals; the three winners and the best-placed loser reach the semi-finals.</li>
-        <li><b>Prem Rugby</b>: 10 clubs. The top four play semi-finals.</li>
+        <li><b>Prem Rugby</b>: 10 clubs. The top four play semi-finals; the final is at Twickenham.</li>
         <li><b>United Rugby Championship</b>: 16 teams. The top eight play quarter-finals.</li>
-        <li><b>Top 14</b>: 14 clubs. Third to sixth play barrages; the top two wait in the semi-finals.</li>
+        <li><b>Top 14</b>: 14 clubs. Third to sixth play barrages; the top two wait in the semi-finals, in Bordeaux, and the final is at the Stade de France.</li>
       </ul>
+      <p>The <b>Champions Cup</b> has the 24 clubs from the 2026–27 draw in four pools of six. Each plays the four clubs in its pool from the other two leagues. The top three in each pool and the four best of the rest go into a round of 16, then quarter-finals, semi-finals and a final in Lyon.</p>
+      <p>Everyone plays at their real home ground, except the neutral finals. When a league season ends you can carry on with your club into the next, squad and all, building a trophy cabinet and a records book; the top eight in each European league qualify for the next Champions Cup. The hub keeps the season's top try and points scorers and a Team of the Season.</p>
       <p>A short season is 6 rounds; a full season has everyone play everyone once. A win is worth 4 points, with a bonus point for scoring 4 tries and another for losing by 7 or fewer. Team names are the real clubs'; the players are made up.</p>
     </section>
     <section>

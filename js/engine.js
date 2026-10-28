@@ -4,7 +4,7 @@
 import { DICE, POSITIONS } from './dice.js';
 import { CARD_IDS, cardEffects, catchUp, DEAL_SIZE, rollRarity } from './cards.js';
 
-export const VERSION = 4;
+export const VERSION = 5;
 
 export const MATCH_LENGTHS = {
   quick: { half: 10, full: 20, label: 'Quick' },
@@ -13,6 +13,43 @@ export const MATCH_LENGTHS = {
 };
 
 export const QUICK_TAP_RUNS = 3;
+
+// ---- Weather and the bench (optional rules) ----------------------------------
+//
+// Weather: rain makes the ball slippery, so the Forwards' and Centres' free
+// ‹Pass› faces become knock-ons (the Scrum Half's passes are safe). Wind is
+// worth 10 m on every kick: with it at your back, +10 m; into it, −10 m.
+// One side has it at their backs in the first half and the ends change at
+// half time.
+//
+// The bench: once a half each side may bring on a replacement for an
+// injured player, which clears that player's injury penalty. The choice
+// comes when a player is hurt (any injured player may be replaced then) and
+// at half time, with the second half's replacement.
+export const WET_HANDS = ['F', 'C'];
+export const WIND_METRES = 1;
+
+// Conditions for a match: rain on about one match in three, wind on half of
+// them, blowing towards either end.
+export function rollWeather(rng = Math.random) {
+  const rain = rng() < 0.35;
+  const wind = rng() < 0.5 ? (rng() < 0.5 ? 0 : 1) : null;
+  return { rain, wind };
+}
+
+// Which side has the wind at their backs now, or null in still air.
+export function windWith(match) {
+  const w = match.weather?.wind;
+  if (w === null || w === undefined) return null;
+  return match.half === 1 ? w : other(w);
+}
+
+// +1 (10 m) for the side with the wind, −1 for the side kicking into it.
+export function windBonus(match, team) {
+  const w = windWith(match);
+  if (w === null) return 0;
+  return team === w ? WIND_METRES : -WIND_METRES;
+}
 
 const other = team => 1 - team;
 const rollDie = rng => Math.floor(rng() * 6);
@@ -102,6 +139,8 @@ export function newMatch({
   tossCaller = 0,
   controllers = null,
   venue = null,
+  weather = null,
+  bench = false,
 } = {}) {
   const kits = teams || [
     { name: 'Home', color: '#1d4ed8' },
@@ -120,6 +159,9 @@ export function newMatch({
     controllers: controllers || (mode === '1p' ? ['human', 'cpu'] : ['human', 'human']),
     // Where it's played, for the kick-off title card: {name, neutral}.
     venue: venue ? { name: venue.name, neutral: !!venue.neutral } : null,
+    // {rain, wind}: wind is the side with it at their backs in the first half.
+    weather: weather ? { rain: !!weather.rain, wind: weather.wind === 0 || weather.wind === 1 ? weather.wind : null } : null,
+    bench: !!bench,
     teams: kits.map(kit => ({
       name: kit.name,
       color: kit.color,
@@ -130,6 +172,8 @@ export function newMatch({
       injuries: { S: 0, F: 0, C: 0, W: 0, B: 0 },
       yellows: 0,
       sinBin: false,
+      // Replacements left this half.
+      bench: bench ? 1 : 0,
       card: null,
       cardRarity: null,
       cardUses: freshUses(),
@@ -166,8 +210,11 @@ export function migrate(match) {
   m.quickTapFrom ??= m.quickTap ? 'tap' : null;
   m.gained ??= 0;
   m.venue ??= null;
+  m.weather ??= null;
+  m.bench ??= false;
   for (const t of m.teams) {
     t.kit ??= null;
+    t.bench ??= 0;
     t.roster ??= null;
     t.card ??= null;
     t.cardRarity ??= t.card ? 'common' : null;
@@ -261,8 +308,34 @@ export function kickChance(range, bonus = 0) {
   return DICE.K.faces.filter(f => f.kick + bonus >= range).length / 6;
 }
 
+// A kick's extra distance: the team card's, and the wind's.
+export function kickParts(match, team, kick) {
+  return { card: cardEffects(match, team).kickBonus?.[kick] || 0, wind: windBonus(match, team) };
+}
+
 export function kickBonus(match, team, kick) {
-  return cardEffects(match, team).kickBonus?.[kick] || 0;
+  const { card, wind } = kickParts(match, team, kick);
+  return card + wind;
+}
+
+const WET_PASS = Object.freeze({ kind: 'error', label: 'Knock On', error: 'knockon', wet: true });
+
+// What an attacking die's face does once the weather and team cards have
+// had their say: {face, wet, swapped, dropped}. In the rain a free ‹Pass›
+// for the Forwards or Centres slips loose; Sure Hands and the like turn an
+// error back into a pass; Drop-Goal Artist turns a free pass into a drop.
+export function attackFace(match, team, pos, faceIndex) {
+  const rolled = DICE[pos].faces[faceIndex];
+  let face = rolled;
+  const wet = !!match.weather?.rain && WET_HANDS.includes(pos) && rolled.kind === 'pass' && !rolled.to;
+  if (wet) face = WET_PASS;
+  const fx = cardEffects(match, team);
+  const lost = face.error || (face.kind === 'intercept' ? 'intercept' : null);
+  const swapped = lost && fx.faceSwap?.[pos]?.[lost] === 'pass' ? lost : null;
+  if (swapped) face = { kind: 'pass', label: 'Pass' };
+  const dropped = face.kind === 'pass' && !face.to && face === rolled && (fx.passToDrop || []).includes(pos);
+  if (dropped) face = { kind: 'drop', label: 'Drop Goal' };
+  return { face, rolled, wet, swapped, dropped };
 }
 
 export function receiverOdds(match, team, pos) {
@@ -270,15 +343,15 @@ export function receiverOdds(match, team, pos) {
   const modifier = defenceModifier(match, def);
   let lineBreak = 0;
   let error = 0;
-  const swaps = cardEffects(match, team).faceSwap?.[pos] || {};
-  for (const face of DICE[pos].faces) {
+  DICE[pos].faces.forEach((_, i) => {
+    const { face } = attackFace(match, team, pos, i);
     if (face.kind === 'run') {
       const intensity = runIntensity(match, team, pos, face.value, face);
       const canRuck = ruckFor(match, def, face, intensity);
       lineBreak += breakChance(intensity, modifier, canRuck, tackleBonusFor(match, def, !!face.special)) / 6;
     }
-    if ((face.kind === 'error' || face.kind === 'intercept') && !swaps[face.error || face.kind]) error += 1 / 6;
-  }
+    if (face.kind === 'error' || face.kind === 'intercept') error += 1 / 6;
+  });
   return { lineBreak, error, special: DICE[pos].faces.find(f => f.special) };
 }
 
@@ -366,23 +439,15 @@ function onAttack(m, ev, rng) {
   const def = other(team);
   const pos = m.step.dice[0];
   const faceIndex = rollDie(rng);
-  const rolled = DICE[pos].faces[faceIndex];
   const T = m.teams[team];
   m.roll = { dice: [pos], faces: [faceIndex], purpose: 'attack', team };
 
-  // Sure Hands and the like: an error face on the named player becomes a free pass.
-  let face = rolled;
-  const lost = rolled.error || (rolled.kind === 'intercept' ? 'intercept' : null);
-  if (lost && cardEffects(m, team).faceSwap?.[pos]?.[lost] === 'pass') {
-    cardPlayed(ev, m, team, lost);
-    face = { kind: 'pass', label: 'Pass' };
-  }
-
-  // Drop-Goal Artist: other players' free passes become drop-goal chances too.
-  if (face.kind === 'pass' && !face.to && face === rolled && (cardEffects(m, team).passToDrop || []).includes(pos)) {
-    cardPlayed(ev, m, team, 'dropChance');
-    face = { kind: 'drop', label: 'Drop Goal' };
-  }
+  // Rain, then Sure Hands and the like (an error becomes a free pass), then
+  // Drop-Goal Artist (other players' free passes become drop-goal chances).
+  const { face, wet, swapped, dropped } = attackFace(m, team, pos, faceIndex);
+  if (wet) ev.push({ type: 'wetBall', team, pos });
+  if (swapped) cardPlayed(ev, m, team, swapped, wet ? { wet: true } : {});
+  if (dropped) cardPlayed(ev, m, team, 'dropChance');
 
   switch (face.kind) {
     case 'run': {
@@ -413,7 +478,7 @@ function onAttack(m, ev, rng) {
       T.stats.errors++;
       player(m, team, pos).errors++;
       const piece = face.error === 'knockon' ? 'scrum' : 'lineout';
-      ev.push({ type: 'error', team, pos, error: face.error, piece });
+      ev.push({ type: 'error', team, pos, error: face.error, piece, ...(face.wet ? { wet: true } : {}) });
       setPiece(m, ev, piece, def);
       break;
     }
@@ -445,6 +510,7 @@ function onTackle(m, ev, rng) {
     A.injuries[carrier]++;
     ev.push({ type: 'injury', team: att, pos: carrier, penalty: A.injuries[carrier] });
   }
+  const hurt = result.injury && A.bench > 0;
 
   const metres = carryMetres(result.outcome, intensity, result.total);
   A.stats.metres += metres;
@@ -485,6 +551,29 @@ function onTackle(m, ev, rng) {
   } else {
     nextPhase(m);
   }
+  // A replacement on the bench: the injured side decides before play goes on.
+  if (hurt) offerBench(m, att, 'injury', carrier, m.step);
+}
+
+// The injured positions a replacement could come on for.
+export const injuredPositions = (match, team) => POSITIONS.filter(p => match.teams[team].injuries[p] > 0);
+
+// Asks `team` whether to bring on a replacement, then carries on with
+// `next` (a step, or 'kickoff' for the second half's kick-off).
+function offerBench(m, team, when, pos, next) {
+  const options = [...injuredPositions(m, team), 'stay'];
+  m.step = { type: 'choose', purpose: 'bench', team, when, pos, options, next };
+}
+
+// Half time: each side with an injury and a replacement may make a change,
+// the side receiving the kick-off last. Returns false when nobody can.
+function halfTimeBench(m, after = null) {
+  const receiver = other(m.firstReceiver);
+  const order = [other(receiver), receiver].filter(t => after === null || (after !== receiver && t === receiver));
+  const team = order.find(t => m.teams[t].bench > 0 && injuredPositions(m, t).length);
+  if (team === undefined) return false;
+  offerBench(m, team, 'halftime', null, 'kickoff');
+  return true;
 }
 
 function onRuck(m, ev, rng) {
@@ -544,9 +633,10 @@ function onRange(m, ev, rng) {
   const kick = m.step.kick;
   const faceIndex = rollDie(rng);
   const range = DICE.D.faces[faceIndex].value;
-  const bonus = kickBonus(m, team, kick);
+  const parts = kickParts(m, team, kick);
+  const bonus = parts.card + parts.wind;
   m.roll = { dice: ['D'], faces: [faceIndex], purpose: 'range', team };
-  ev.push({ type: 'range', team, kick, range, bonus, chance: kickChance(range, bonus) });
+  ev.push({ type: 'range', team, kick, range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range, bonus) });
   if (kick === 'conversion') {
     m.step = { type: 'roll', purpose: 'kick', dice: ['K'], team, kick, range, kicker: 'B' };
   } else {
@@ -576,8 +666,9 @@ function onPenaltyCheck(m, ev, rng) {
   }
 
   const range = DICE.D.faces[rangeFace].value;
-  const bonus = kickBonus(m, team, 'penalty');
-  ev.push({ type: 'range', team, kick: 'penalty', range, bonus, chance: kickChance(range, bonus) });
+  const parts = kickParts(m, team, 'penalty');
+  const bonus = parts.card + parts.wind;
+  ev.push({ type: 'range', team, kick: 'penalty', range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range, bonus) });
   m.step = { type: 'choose', purpose: 'penalty', team, range, options: ['kick', 'tap'] };
 }
 
@@ -585,7 +676,8 @@ function onKick(m, ev, rng) {
   const { team, kick, range } = m.step;
   const faceIndex = rollDie(rng);
   const rolled = DICE.K.faces[faceIndex].kick;
-  const bonus = kickBonus(m, team, kick);
+  const parts = kickParts(m, team, kick);
+  const bonus = parts.card + parts.wind;
   const distance = rolled + bonus;
   const good = distance >= range;
   const S = m.teams[team].stats;
@@ -594,7 +686,7 @@ function onKick(m, ev, rng) {
 
   const tally = { conversion: ['conversions', 'conversionAttempts', 2], penalty: ['penaltyGoals', 'penaltyAttempts', 3], drop: ['dropGoals', 'dropAttempts', 3] }[kick];
   S[tally[1]]++;
-  ev.push({ type: 'kick', team, kick, range, distance, rolled, bonus, good, kicker });
+  ev.push({ type: 'kick', team, kick, range, distance, rolled, bonus, card: parts.card, wind: parts.wind, good, kicker });
 
   if (good) {
     S[tally[0]]++;
@@ -696,6 +788,20 @@ function onChoose(m, ev, value) {
         m.quickTapFrom = 'tap';
       }
       break;
+    case 'bench': {
+      const T = m.teams[step.team];
+      if (value === 'stay') {
+        ev.push({ type: 'playOn', team: step.team, pos: step.pos, when: step.when });
+      } else {
+        const cleared = T.injuries[value];
+        T.injuries[value] = 0;
+        T.bench--;
+        ev.push({ type: 'replacement', team: step.team, pos: value, cleared, when: step.when });
+      }
+      if (step.next !== 'kickoff') m.step = step.next;
+      else if (!halfTimeBench(m, step.team)) startPossession(m, ev, other(m.firstReceiver), 'kickoff');
+      break;
+    }
     case 'draft': {
       const dealt = m.dealRarity?.[value] || 'common';
       const rarity = draftRarity(m, value);
@@ -773,10 +879,11 @@ export function actInPlace(m, action, rng = Math.random) {
     m.half = 2;
     m.teams.forEach((t, i) => {
       t.sinBin = false;
+      t.bench = m.bench ? 1 : 0;
       refreshUses(m, i);
     });
-    ev.push({ type: 'secondHalf' });
-    startPossession(m, ev, other(m.firstReceiver), 'kickoff');
+    ev.push({ type: 'secondHalf', ...(windWith(m) !== null ? { wind: windWith(m) } : {}) });
+    if (!halfTimeBench(m)) startPossession(m, ev, other(m.firstReceiver), 'kickoff');
   } else if (step.type === 'choose' && step.purpose === 'toss') {
     const result = rng() < 0.5 ? 'heads' : 'tails';
     const winner = result === action.value ? step.team : other(step.team);

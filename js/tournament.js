@@ -2,7 +2,7 @@
 // final) and four real leagues, each with its own play-off format. Other
 // fixtures are played out by the engine, CPU against CPU.
 
-import { act, newMatch } from './engine.js';
+import { act, newMatch, rollWeather } from './engine.js';
 import { cpuChoice } from './ai.js';
 import { playerOfTheMatch, randomRoster } from './players.js';
 import { packPlayers } from './season.js';
@@ -205,7 +205,7 @@ function makeTeams(roster, rng) {
   return roster.map(team => ({ ...team, roster: randomRoster(team.flavour, rng) }));
 }
 
-export function createCup({ userTeam, length = 'quick', cards = true, rng = Math.random }) {
+export function createCup({ userTeam, length = 'quick', cards = true, bench = false, weather = false, rng = Math.random }) {
   const others = shuffle(NATIONS.filter(n => n.id !== userTeam), rng).slice(0, 7);
   const field = shuffle([NATIONS.find(n => n.id === userTeam), ...others], rng);
   const pools = { A: field.slice(0, 4).map(n => n.id), B: field.slice(4).map(n => n.id) };
@@ -217,13 +217,13 @@ export function createCup({ userTeam, length = 'quick', cards = true, rng = Math
   }
   // One of the eight hosts the semi-finals and the final.
   const host = field[Math.floor(rng() * field.length)].id;
-  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, cards, userTeam, host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
+  return { kind: 'cup', name: 'Nations Cup', short: 'Nations Cup', length, cards, bench, weather, userTeam, host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
 }
 
 // season: 'full' (everyone plays everyone once) or 'short' (the first
 // SHORT_SEASON rounds of that schedule). With an odd number of teams, one
 // side has a bye each round.
-export function createLeague({ league = 'prem', userTeam, length = 'quick', cards = true, season = 'short', rng = Math.random }) {
+export function createLeague({ league = 'prem', userTeam, length = 'quick', cards = true, bench = false, weather = false, season = 'short', rng = Math.random }) {
   const L = LEAGUES[league];
   const field = L.teams.map(c => c.id);
   const schedule = roundRobin(shuffle(field, rng));
@@ -242,6 +242,8 @@ export function createLeague({ league = 'prem', userTeam, length = 'quick', card
     rounds: rounds.length,
     length,
     cards,
+    bench,
+    weather,
     userTeam,
     teams: makeTeams(L.teams, rng),
     pools: { L: field },
@@ -286,7 +288,7 @@ export function championsPoolRounds(ids, rng = Math.random) {
 }
 
 // `pools`: the draw, by default the real 2026-27 one.
-export function createChampions({ userTeam, length = 'quick', cards = true, rng = Math.random, pools: drawn = CHAMPIONS_CUP.pools }) {
+export function createChampions({ userTeam, length = 'quick', cards = true, bench = false, weather = false, rng = Math.random, pools: drawn = CHAMPIONS_CUP.pools }) {
   const C = CHAMPIONS_CUP;
   const pools = Object.fromEntries(Object.entries(drawn).map(([group, ids]) => [group, [...ids]]));
   const fixtures = [];
@@ -302,6 +304,8 @@ export function createChampions({ userTeam, length = 'quick', cards = true, rng 
     short: C.short,
     length,
     cards,
+    bench,
+    weather,
     userTeam,
     teams: makeTeams(field, rng),
     pools,
@@ -399,6 +403,12 @@ export function kits(t, f) {
   return [dressed(home, { color: home.color, kit: home.kit || null }), dressed(away, stripAgainst(away, home.color))];
 }
 
+// A competition's rules for one of its matches: length, cards, bench, and
+// fresh weather for each match when it's on.
+export function matchRules(t, rng = Math.random) {
+  return { length: t.length, cards: t.cards, bench: !!t.bench, weather: t.weather ? rollWeather(rng) : null };
+}
+
 // The user's match, with the user always as team 0 in their first-choice
 // kit; the CPU side changes strip if need be.
 export function matchOptions(t, f) {
@@ -407,7 +417,7 @@ export function matchOptions(t, f) {
   const opponent = teamOf(t, userHome ? f.away : f.home);
   const mine = dressed(me, { color: me.color, kit: me.kit || null });
   const theirs = dressed(opponent, stripAgainst(opponent, me.color));
-  return { mode: '1p', teams: [mine, theirs], length: t.length, cards: t.cards, cpuLevel: opponent.level, cpuPersonality: opponent.personality, venue: venue(t, f) };
+  return { mode: '1p', teams: [mine, theirs], ...matchRules(t), cpuLevel: opponent.level, cpuPersonality: opponent.personality, venue: venue(t, f) };
 }
 
 // A finished match as a fixture result, home side first: the score, tries,
@@ -430,7 +440,7 @@ export function resultFromMatch(f, match, userIsHome) {
 export function simulateFixture(t, f, rng = Math.random) {
   const [home, away] = kits(t, f);
   const sides = [teamOf(t, f.home), teamOf(t, f.away)];
-  let m = newMatch({ mode: '2p', teams: [home, away], length: t.length, cards: t.cards });
+  let m = newMatch({ mode: '2p', teams: [home, away], ...matchRules(t, rng) });
   for (let guard = 0; m.step.type !== 'fulltime' && guard < 5000; guard++) {
     const step = m.step;
     let action;

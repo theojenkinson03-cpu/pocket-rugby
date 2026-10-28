@@ -447,12 +447,13 @@ const SCENARIOS = {
     await page.goto(base);
     await page.click('#btn-tournament');
     // Every league lists its real teams.
-    for (const [comp, count, first] of [['Super Rugby Pacific', 11, 'Blues'], ['Prem Rugby', 10, 'Bath'], ['United Rugby Championship', 16, 'Leinster'], ['Top 14', 14, 'Toulouse']]) {
-      await page.click(`.comp >> text=${comp}`);
+    for (const [comp, count, first] of [['super', 11, 'Blues'], ['prem', 10, 'Bath'], ['urc', 16, 'Leinster'], ['top14', 14, 'Toulouse'], ['champions', 24, 'Leinster']]) {
+      await page.click(`.comp:has(input[value="${comp}"])`);
       const tiles = await page.$$eval('.team-tile .tt-name', x => x.map(n => n.textContent));
       check(tiles.length === count && tiles[0] === first, `${comp}: ${tiles.length} teams, first ${tiles[0]}`);
     }
-    await page.click('.comp >> text=Super Rugby Pacific');
+    check((await page.$$('.pool-title')).length === 4, 'the Champions Cup lists its four pools');
+    await page.click('.comp:has(input[value="super"])');
     await page.click('.team-tile >> text=Fijian Drua');
     await page.click('#tournament-body .btn-primary');
     check((await page.$$('.standings tbody tr')).length === 11, 'eleven sides in the table');

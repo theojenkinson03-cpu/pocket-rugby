@@ -34,3 +34,18 @@ export function tallButton(label, note, onClick, className = 'btn') {
   if (note) b.append(el('small', null, note));
   return b;
 }
+
+// A labelled on/off switch, like the team-cards one on the setup screens.
+export function toggleRow(title, note, checked, onChange, className = 'toggle toggle-card') {
+  const label = el('label', className);
+  const text = el('span');
+  text.append(el('b', null, title), el('small', null, note));
+  const box = el('input');
+  box.type = 'checkbox';
+  box.checked = checked;
+  box.addEventListener('change', () => onChange(box.checked));
+  const knob = el('i');
+  knob.setAttribute('aria-hidden', 'true');
+  label.append(text, box, knob);
+  return label;
+}

@@ -1,6 +1,6 @@
 # Pocket Rugby
 
-A digital version of the Pocket Sports Rugby dice game, built for phones. Play the CPU, pass one phone between two players, or play a friend on two phones. Take a nation through the Nations Cup, or a real club through a season of Super Rugby Pacific, Prem Rugby, the United Rugby Championship or the Top 14.
+A digital version of the Pocket Sports Rugby dice game, built for phones. Play the CPU, pass one phone between two players, or play a friend on two phones. Take a nation through the Nations Cup, a real club through a season of Super Rugby Pacific, Prem Rugby, the United Rugby Championship or the Top 14 (and on into the next, season after season), or a European club through the Champions Cup.
 
 Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly Half (the printed set calls the last four the Forward, Centre, Wing and Back). The defence, referee and scoring dice settle tackles, scrums, lineouts, penalties, tries and kicks. First to 30 wins, and half time is called at 15.
 
@@ -9,8 +9,10 @@ Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly
 - **1 player against the CPU.** Three levels: Rookie plays on instinct, Pro plays the odds, Expert plays out hundreds of continuations before each decision. Four styles: Balanced, Boot it (kicks at every chance), Run it (taps penalties and spreads it wide) and Forwards (keeps it tight).
 - **2 players** on one phone, taking turns.
 - **Online, on two phones.** One player hosts and gets a six-letter code; the other joins with it. See [Online play](#online-play) for what it needs.
-- **Nations Cup**: eight nations in two pools of four, then semi-finals and a final.
+- **Nations Cup**: eight nations in two pools of four, then semi-finals and a final at the host nation's ground.
 - **Four real leagues**, each with its real teams and its own play-offs (see [Leagues](#leagues)). Play a short season of six rounds or a full one where everyone meets once.
+- **Champions Cup**: the real 2026–27 draw, 24 clubs from the Prem, the URC and the Top 14 (see [Champions Cup](#champions-cup)).
+- **Club career**: when a league season ends, carry on into the next with the same club and squad (see [Club career](#club-career)).
 - Tables use 4 points for a win and bonus points for 4 tries or losing by 7 or fewer. Other fixtures are played out by the engine, CPU against CPU, with each side's own level and style.
 - **Learn to play**: a guided first match against a Rookie, with a coach who explains each part of the game the first time it comes up. New players see it first on the title screen.
 
@@ -23,7 +25,46 @@ Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly
 | **United Rugby Championship** (2026–27) | Leinster, Munster, Ulster, Connacht, Cardiff, Dragons, Ospreys, Scarlets, Glasgow Warriors, Edinburgh, Benetton, Zebre Parma, Bulls, Lions, Sharks, Stormers | Top eight. Quarter-finals 1 v 8, 4 v 5, 2 v 7 and 3 v 6 on a fixed bracket, then the Grand Final |
 | **Top 14** (2026–27) | Toulouse, Bordeaux Bègles, Toulon, La Rochelle, Clermont, Racing 92, Stade Français, Castres, Montpellier, Pau, Bayonne, Lyon, Perpignan, Vannes | Top six. Barrages 3 v 6 and 4 v 5 while the top two wait; 1st meets the 4 v 5 winner and 2nd the 3 v 6 winner in the semi-finals, then the final |
 
-The better seed is at home in every knockout tie, the final included (in the real competitions some finals are at a neutral ground). With an odd number of teams, as in Super Rugby Pacific, one side sits out each round. Each side has its own colours, a change strip for clashes, and a CPU level and style. The club names are real; the players are made up.
+The better seed is at home in every knockout tie, except where the real competition goes to a neutral ground: the Prem final at Allianz Stadium, Twickenham, and the Top 14 semi-finals at the Stade Atlantique in Bordeaux and the final at the Stade de France. With an odd number of teams, as in Super Rugby Pacific, one side sits out each round. Each side has its own colours, a change strip for clashes, and a CPU level and style. The club names are real; the players are made up.
+
+**Home grounds.** Every nation and club plays at its real home ground (Thomond Park, Kingsholm, Ellis Park, One New Zealand Stadium and so on), named on the kick-off title card, the next-match card and in the commentary, and marked when the ground is neutral.
+
+**Kits.** Kits can be patterned: hoops, stripes, halves, quarters, a sash, a chest band or tartan. Gloucester's cherry and white, Leicester's green, red and white, Bath, Northampton, Cardiff, Racing 92, Argentina and Japan wear hoops; Harlequins their quarters; Zebre and Perpignan stripes; the Chiefs a chest band; Glasgow tartan. Patterns show on every kit chip, the team tiles, the pitch tokens and the scenes; a change strip is plain. Your own side on the team sheet can wear any pattern, and it goes with you online.
+
+## Champions Cup
+
+The 24 clubs drawn for the 2026–27 Champions Cup, in the real four pools of six (two from each league in each pool):
+
+| Pool | Clubs |
+| --- | --- |
+| 1 | Leinster, Glasgow Warriors, Pau, Sale Sharks, Leicester Tigers, Clermont |
+| 2 | Toulouse, Lions, Saracens, La Rochelle, Exeter Chiefs, Connacht |
+| 3 | Bordeaux Bègles, Stormers, Racing 92, Munster, Bristol Bears, Gloucester |
+| 4 | Northampton Saints, Bath, Cardiff, Montpellier, Stade Français, Bulls |
+
+Each club plays the four clubs in its pool from the other two leagues, two at home and two away. The top three in each pool and the four best-placed of the rest go through to a round of 16 seeded 1 to 16 (pool winners first, then runners-up, then thirds, each in table order, then the best of the rest), played 1 v 16 to 8 v 9 at the better seed's ground. A fixed bracket leads to the quarter-finals and semi-finals, and the final is at the OL Stadium in Lyon.
+
+## Club career
+
+When a league season ends, **Start the next season** carries on with the same club: every side keeps its squad (yours, edited or not, included), and the season name moves on (2026–27, 2027–28, ...; 2026, 2027, ... in Super Rugby). A club in the Champions Cup plays it after the league: the real draw in the first season, a fresh draw after that. The top eight in each European league's table qualify for the next season's Champions Cup.
+
+The hub keeps the club's story:
+
+- **Trophy cabinet**: league titles, Champions Cup wins, the Double, and finishing top of the table.
+- **Club records**: biggest win, heaviest defeat, most points and tries in a match, the longest winning run, the best league season, and the most tries, points, metres and tackles by one player in a season.
+- **All-time leaders**: tries, points and appearances for the club across every season.
+- **Season by season**: table place, how far the club went in the play-offs and in Europe, the record and the top try scorer.
+
+## Season stats
+
+Every match in a competition counts, the ones the engine plays out as well as yours: every fixture keeps each player's numbers and the Player of the Match. The hub lists the top try scorers, top points scorers, most metres and most tackles, and a **Team of the Season**: the best average match rating at each position among the regulars (at least half as many matches as the most at that position), with a Player of the Season named when the competition ends.
+
+## Weather and the bench
+
+Two optional rules, switched on or off on the team sheet, in the competition setup and in the online lobby, like the team cards:
+
+- **Weather** (off unless you turn it on). Each match gets its own conditions: rain about one match in three, wind about one in two. **Rain**: a wet ball, so the Forwards' and Centres' free ‹Pass› face is a knock-on (the Scrum Half's passes and every run are as normal; a card that stops a knock-on still does). **Wind**: kicks with the wind at your back go 10 m further, and 10 m shorter into it; the ends change at half time. The pitch shows the rain and an arrow for the wind, the pass odds and kick chances count them, and the commentary says when the weather made the difference.
+- **The bench** (on unless you turn it off). Once a half, each side may bring on a replacement to clear an injured player's penalty. The choice comes when a player is hurt (any injured player may come off then) and at half time, when each side gets a fresh replacement and can use it on an old injury. Use it now, or keep it in case someone who carries more gets hurt; an unused replacement is gone at half time. The CPU brings the replacement on straight away for whoever carries most: in 40,000 simulated matches for each policy, keeping it for something worse never did better (49.6% to 49.9% against replacing at once), so it's a close call, and the CPU takes the safe one.
 
 ## Team cards
 
@@ -42,7 +83,7 @@ Three of twelve cards are dealt after the coin toss. Each card bends one rule fo
 - **Player of the Match** after every match, with a spotlight scene, and a table of every player's tries, metres, carries, line breaks, tackles, missed tackles, turnovers, kicking points and errors. The team report adds metres per carry and tackle success.
 - **Win meter.** A live bar under the scoreboard shows each side's chance of winning, from a model of how possessions end (it agrees with simulated matches to within a few points), with each side's team card counted as an edge worth its measured lift. The full-time report charts it through the match as a momentum graph, with every score marked.
 - **Career.** Your record against each CPU level and online, streaks, points, tries, biggest win, trophies, and the team cards you've won with, each at the rarest you've had.
-- **31 achievements**, from Hat-trick, Hundred Metres and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert), Mythic (win with a Mythic card) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
+- **34 achievements**, from Hat-trick, Hundred Metres and Comeback to Ice Cold (win it with a kick), From Halfway (a 50 m drop goal), Giant Killer (beat the Expert), Mythic (win with a Mythic card), Champions of Europe, The Double (your league and the Champions Cup in one season), Dynasty (three league titles with one club) and Invincibles (win a tournament unbeaten). Each one gets a scene when you unlock it.
 
 ## Presentation
 
@@ -60,7 +101,7 @@ Three of twelve cards are dealt after the coin toss. Each card bends one rule fo
 Online matches run through the page's live room on claude.ai, so both players open the game there:
 
 - Both players must be **signed in** and have **access to the page**. The owner shares it from the **Share** menu. Someone who opens a public link can't join a match.
-- The host picks the match length and whether to draft team cards. The guest calls the toss.
+- The host picks the match length, team cards, the bench and the weather. The guest calls the toss.
 - If both choose the same kit colour, the guest changes strip.
 - Closing the page doesn't end the match: **Resume** rejoins the room and carries on from the last move.
 
@@ -97,9 +138,9 @@ npm run build        # writes dist/pocket-rugby.html
 The rules engine is checked from several directions. [RULES.md](RULES.md) maps every rule on the sheet, and every team card, to its code and its tests.
 
 ```sh
-npm test               # 175+ tests: rules, cards at every rarity, players, tournaments, career, coach, online, win model, CPU, fuzzing, odds, static checks
+npm test               # 220+ tests: rules, cards at every rarity, weather and the bench, players, tournaments, the Champions Cup, season stats, club careers, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 116 bugs; every one must be caught
+npm run test:mutation  # plants 149 bugs; every one must be caught
 npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match
 npm run check          # all of the above
 ```
@@ -136,7 +177,10 @@ A standard match averages about 5 tries and 2 drop goals, and the kick-off recei
 | `js/ai.js` | CPU levels and styles, including Expert's look-ahead |
 | `js/winprob.js` | Win model for the meter, the momentum chart and Expert |
 | `js/players.js` | Player names, ratings and Player of the Match |
-| `js/tournament.js` | Nations Cup and the four leagues: teams, fixtures, tables, play-offs |
+| `js/tournament.js` | Nations Cup, the four leagues and the Champions Cup: teams, grounds, fixtures, tables, play-offs |
+| `js/season.js` | Season stats: player totals, leaders, Team of the Season |
+| `js/club.js` | Club career: seasons, Champions Cup qualification, records and trophies |
+| `js/color.js` | Kit colours and patterns |
 | `js/career.js` | Career record and achievements |
 | `js/coach.js` | The coach's tips |
 | `js/online.js` | Online protocol: moves, checks and the room session |

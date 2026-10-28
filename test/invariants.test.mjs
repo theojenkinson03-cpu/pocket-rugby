@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, carryMetres, controllerOf, defenceModifier, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, seededRng, TRY_RUN_IN } from '../js/engine.js';
+import { act, carryMetres, controllerOf, defenceModifier, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, rollWeather, seededRng, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { CARD_BY_ID, CARD_IDS, catchUp, RARITY_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
@@ -118,6 +118,16 @@ function checkState(m, label) {
   });
   checkCards(m, label);
 
+  // The bench: at most one replacement a half, none with the bench off.
+  m.teams.forEach((t, i) => assert.ok(m.bench ? t.bench === 0 || t.bench === 1 : t.bench === 0, `${label}: team ${i} bench ${t.bench}`));
+  if (step.purpose === 'bench') {
+    const T = m.teams[step.team];
+    assert.ok(m.bench && T.bench === 1, `${label}: a replacement is only offered with one on the bench`);
+    assert.deepEqual(step.options, [...POSITIONS.filter(p => T.injuries[p] > 0), 'stay'], `${label}: any injured player, or play on`);
+    assert.ok(step.options.length >= 2, `${label}: someone is injured`);
+    if (step.when === 'injury') assert.ok(T.injuries[step.pos] > 0, `${label}: the player just hurt`);
+  }
+
   const scores = m.teams.map(t => t.score);
   if (step.type === 'fulltime') {
     assert.ok(m.winner === 0 || m.winner === 1, `${label}: winner`);
@@ -160,14 +170,46 @@ function checkEvents(before, after, events, label) {
 
   // Possession only changes hands for a reason the rules give.
   if (before.attacker !== null && after.attacker !== before.attacker && after.step.type !== 'fulltime') {
-    const reasons = new Set(['intercept', 'ruck', 'noTry', 'setPiece', 'kick', 'secondHalf', 'penalty']);
+    const reasons = new Set(['intercept', 'ruck', 'noTry', 'setPiece', 'kick', 'secondHalf', 'penalty', 'replacement', 'playOn']);
     assert.ok(events.some(e => reasons.has(e.type)), `${label}: possession changed without a reason (${events.map(e => e.type)})`);
   }
 
-  // Injuries come only from two Big Hits.
+  // Injuries come only from two Big Hits, and go only with a replacement.
   const injured = events.filter(e => e.type === 'injury').length;
+  const cleared = events.filter(e => e.type === 'replacement').reduce((n, e) => n + e.cleared, 0);
   const injuryDelta = after.teams.reduce((n, t, i) => n + POSITIONS.reduce((k, p) => k + t.injuries[p] - before.teams[i].injuries[p], 0), 0);
-  assert.equal(injuryDelta, injured, `${label}: injuries`);
+  assert.equal(injuryDelta, injured - cleared, `${label}: injuries`);
+  for (const e of events.filter(x => x.type === 'replacement')) {
+    assert.equal(before.step.purpose, 'bench', `${label}: replacements come from the bench decision`);
+    assert.equal(after.teams[e.team].injuries[e.pos], 0, `${label}: a fresh player has no injury`);
+    assert.equal(after.teams[e.team].bench, before.teams[e.team].bench - 1, `${label}: the replacement is used up`);
+  }
+  // An injury with a replacement on the bench always asks the question.
+  const hurt = events.find(e => e.type === 'injury');
+  if (hurt && before.teams[hurt.team].bench > 0) {
+    assert.equal(after.step.purpose, 'bench', `${label}: bench decision after an injury`);
+    assert.equal(after.step.team, hurt.team, `${label}: the injured side decides`);
+  }
+  if (events.some(e => e.type === 'secondHalf')) after.teams.forEach((t, i) => assert.equal(t.bench, before.bench ? 1 : 0, `${label}: team ${i} has a fresh replacement for the second half`));
+
+  // Weather: a wet ball only for the Forwards and Centres, in the rain, on a free pass.
+  for (const e of events.filter(x => x.type === 'wetBall')) {
+    assert.ok(before.weather?.rain, `${label}: a wet ball needs rain`);
+    assert.ok(WET_HANDS.includes(e.pos), `${label}: ${e.pos} has wet hands`);
+    const face = DICE[e.pos].faces[after.roll.faces[0]];
+    assert.ok(face.kind === 'pass' && !face.to, `${label}: the rolled face was a free pass`);
+  }
+  if (before.step.purpose === 'attack' && before.weather?.rain && WET_HANDS.includes(before.step.dice[0])) {
+    const face = DICE[before.step.dice[0]].faces[after.roll.faces[0]];
+    if (face.kind === 'pass' && !face.to) assert.ok(events.some(e => e.type === 'wetBall'), `${label}: every free pass is wet in the rain`);
+  }
+  // Every kick: the black die, the card and the wind.
+  for (const e of events.filter(x => x.type === 'kick')) {
+    assert.equal(e.wind, windBonus(before, e.team), `${label}: wind on the kick`);
+    assert.equal(e.card, fx(before, e.team).kickBonus?.[e.kick] || 0, `${label}: card on the kick`);
+    assert.equal(e.distance, e.rolled + e.card + e.wind, `${label}: kick distance`);
+    assert.equal(e.good, e.distance >= e.range, `${label}: a kick lands when it reaches the range`);
+  }
   if (injured) {
     const [a, b] = after.roll.faces;
     assert.ok(DICE.D.faces[a].kind === 'bighit' && DICE.D.faces[b].kind === 'bighit', `${label}: injury needs two Big Hits`);
@@ -192,7 +234,9 @@ function checkEvents(before, after, events, label) {
     });
     const brokeThrough = events.some(e => e.type === 'lineBreak');
     assert.equal(brokeThrough, want.result === 'break', `${label}: tackle outcome`);
-    assert.equal(after.step.purpose === 'ruck', want.result === 'ruck', `${label}: ruck`);
+    // After an injury the bench decision comes first, then play goes on.
+    const next = after.step.purpose === 'bench' ? after.step.next : after.step;
+    assert.equal(next.purpose === 'ruck', want.result === 'ruck', `${label}: ruck`);
   }
 
   // Run metres: from the tackle dice, and the run-in for a try.
@@ -235,7 +279,15 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
     const rng = seededRng(1000 + g);
     const length = LENGTHS[g % LENGTHS.length];
     const style = styles[g % styles.length];
-    let m = newMatch({ mode: g % 2 ? '1p' : '2p', length, cpuLevel: g % 4 ? 'pro' : 'rookie', cards: g % 3 !== 2, cpuPersonality: ['balanced', 'boot', 'run', 'pack'][g % 4] });
+    let m = newMatch({
+      mode: g % 2 ? '1p' : '2p',
+      length,
+      cpuLevel: g % 4 ? 'pro' : 'rookie',
+      cards: g % 3 !== 2,
+      cpuPersonality: ['balanced', 'boot', 'run', 'pack'][g % 4],
+      bench: g % 5 !== 4,
+      weather: g % 2 ? rollWeather(rng) : null,
+    });
     checkState(m, `match ${g} start`);
     let actions = 0;
     while (m.step.type !== 'fulltime') {
@@ -282,10 +334,11 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
   const everyEvent = ['toss', 'possession', 'run', 'pass', 'passChoice', 'dropChance', 'error', 'intercept', 'tackle', 'lineBreak',
     'injury', 'ruck', 'videoRef', 'try', 'noTry', 'range', 'dropAttempt', 'dropDeclined', 'penaltyAttempt', 'kick', 'setPiece',
     'penalty', 'card', 'noCard', 'quickTap', 'advantageOver', 'score', 'halftime', 'secondHalf', 'fulltime', 'deal', 'draft', 'catchUp',
+    'wetBall', 'replacement', 'playOn',
     ...['knockon', 'touch', 'intercept', 'dropChance', 'ruck', 'heldUp', 'noTry', 'penalty', 'reset', 'notstraight', 'advantage'].map(w => `cardPlayed:${w}`)];
   for (const e of everyEvent) assert.ok(totals.events.has(e), `event ${e} was reached`);
   for (const s of ['roll:attack', 'roll:tackle', 'roll:ruck', 'roll:try', 'roll:range', 'roll:penalty', 'roll:kick', 'roll:setpiece',
-    'choose:pass', 'choose:drop', 'choose:penalty', 'choose:draft', 'halftime:', 'fulltime:']) {
+    'choose:pass', 'choose:drop', 'choose:penalty', 'choose:draft', 'choose:bench', 'halftime:', 'fulltime:']) {
     assert.ok(totals.steps.has(s), `step ${s} was reached`);
   }
   assert.ok(totals.winners[0] > MATCHES * 0.35 && totals.winners[1] > MATCHES * 0.35, `both sides win (${totals.winners})`);

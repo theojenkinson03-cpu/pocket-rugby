@@ -629,7 +629,22 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
   gap: 4px;
   pointer-events: none;
 }
-.situation .chip { background: rgb(8 20 12 / 0.72); color: #f3f6ef; backdrop-filter: blur(4px); }
+.situation .chip, .conditions .chip { background: rgb(8 20 12 / 0.72); color: #f3f6ef; backdrop-filter: blur(4px); }
+.conditions { position: absolute; right: 6px; top: 6px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; pointer-events: none; }
+.conditions .chip.wind b { font-weight: 800; }
+/* Rain over the pitch: slanting streaks that fall forever. */
+.rain {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(105deg, transparent 0 9px, rgb(220 235 255 / 0.28) 9px 10px, transparent 10px 23px),
+    linear-gradient(rgb(20 40 60 / 0.16), rgb(20 40 60 / 0.16));
+  background-size: 46px 60px, auto;
+  animation: rain-fall 0.5s linear infinite;
+}
+@keyframes rain-fall { to { background-position: -12px 60px, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .rain { animation: none; } }
 .situation .chip.tap { background: var(--accent); color: var(--accent-ink); }
 
 .tray {
@@ -911,6 +926,7 @@ dialog.sheet::backdrop { background: rgb(5 12 8 / 0.55); backdrop-filter: blur(2
 
 .settings { display: grid; gap: 2px; margin-bottom: 18px; }
 .toggle {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2126,6 +2142,18 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
   animation: rise 420ms 480ms ease both;
 }
 .ko-venue.neutral { color: var(--accent); opacity: 1; }
+.ko-conditions {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(13% + clamp(40px, 12.5vw, 80px) + 1.6em);
+  font: 700 clamp(12px, 3.3vw, 15px)/1.2 var(--font-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cine-ink);
+  opacity: 0.75;
+  animation: rise 420ms 560ms ease both;
+}
 .draft-scene { gap: 16px; width: 100%; }
 .ds-kicker { font: 800 clamp(22px, 7vw, 40px)/1 var(--font-display); letter-spacing: 0.16em; text-transform: uppercase; animation: rise 380ms ease both; }
 .ds-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 10px; width: min(94vw, 620px); }
@@ -2267,3 +2295,17 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 .sr-head b { font: 800 16px/1.1 var(--font-display); }
 .sr-head span { color: var(--muted); font-size: 13px; }
 .sr-note { color: var(--muted); font-size: 12.5px; }
+
+/* Daily challenge. */
+.btn-daily { border-color: color-mix(in srgb, var(--accent) 70%, var(--line)); }
+.btn-daily span::before { content: ''; display: inline-block; width: 8px; height: 8px; margin: 0 7px 2px 0; border-radius: 50%; background: var(--accent); }
+.daily-card .nc-title { font-size: clamp(30px, 9vw, 44px); }
+.daily-score { font: 900 46px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.daily-facts { margin: 4px 0 0; padding: 0 0 0 18px; display: grid; gap: 5px; color: var(--board-ink, #f3f6ef); font-size: 14.5px; line-height: 1.35; }
+.daily-facts li::marker { color: var(--accent); }
+.daily-status { display: grid; gap: 10px; }
+.daily-status .nc-meta { color: var(--ink); font: 600 16px/1.35 var(--font-body); }
+.daily-share { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.board-avatar { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.sp-num.won { color: var(--good, #1f8a4c); }
+.sp-num.lost { color: var(--muted); }

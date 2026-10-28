@@ -10,7 +10,7 @@ import { dieChip } from './dice-view.js';
 import { canContinue, nextStep } from './club.js';
 import { clubSection } from './club-view.js';
 import { MATCH_LENGTHS } from './engine.js';
-import { button, el, tallButton } from './dom.js';
+import { button, el, tallButton, toggleRow } from './dom.js';
 import { kitVars } from './color.js';
 
 const STRENGTH = { expert: ['Favourites', 3], pro: ['Contenders', 2], rookie: ['Outsiders', 1] };
@@ -125,16 +125,11 @@ export function tournamentSetup(state, { onChange, onStart }) {
   }
   page.append(seg('Match length', 't-length', Object.entries(MATCH_LENGTHS).map(([k, v]) => [k, v.label, `HT ${v.half} · FT ${v.full}`]), state.length, v => onChange({ length: v })));
 
-  const cards = el('label', 'toggle toggle-card');
-  const text = el('span');
-  text.append(el('b', null, 'Team cards'), el('small', null, 'A draft before every match'));
-  const box = el('input');
-  box.type = 'checkbox';
-  box.checked = state.cards;
-  box.addEventListener('change', () => onChange({ cards: box.checked }));
-  cards.append(text, box, el('i'));
-  cards.querySelector('i').setAttribute('aria-hidden', 'true');
-  page.append(cards);
+  page.append(
+    toggleRow('Team cards', 'A draft before every match', state.cards, on => onChange({ cards: on })),
+    toggleRow('Bench', 'One replacement a half clears an injury', state.bench, on => onChange({ bench: on })),
+    toggleRow('Weather', 'Rain and wind, different every match', state.weather, on => onChange({ weather: on })),
+  );
 
   const rounds = league ? (state.season === 'full' ? full : SHORT_SEASON) : 3;
   const what = league
@@ -224,7 +219,8 @@ function nextMatchCard(t, handlers) {
   card.append(vs);
   const ground = venue(t, f);
   if (ground) card.append(el('p', `nc-venue${ground.neutral ? ' neutral' : ''}`, ground.neutral ? `${ground.name} · neutral ground` : ground.name));
-  card.append(tallButton('Play', `${MATCH_LENGTHS[t.length].label} match${t.cards ? ' · team cards' : ''}`, handlers.onPlay, 'btn btn-primary btn-play'));
+  const extras = [t.cards && 'team cards', t.bench && 'bench', t.weather && 'weather'].filter(Boolean);
+  card.append(tallButton('Play', [`${MATCH_LENGTHS[t.length].label} match`, ...extras].join(' · '), handlers.onPlay, 'btn btn-primary btn-play'));
   card.querySelector('.btn-play').dataset.primary = '';
   return card;
 }

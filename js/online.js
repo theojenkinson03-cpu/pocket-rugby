@@ -81,6 +81,12 @@ export function hashState(match) {
 
 // The starting match both phones build from the host's kick-off message.
 // The host is team 0; the guest is team 1 and calls the toss.
+// Weather from the host: rain and which side has the wind, or none.
+function sanitiseWeather(w) {
+  if (!w || typeof w !== 'object') return null;
+  return { rain: w.rain === true, wind: w.wind === 0 || w.wind === 1 ? w.wind : null };
+}
+
 export function startingMatch(start, myRole) {
   const host = myRole === 'host';
   return newMatch({
@@ -88,6 +94,8 @@ export function startingMatch(start, myRole) {
     teams: start.teams.map(sanitiseTeam),
     length: start.length,
     cards: start.cards,
+    bench: start.bench === true,
+    weather: sanitiseWeather(start.weather),
     tossCaller: 1,
     controllers: host ? ['human', 'remote'] : ['remote', 'human'],
   });
@@ -234,11 +242,11 @@ export class OnlineSession {
   // Host: set the match up and kick it off. Every match has its own id,
   // `mid`, sent with each phone's moves so a rematch never picks up moves
   // from the match before.
-  kickOff({ length, cards, guestTeam, rng = strongRandom }) {
+  kickOff({ length, cards, bench = false, weather = null, guestTeam, rng = strongRandom }) {
     const mid = makeCode(rng);
     this.mid = mid;
     this.log = [];
-    const start = { mid, length, cards, teams: [this.team, sanitiseTeam(guestTeam)] };
+    const start = { mid, length, cards, bench, weather, teams: [this.team, sanitiseTeam(guestTeam)] };
     return this.publish({ start, mid, log: [], seq: 0, hash: null }).then(() => start);
   }
 

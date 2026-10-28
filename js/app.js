@@ -1,10 +1,10 @@
 // Screen controller: menus, the match loop, animation and persistence.
 
-import { act, controllerOf, draftRarity, kickBonus, kickChance, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds } from './engine.js';
+import { act, controllerOf, draftRarity, kickBonus, kickChance, kickParts, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollWeather, windWith } from './engine.js';
 import { cpuChoiceAsync, LEVELS, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
 import { CARD_BY_ID, CARDS, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
-import { metres, narrate, scoreLine } from './commentary.js';
+import { metres, narrate, scoreLine, weatherText } from './commentary.js';
 import { playerOfTheMatch, possessive, randomRoster, statLine, surname } from './players.js';
 import { winMeter } from './winprob.js';
 import { ACHIEVEMENT_BY_ID, newCareer, newTracker, recordMatch, track } from './career.js';
@@ -20,6 +20,8 @@ import { lobbyPage } from './online-view.js';
 import { momentumChart, momentumFacts, playersTables, potmCard } from './report.js';
 import { createCinema } from './cinema.js';
 import { continueClub } from './club.js';
+import { dailyDice, dailyMatch, dailyResult, dailyScenario, dayKey, scenarioTitle, shareText } from './daily.js';
+import { dailyPage, scoreCard } from './daily-view.js';
 import { createPitch } from './pitch.js';
 import { buzz, play, setSoundEnabled, unlockAudio } from './audio.js';
 import { customKit, kitVars, PATTERN_NAMES, PATTERNS } from './color.js';
@@ -27,7 +29,7 @@ import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
 // anything that changes a match's outcome changes.
-const BUILD = 'pr-3.0';
+const BUILD = 'pr-3.1';
 
 const KITS = [
   { name: 'Navy', color: '#1d3577' },
@@ -40,7 +42,7 @@ const KITS = [
   { name: 'Orange', color: '#e8701c' },
 ];
 
-const DEFAULT_SETUP = { mode: '1p', names: ['Ravens', 'Foxes'], colors: ['#1d3577', '#e8701c'], patterns: ['plain', 'plain'], length: 'standard', cpu: 'pro', style: 'balanced', cards: true, rosters: null };
+const DEFAULT_SETUP = { mode: '1p', names: ['Ravens', 'Foxes'], colors: ['#1d3577', '#e8701c'], patterns: ['plain', 'plain'], length: 'standard', cpu: 'pro', style: 'balanced', cards: true, bench: true, weather: false, rosters: null };
 const DEFAULT_PREFS = { sound: true, odds: true, fast: false, autoDefence: false, haptics: true, cinema: 'full', meter: true, coach: true };
 
 const DIE_NOTES = {
@@ -75,7 +77,7 @@ const ui = {
   coachSeen: load('coach', []),
   coach: null,
   tournament: migrateTournament(load('tournament', null)),
-  tsetup: { comp: 'cup', team: null, length: 'quick', cards: true, season: 'short' },
+  tsetup: { comp: 'cup', team: null, length: 'quick', cards: true, bench: true, weather: false, season: 'short' },
   online: null,
   lobby: null,
   roomPromise: null,
@@ -94,7 +96,7 @@ const showOdds = () => ui.prefs.odds || ui.context?.kind === 'learn';
 
 // ---------- Views ----------
 
-const VIEWS = ['home', 'setup', 'match', 'tournament', 'career', 'online'];
+const VIEWS = ['home', 'setup', 'match', 'tournament', 'career', 'online', 'daily', 'friends'];
 
 function showView(name) {
   ui.view = name;
@@ -110,6 +112,7 @@ function showView(name) {
 function contextLabel(context) {
   if (!context) return null;
   if (context.kind === 'learn') return 'Guided match';
+  if (context.kind === 'daily') return `Daily #${context.number}${context.official ? '' : ' · practice'}`;
   if (context.kind === 'online') return 'Online';
   if (context.kind === 'tournament') {
     const t = ui.tournament;
@@ -132,6 +135,10 @@ function renderHome() {
   const newcomer = ui.career.played === 0 && !ui.career.achievements.graduate;
   $('#btn-learn').hidden = !newcomer;
   $('#link-learn').hidden = newcomer;
+  const today = todaysChallenge();
+  const record = dailyRecord(today.key);
+  $('#daily-label').textContent = `Daily challenge #${today.number}`;
+  $('#daily-detail').textContent = record.official ? `${record.official.won ? 'Won' : 'Lost'} ${record.official.score.join('–')} · back tomorrow` : scenarioTitle(today);
   const t = ui.tournament;
   if (t && t.stage !== 'done') {
     $('#tournament-label').textContent = `Continue the ${t.short || t.name}`;
@@ -174,6 +181,8 @@ function renderSetup() {
   $(`#cpu-${s.cpu}`).checked = true;
   $(`#style-${s.style}`).checked = true;
   $('#setup-cards').checked = s.cards;
+  $('#setup-bench').checked = s.bench;
+  $('#setup-weather').checked = s.weather;
   $('#seg-cpu').hidden = s.mode !== '1p';
   $('#seg-style').hidden = s.mode !== '1p';
   $('#team0-tag').textContent = s.mode === '1p' ? 'You' : 'Player 1';
@@ -235,6 +244,8 @@ function bindSetup() {
     if (e.target.name === 'cpu') s.cpu = e.target.value;
     if (e.target.name === 'style') s.style = e.target.value;
     if (e.target.id === 'setup-cards') s.cards = e.target.checked;
+    if (e.target.id === 'setup-bench') s.bench = e.target.checked;
+    if (e.target.id === 'setup-weather') s.weather = e.target.checked;
     renderSetup();
   });
   for (const team of [0, 1]) {
@@ -265,6 +276,8 @@ function bindSetup() {
       cpuLevel: s.cpu,
       cpuPersonality: s.style,
       cards: s.cards,
+      bench: s.bench,
+      weather: s.weather ? rollWeather() : null,
     }, { kind: s.mode === '1p' ? 'quick' : '2p' });
   });
   $('#btn-setup-back').addEventListener('click', () => showView('home'));
@@ -286,6 +299,7 @@ function startLearn() {
     cpuLevel: 'rookie',
     cpuPersonality: 'balanced',
     cards: true,
+    bench: true,
   }, { kind: 'learn', seen: [] });
 }
 
@@ -333,6 +347,17 @@ function bindSquad() {
 
 const meOf = context => (context.kind === '2p' ? null : context.kind === 'online' ? context.team : 0);
 
+// ---- Runtime capabilities (claude.ai): null wherever they're not available ----
+
+const capabilities = {};
+function capability(name) {
+  if (!(name in capabilities)) {
+    const use = window.claude?.use;
+    capabilities[name] = typeof use === 'function' ? Promise.resolve(window.claude.use(name)).catch(() => null) : Promise.resolve(null);
+  }
+  return capabilities[name];
+}
+
 function tossText(m) {
   const caller = m.teams[m.step.team].name;
   return `${caller} to call. The winner receives the kick-off${m.cards ? ' and the loser picks a team card first' : ''}.`;
@@ -360,9 +385,19 @@ function startMatch(options, context = { kind: 'quick' }, prebuilt = null) {
   persist();
   showView('match');
   showCoin();
-  setHeadline('Coin toss', tossText(ui.match));
+  if (context.kind === 'daily') setHeadline(`Daily #${context.number}`, `${scenarioTitle(ui.daily.scenario)}. Over to you.`);
+  else setHeadline('Coin toss', tossText(ui.match));
   renderFeed(0);
   render();
+  if (context.kind === 'daily' && wantsScene('kickoff')) {
+    ui.busy = true;
+    ui.cinema.play('kickoff', { teams: ui.match.teams, half: 2, target: ui.match.target, label: contextLabel(context), venue: ui.match.venue, conditions: conditionsText(ui.match) }).then(() => {
+      ui.busy = false;
+      render();
+      afterTurn([]);
+    });
+    return;
+  }
   afterTurn([]);
 }
 
@@ -415,6 +450,9 @@ function rematchOptions(m) {
     cpuLevel: m.cpuLevel,
     cpuPersonality: m.cpuPersonality,
     cards: m.cards,
+    bench: m.bench,
+    // New conditions for the rematch, if the weather is on.
+    weather: m.weather ? rollWeather() : null,
     venue: m.venue,
   };
 }
@@ -442,7 +480,9 @@ async function dispatch(action) {
   if (ui.busy || !ui.match) return;
   const before = ui.match;
   const online = ui.context?.kind === 'online' && ui.online;
-  const rng = online ? recordingRng() : Math.random;
+  // The daily challenge's dice are the day's seeded stream, picked up where they left off.
+  const daily = ui.context?.kind === 'daily' ? dailyDice(ui.daily?.scenario || dailyScenario(ui.context.key), ui.context.rngUsed || 0) : null;
+  const rng = online ? recordingRng() : daily || Math.random;
   let result;
   try {
     result = act(before, action, rng);
@@ -451,6 +491,7 @@ async function dispatch(action) {
     return;
   }
   if (online) ui.online.session.shareMove(result.state, { s: before.seq, a: encodeAction(action), r: rng.used });
+  if (daily) ui.context.rngUsed = daily.used();
   await applyOutcome(before, result);
 }
 
@@ -460,6 +501,7 @@ async function applyOutcome(before, result) {
   ui.busy = true;
   ui.match = result.state;
   const events = result.events;
+  if (ui.context?.kind === 'daily') for (const e of events) if (e.type === 'score') (ui.context.scores ||= []).push(e.team);
   if (ui.tracker && ui.tracker.me !== null && ui.tracker.me !== undefined) track(ui.tracker, before, events, ui.match);
   recordHistory(events);
   const story = narrate(events, ui.match);
@@ -579,6 +621,7 @@ function finishMatch() {
       save('tournament', t);
     }
   }
+  if (context.kind === 'daily') finishDaily(m, context, outcome);
   const mode = context.kind === 'online' ? 'online' : context.kind === 'learn' ? 'learn' : m.mode;
   outcome.unlocked = recordMatch(ui.career, m, ui.tracker || newTracker(null), { mode, level: m.cpuLevel, tournament: cup });
   save('career', ui.career);
@@ -651,7 +694,7 @@ function sceneFor(moment, after, events) {
 
 // A card changes the dice before anything else happens; big hits read
 // better before the injury they cause.
-const MOMENT_ORDER = ['mythic', 'cardplay', 'bighit', 'injury', 'break', 'try', 'notry', 'tmo', 'turnover', 'penalty', 'yellow', 'red', 'quicktap', 'goal', 'conversion', 'draft', 'halftime', 'fulltime'];
+const MOMENT_ORDER = ['mythic', 'cardplay', 'bighit', 'injury', 'replacement', 'break', 'try', 'notry', 'tmo', 'turnover', 'penalty', 'yellow', 'red', 'quicktap', 'goal', 'conversion', 'draft', 'halftime', 'fulltime'];
 
 function stageLabel() {
   const c = ui.context;
@@ -693,7 +736,9 @@ async function present(before, after, events, story) {
   if (kick) {
     if (wantsScene('kickcam')) {
       covered.add('kick');
-      const note = kick.bonus ? `+${metres(kick.bonus)} ${CARD_BY_ID[after.teams[kick.team].card]?.name || ''}`.trim() : null;
+      const card = kick.card ?? kick.bonus;
+      const notes = [card ? `+${metres(card)} ${CARD_BY_ID[after.teams[kick.team].card]?.name || ''}`.trim() : '', kick.wind > 0 ? `+${metres(kick.wind)} wind` : kick.wind < 0 ? `−${metres(-kick.wind)} into the wind` : ''].filter(Boolean);
+      const note = notes.length ? notes.join(' · ') : null;
       await ui.cinema.play('kickcam', { team: after.teams[kick.team], kick: kick.kick, range: kick.range, distance: kick.distance, good: kick.good, note });
     } else {
       play('kick');
@@ -725,7 +770,7 @@ async function present(before, after, events, story) {
   const drafted = events.some(e => e.type === 'draft' && !e.first);
   if ((has('toss') && !has('deal')) || drafted || has('secondHalf')) {
     if (drafted && wantsScene('draft')) await ui.cinema.play('draft', { teams: after.teams });
-    if (wantsScene('kickoff')) await ui.cinema.play('kickoff', { teams: after.teams, half: after.half, target: after.target, label: stageLabel(), venue: after.venue });
+    if (wantsScene('kickoff')) await ui.cinema.play('kickoff', { teams: after.teams, half: after.half, target: after.target, label: stageLabel(), venue: after.venue, conditions: conditionsText(after) });
   }
 
   for (const { moment, scene } of moments) {
@@ -847,7 +892,7 @@ async function showMoment(moment) {
   host.append(band);
   host.hidden = false;
   if (moment.kind === 'try' || moment.kind === 'goal') confetti(ui.match.teams[moment.team].color);
-  const ms = { try: 1800, goal: 1400, conversion: 1000, break: 850, bighit: 800, turnover: 1100, injury: 1400, yellow: 1500, red: 1700, penalty: 900, cardplay: 1300 }[moment.kind] || 1000;
+  const ms = { try: 1800, goal: 1400, conversion: 1000, break: 850, bighit: 800, turnover: 1100, injury: 1400, replacement: 1100, yellow: 1500, red: 1700, penalty: 900, cardplay: 1300 }[moment.kind] || 1000;
   await skippable(ms * speed());
   band.classList.add('out');
   await wait(240);
@@ -972,6 +1017,12 @@ function renderBoard(m) {
       }
     }
     if (m.attacker === team && m.quickTap > 0) status.append(chip(`Tap +1 ×${m.quickTap}`, null, 'tap'));
+    // A replacement waiting on the bench matters once someone is hurt.
+    if (t.bench > 0 && POSITIONS.some(p => t.injuries[p])) {
+      const c = chip('Bench ready', null, 'bench');
+      c.title = `${t.name} can bring on a replacement this half`;
+      status.append(c);
+    }
   }
   renderMeter(m);
 }
@@ -998,7 +1049,34 @@ function chip(text, card = null, extra = '') {
   return c;
 }
 
+// "Rain · Wind with Ravens": the conditions now (the wind swaps at half time).
+function conditionsText(m) {
+  if (!m.weather) return null;
+  const w = windWith(m);
+  return [m.weather.rain ? 'Rain' : 'Dry', w === null ? 'No wind' : `Wind with ${m.teams[w].name}`].join(' · ');
+}
+
+// Rain over the pitch, and chips for the rain and which way the wind blows.
+// Team 0 attacks to the right.
+function renderConditions(m) {
+  const host = $('#conditions');
+  host.innerHTML = '';
+  const w = m.weather;
+  $('#rain').hidden = !w?.rain;
+  if (!w) return;
+  if (w.rain) host.append(chip('Rain'));
+  const side = windWith(m);
+  if (side !== null) {
+    const c = chip('');
+    c.classList.add('wind');
+    c.replaceChildren(el('b', null, side === 0 ? 'Wind →' : '← Wind'));
+    c.title = `Wind with ${m.teams[side].name}: their kicks +10 m, the other side's −10 m`;
+    host.append(c);
+  }
+}
+
 function renderSituation(m) {
+  renderConditions(m);
   const host = $('#situation');
   host.innerHTML = '';
   const step = m.step;
@@ -1146,6 +1224,7 @@ function promptText(m) {
     case 'setpiece': return step.piece === 'scrum' ? 'Scrum feed' : 'Lineout throw';
     case 'pass': return `Pass from ${playerName(m, team, step.from)} · pick a receiver`;
     case 'drop': return `${metres(step.range)} out · kick or pass?`;
+    case 'bench': return step.when === 'halftime' ? 'Half-time change?' : `${surname(m, team, step.pos) || PLAYERS[step.pos].one} hurt · bring on a sub?`;
   }
   return '';
 }
@@ -1231,6 +1310,24 @@ function renderDock(m, locked) {
     actions.append(choiceButton({ icon: 'T', title: 'Tails', onClick: choose('tails'), locked }));
     return;
   }
+  if (step.purpose === 'bench') {
+    const injured = step.options.filter(o => o !== 'stay');
+    actions.classList.add(injured.length + 1 >= 3 ? 'three' : 'two');
+    const T = m.teams[step.team];
+    for (const pos of injured) {
+      const name = surname(m, step.team, pos);
+      actions.append(choiceButton({
+        die: pos,
+        title: `Replace ${name || PLAYERS[pos].one}`,
+        sub: `Clears the −${T.injuries[pos]}`,
+        suggested: tip === pos,
+        onClick: choose(pos),
+        locked,
+      }));
+    }
+    actions.append(choiceButton({ icon: '↺', title: 'Play on', sub: 'Keep the sub for later', suggested: tip === 'stay', onClick: choose('stay'), locked }));
+    return;
+  }
   if (step.purpose === 'pass') {
     actions.classList.add(step.options.length === 3 ? 'three' : 'two');
     for (const pos of step.options) {
@@ -1252,11 +1349,13 @@ function renderDock(m, locked) {
     actions.classList.add('two');
     const kick = step.purpose === 'drop' ? 'drop' : 'penalty';
     const bonus = kickBonus(m, step.team, kick);
+    const parts = kickParts(m, step.team, kick);
+    const extras = [parts.card ? `+${metres(parts.card)} ${CARD_BY_ID[m.teams[step.team].card].name}` : '', parts.wind > 0 ? `+${metres(parts.wind)} wind` : parts.wind < 0 ? `−${metres(-parts.wind)} into the wind` : ''].filter(Boolean);
     const p = kickChance(step.range, bonus);
     actions.append(choiceButton({
       icon: '3',
       title: kick === 'drop' ? 'Drop goal' : 'Kick at goal',
-      sub: `Need a ${metres(step.range)} kick${bonus ? ` (+${metres(bonus)} ${CARD_BY_ID[m.teams[step.team].card].name})` : ''}`,
+      sub: `Need a ${metres(step.range)} kick${extras.length ? ` (${extras.join(', ')})` : ''}`,
       odds: showOdds() ? [[`${pct(p)} to land`, p >= 0.5 ? 'up' : 'down']] : null,
       suggested: tip === 'kick',
       onClick: choose('kick'),
@@ -1474,6 +1573,9 @@ function openBreak() {
     if (kind === 'tournament') {
       actions.append(simpleButton(`Back to the ${ui.tournament?.short || ui.tournament?.name || 'tournament'}`, close(openTournament), 'btn btn-primary'));
       actions.append(button('Title screen', close(() => showView('home')), 'btn btn-quiet'));
+    } else if (kind === 'daily') {
+      actions.append(simpleButton('Back to the daily challenge', close(openDaily), 'btn btn-primary'));
+      actions.append(button('Title screen', close(() => showView('home')), 'btn btn-quiet'));
     } else if (kind === 'learn') {
       actions.append(simpleButton('Play a full match', close(openSetup), 'btn btn-primary'));
       actions.append(button('Play the guided match again', close(startLearn), 'btn'));
@@ -1600,7 +1702,7 @@ function renderTournament() {
 
 function startTournament(state) {
   unlockAudio();
-  const options = { userTeam: state.team, length: state.length, cards: state.cards };
+  const options = { userTeam: state.team, length: state.length, cards: state.cards, bench: state.bench, weather: state.weather };
   ui.tournament = LEAGUES[state.comp]
     ? createLeague({ ...options, league: state.comp, season: state.season })
     : state.comp === 'champions' ? createChampions(options) : createCup(options);
@@ -1621,6 +1723,179 @@ function playTournamentMatch() {
     return;
   }
   startMatch(matchOptions(t, f), { kind: 'tournament', fixture: f.id });
+}
+
+// ---------- Daily challenge ----------
+
+// Today's scenario, worked out once per day.
+function todaysChallenge() {
+  const key = dayKey();
+  if (ui.daily?.scenario?.key !== key) ui.daily = { scenario: dailyScenario(key), board: 'loading' };
+  return ui.daily.scenario;
+}
+
+// This phone's record for a day: {official, practice}, and the days before.
+function dailyRecord(key) {
+  return load('daily', { days: {} }).days[key] || {};
+}
+
+function saveDailyRecord(key, patch) {
+  const all = load('daily', { days: {} });
+  all.days[key] = { ...all.days[key], ...patch };
+  // Keep the last two months.
+  const keys = Object.keys(all.days).sort().reverse();
+  for (const old of keys.slice(60)) delete all.days[old];
+  save('daily', all);
+}
+
+function dailyState() {
+  const s = todaysChallenge();
+  const record = dailyRecord(s.key);
+  const saved = load('match', null);
+  const inProgress = saved?.context?.kind === 'daily' && saved.context.key === s.key && saved.match?.step.type !== 'fulltime';
+  const history = Object.entries(load('daily', { days: {} }).days)
+    .filter(([key, r]) => key !== s.key && r.official)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([, r]) => r.official);
+  return { ...ui.daily, scenario: s, official: record.official || null, practice: record.practice || null, inProgress, history };
+}
+
+function openDaily() {
+  todaysChallenge();
+  renderDaily();
+  showView('daily');
+  $('#view-daily').scrollTop = 0;
+  loadLeaderboard();
+}
+
+function renderDaily() {
+  if (ui.view !== 'daily' && ui.view !== 'home') return;
+  $('#daily-body').replaceChildren(dailyPage(dailyState(), {
+    onPlay: () => playDaily(true),
+    onPractice: () => playDaily(false),
+    onResume: () => {
+      const saved = load('match', null);
+      if (saved?.match) resumeMatch(saved);
+    },
+    onSaveCard: saveScoreCard,
+    onCopy: copyDailyResult,
+  }));
+}
+
+function playDaily(official) {
+  unlockAudio();
+  const s = todaysChallenge();
+  // Only the first finished attempt counts: once there's a result, it's practice.
+  const counts = official && !dailyRecord(s.key).official;
+  if (counts) saveDailyRecord(s.key, { started: true });
+  startMatch(null, { kind: 'daily', key: s.key, number: s.number, official: counts, rngUsed: 0, scores: [] }, dailyMatch(s));
+}
+
+// At full time: the result, kept on this phone and, for the first
+// finished attempt, put on the shared leaderboard.
+function finishDaily(m, context, outcome) {
+  const s = ui.daily?.scenario?.key === context.key ? ui.daily.scenario : dailyScenario(context.key);
+  const result = { ...dailyResult(m), number: s.number, title: scenarioTitle(s), scores: context.scores || [] };
+  outcome.note = `Daily #${s.number}: ${result.won ? 'won' : 'lost'} ${result.score.join('–')} from ${s.score.join('–')}.${context.official ? '' : ' Practice: this one doesn’t count.'}`;
+  if (context.official && !dailyRecord(s.key).official) {
+    saveDailyRecord(s.key, { official: result });
+    submitDaily(s, result);
+  } else {
+    saveDailyRecord(s.key, { practice: result });
+  }
+}
+
+// The leaderboard lives in the page's shared data on claude.ai: one
+// document per player (their own, by id), holding their latest day.
+const DAILY_LIMIT = 50;
+
+async function submitDaily(s, result) {
+  const [db, user] = await Promise.all([capability('db'), capability('user')]);
+  const id = user ? await user.id() : null;
+  if (!db || !id) return;
+  try {
+    const ref = db.doc(`daily/${id}`);
+    const prev = await ref.get();
+    const before = prev.exists ? prev.data() : {};
+    // Another phone may have got there first today.
+    if (before.day === s.key) return;
+    const entry = { won: result.won, score: result.score, rank: result.rank };
+    const days = { ...(before.days || {}), [s.key]: entry };
+    for (const old of Object.keys(days).sort().reverse().slice(60)) delete days[old];
+    await ref.set({ day: s.key, ...entry, at: Date.now(), days });
+  } catch (e) {
+    console.warn('daily leaderboard', e);
+  }
+  loadLeaderboard();
+}
+
+async function loadLeaderboard() {
+  const s = todaysChallenge();
+  const [db, user] = await Promise.all([capability('db'), capability('user')]);
+  if (!db) {
+    ui.daily.board = 'unavailable';
+    renderDaily();
+    return;
+  }
+  try {
+    const snap = await db.collection('daily').where('day', '==', s.key).orderBy('rank', 'desc').limit(DAILY_LIMIT).get();
+    const me = user ? await user.id() : null;
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.rank - a.rank || a.at - b.at);
+    const people = user && docs.length ? await user.profiles(docs.map(d => d.id)) : {};
+    ui.daily.board = docs.map(d => ({ ...d, name: people[d.id]?.name || '', avatar: people[d.id]?.avatarUrl || '', mine: d.id === me, team: d.id === me ? 'You' : '' }));
+    ui.daily.boardNote = docs.length >= DAILY_LIMIT ? `The top ${DAILY_LIMIT}.` : null;
+  } catch (e) {
+    console.warn('daily leaderboard', e);
+    ui.daily.board = 'unavailable';
+  }
+  renderDaily();
+}
+
+async function saveScoreCard() {
+  const s = todaysChallenge();
+  const record = dailyRecord(s.key);
+  const result = record.official;
+  if (!result) return;
+  // The card shows the final score with each side's kit.
+  const m = dailyMatch(s);
+  m.teams[0].score = result.score[0];
+  m.teams[1].score = result.score[1];
+  const { blob, url } = await scoreCard(s, result, m, result.scores || []);
+  const filename = `pocket-rugby-daily-${s.number}.png`;
+  const downloads = await capability('downloads');
+  try {
+    if (downloads) await downloads.save({ filename, data: blob });
+    else {
+      const a = el('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+    }
+    ui.daily.shareError = null;
+  } catch (e) {
+    ui.daily.shareError = e?.code === 'declined' ? null : 'Couldn’t save the card here.';
+  }
+  renderDaily();
+}
+
+function copyDailyResult() {
+  const s = todaysChallenge();
+  const result = dailyRecord(s.key).official;
+  if (!result) return;
+  const text = shareText(s, result, result.scores || []);
+  navigator.clipboard?.writeText(text).then(() => {
+    ui.daily.copied = true;
+    renderDaily();
+  }).catch(() => {
+    ui.daily.shareError = text;
+    renderDaily();
+  });
+}
+
+// ---------- Friends league ----------
+
+function openFriends() {
+  showView('friends');
 }
 
 // ---------- Career ----------
@@ -1670,7 +1945,7 @@ const netMessage = code => NET_ERRORS[code] || 'Couldn’t connect. Check your c
 
 async function openOnline() {
   unlockAudio();
-  ui.lobby = { phase: 'checking', length: 'quick', cards: true, team: myOnlineTeam(), code: '', error: null };
+  ui.lobby = { phase: 'checking', length: 'quick', cards: true, bench: true, weather: false, team: myOnlineTeam(), code: '', error: null };
   showView('online');
   renderLobby();
   const room = await roomCapability();
@@ -1776,7 +2051,7 @@ async function kickOffOnline() {
   let guest = s.peer.team;
   if (clash(me.color, guest.color)) guest = { ...guest, color: KITS.find(k => !clash(k.color, me.color)).color, kit: null };
   if (guest.name.toLowerCase() === me.name.toLowerCase()) guest = { ...guest, name: `${guest.name.slice(0, 11)} II` };
-  const start = await s.kickOff({ length: ui.lobby.length, cards: ui.lobby.cards, guestTeam: guest });
+  const start = await s.kickOff({ length: ui.lobby.length, cards: ui.lobby.cards, bench: ui.lobby.bench, weather: ui.lobby.weather ? rollWeather() : null, guestTeam: guest });
   beginOnlineMatch(s, start);
 }
 
@@ -1889,7 +2164,7 @@ function onlineRematch() {
   const o = ui.online;
   if (!o || o.role !== 'host') return;
   const m = ui.match;
-  o.session.kickOff({ length: m.length, cards: m.cards, guestTeam: { name: m.teams[1].name, color: m.teams[1].color, kit: m.teams[1].kit, roster: m.teams[1].roster } }).then(start => {
+  o.session.kickOff({ length: m.length, cards: m.cards, bench: m.bench, weather: m.weather ? rollWeather() : null, guestTeam: { name: m.teams[1].name, color: m.teams[1].color, kit: m.teams[1].kit, roster: m.teams[1].roster } }).then(start => {
     ui.online = { ...o, mid: start.mid, start };
     startMatch(null, { kind: 'online', team: 0, mid: start.mid }, startingMatch(start, 'host'));
   });
@@ -1907,7 +2182,7 @@ function renderNet() {
   const o = ui.online;
   const onlineMatch = ui.context?.kind === 'online';
   net.hidden = !onlineMatch;
-  $('#btn-restart').hidden = onlineMatch;
+  $('#btn-restart').hidden = onlineMatch || ui.context?.kind === 'daily';
   if (!onlineMatch) return;
   const s = o?.session;
   const them = ui.match.teams[other(ui.context.team)].name;
@@ -1988,6 +2263,10 @@ function bindDialogs() {
     if (ui.online) {
       ui.online.session.leave();
       ui.online = null;
+    }
+    if (ui.context?.kind === 'daily') {
+      openDaily();
+      return;
     }
     showView(ui.context?.kind === 'tournament' ? 'tournament' : 'home');
     if (ui.context?.kind === 'tournament') renderTournament();
@@ -2150,6 +2429,8 @@ function start(data = {}) {
   $('#link-learn').addEventListener('click', startLearn);
   $('#btn-tournament').addEventListener('click', openTournament);
   $('#btn-career').addEventListener('click', openCareer);
+  $('#btn-daily').addEventListener('click', openDaily);
+  $('#btn-friends').addEventListener('click', openFriends);
   $('#btn-online').addEventListener('click', openOnline);
   $('#btn-online-back').addEventListener('click', leaveLobby);
   $('#btn-resume').addEventListener('click', () => {

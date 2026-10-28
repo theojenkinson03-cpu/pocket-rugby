@@ -186,7 +186,7 @@ function keepSquads(t, club) {
 export function continueClub(t, rng = Math.random) {
   const club = t.club || newClub(t);
   closeCompetition(club, t);
-  const options = { userTeam: club.team, length: t.length, cards: t.cards, rng };
+  const options = { userTeam: club.team, length: t.length, cards: t.cards, bench: !!t.bench, weather: !!t.weather, rng };
   let next;
   if (t.kind === 'league' && playsEurope(club)) {
     // Season one's Champions Cup is the real draw; after that, a fresh one.

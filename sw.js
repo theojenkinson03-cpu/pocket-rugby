@@ -17,6 +17,8 @@ const FILES = [
   'js/club.js',
   'js/color.js',
   'js/commentary.js',
+  'js/daily-view.js',
+  'js/daily.js',
   'js/dice-view.js',
   'js/dice.js',
   'js/dom.js',

@@ -42,7 +42,7 @@ const MUTANTS = [
   ['Intercept is not a turnover', 'js/engine.js', "startPossession(m, ev, def, 'intercept');", "startPossession(m, ev, team, 'intercept');"],
   ['Ruck won does not turn the ball over', 'js/engine.js', "if (result === 'ruck' || byCard) {", "if (result === 'never' || byCard) {"],
   ['Full time only beyond 30', 'js/engine.js', 'if (m.teams[team].score < m.target.full) return false;', 'if (m.teams[team].score <= m.target.full) return false;'],
-  ['Same side receives in both halves', 'js/engine.js', "startPossession(m, ev, other(m.firstReceiver), 'kickoff');", "startPossession(m, ev, m.firstReceiver, 'kickoff');"],
+  ['Same side receives in both halves', 'js/engine.js', "    if (!halfTimeBench(m)) startPossession(m, ev, other(m.firstReceiver), 'kickoff');", "    if (!halfTimeBench(m)) startPossession(m, ev, m.firstReceiver, 'kickoff');"],
   ['Passing back to the Scrum Half allowed', 'js/engine.js', "POSITIONS.filter(p => p !== 'S' && p !== from)", 'POSITIONS.filter(p => p !== from)'],
   ['Toss winner kicks instead of receiving', 'js/engine.js', 'const winner = result === action.value ? step.team : other(step.team);', 'const winner = result === action.value ? other(step.team) : step.team;'],
   ['Wing big move is 7', 'js/dice.js', "special('Into the Corner', 8)", "special('Into the Corner', 7)"],
@@ -55,11 +55,11 @@ const MUTANTS = [
   ['Fortress protects the attackers', 'js/engine.js', 'const defence = face ? cardEffects(match, other(team)) : NO_EFFECTS;', 'const defence = face ? cardEffects(match, team) : NO_EFFECTS;'],
   ['Fortress against Hit Ups too', 'js/engine.js', 'const fortress = (face?.special ? defence.specialDefence :', 'const fortress = (face ? defence.specialDefence :'],
   ['Fortress (Mythic) cuts every Hit Up', 'js/engine.js', 'value >= (defence.hitUpDefenceFrom || 0)', 'value >= 0'],
-  ['Card face swaps ignored', 'js/engine.js', "if (lost && cardEffects(m, team).faceSwap?.[pos]?.[lost] === 'pass') {", 'if (false) {'],
-  ["Sure Hands for every player", 'js/engine.js', "cardEffects(m, team).faceSwap?.[pos]?.[lost] === 'pass'", "cardEffects(m, team).faceSwap?.W?.[lost] === 'pass'"],
-  ['Drop-Goal Artist: every open pass a drop chance', 'js/engine.js', '(cardEffects(m, team).passToDrop || []).includes(pos)', '(cardEffects(m, team).passToDrop || []).length'],
+  ['Card face swaps ignored', 'js/engine.js', "const swapped = lost && fx.faceSwap?.[pos]?.[lost] === 'pass' ? lost : null;", 'const swapped = null;'],
+  ["Sure Hands for every player", 'js/engine.js', "fx.faceSwap?.[pos]?.[lost] === 'pass'", "fx.faceSwap?.W?.[lost] === 'pass'"],
+  ['Drop-Goal Artist: every open pass a drop chance', 'js/engine.js', '(fx.passToDrop || []).includes(pos)', '(fx.passToDrop || []).length'],
   ['Kick bonus left off the kick', 'js/engine.js', 'const distance = rolled + bonus;', 'const distance = rolled;'],
-  ['Kick bonus left out of the shown chance', 'js/engine.js', "ev.push({ type: 'range', team, kick, range, bonus, chance: kickChance(range, bonus) });", "ev.push({ type: 'range', team, kick, range, bonus, chance: kickChance(range) });"],
+  ['Kick bonus left out of the shown chance', 'js/engine.js', "ev.push({ type: 'range', team, kick, range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range, bonus) });", "ev.push({ type: 'range', team, kick, range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range) });"],
   ['Golden Boot helps drop goals too', 'js/cards.js', 'kickBonus: { conversion: 2, penalty: 2 }', 'kickBonus: { conversion: 2, penalty: 2, drop: 2 }'],
   ['Rush Defence on both dice', 'js/engine.js', 'return [n >= 1 ? 1 : 0, n >= 2 ? 1 : 0];', 'return [n >= 1 ? 1 : 0, n >= 1 ? 1 : 0];'],
   ['Rush Defence (Rare) still on one die', 'js/engine.js', 'return [n >= 1 ? 1 : 0, n >= 2 ? 1 : 0];', 'return [n >= 1 ? 1 : 0, 0];'],
@@ -105,8 +105,8 @@ const MUTANTS = [
   ['Knockouts hosted by the worse seed', 'js/tournament.js', 't.seeds[a] <= t.seeds[b] ? [a, b] : [b, a]', 't.seeds[a] >= t.seeds[b] ? [a, b] : [b, a]'],
   ['Short season plays every round', 'js/tournament.js', "season === 'full' ? schedule : schedule.slice(0, SHORT_SEASON)", 'schedule'],
   ['A side with a bye counts as out', 'js/tournament.js', '(t.byes || []).includes(t.userTeam) || ', ''],
-  ['Away side never changes kit', 'js/tournament.js', '{ name: away.name, color: stripAgainst(away, home.color), roster: away.roster }', '{ name: away.name, color: away.color, roster: away.roster }'],
-  ['No plain kit when both strips clash', 'js/tournament.js', '[team.color, team.alt, ...NEUTRALS]', '[team.color, team.alt]'],
+  ['Away side never changes kit', 'js/tournament.js', 'dressed(away, stripAgainst(away, home.color))', 'dressed(away, { color: away.color, kit: away.kit || null })'],
+  ['No plain kit when both strips clash', 'js/tournament.js', '[team.alt, ...NEUTRALS]', '[team.alt]'],
   ['User plays as the CPU side', 'js/tournament.js', "return { mode: '1p', teams: [mine, theirs]", "return { mode: '1p', teams: [theirs, mine]"],
 
   // Card rarities and the catch-up.
@@ -137,6 +137,45 @@ const MUTANTS = [
   ['Coach repeats tips', 'js/coach.js', 'const fresh = id => (seen.includes(id) ? null : id);', 'const fresh = id => id;'],
   ["Coach talks on the CPU's turn", 'js/coach.js', '  if (!humanTurn) return null;\n', ''],
 
+  // Home grounds, kits, season stats, the Champions Cup and the club career.
+  ['Prem final at the better seed\'s ground', 'js/tournament.js', "prem: { final: 'Allianz Stadium, Twickenham' },", 'prem: {},'],
+  ['Neutral grounds not marked neutral', 'js/tournament.js', 'neutral: name !== home?.ground && name !== teamOf(t, f.away)?.ground', 'neutral: false'],
+  ['A change strip keeps the pattern', 'js/tournament.js', 'find(c => c && !clash(c, other)) || team.color, kit: null };', 'find(c => c && !clash(c, other)) || team.color, kit: team.kit || null };'],
+  ['Hoops drawn as stripes', 'js/color.js', 'rect(0, i / HOOPS, 1, 1 / HOOPS,', 'rect(i / HOOPS, 0, 1 / HOOPS, 1,'],
+  ['Season stats lose the away side', 'js/season.js', 'const match = unpackPlayer(lines[side]?.[pos]);', 'const match = unpackPlayer(lines[0]?.[pos]);'],
+  ['Leaders sorted lowest first', 'js/season.js', '.sort((a, b) => b.value - a.value || a.apps - b.apps', '.sort((a, b) => a.value - b.value || a.apps - b.apps'],
+  ['Team of the Season by total, not average', 'js/season.js', 'const [a, b] = [p.rating / p.apps, best.rating / best.apps];', 'const [a, b] = [p.rating, best.rating];'],
+  ['Team of the Season lets in one-match wonders', 'js/season.js', 'const eligible = field.filter(p => p.apps * 2 >= most);', 'const eligible = field;'],
+  ['Champions Cup: league rivals meet in the pools', 'js/tournament.js', '[[a1, b1], [a2, c1], [b2, c2]],', '[[a1, a2], [b1, c1], [b2, c2]],'],
+  ['Champions Cup: home and away not shared out', 'js/tournament.js', 'if (ids.every(id => homes.get(id) === 2)) {', 'if (true) {'],
+  ['Champions Cup: only the top two go through', 'js/tournament.js', '  through: 3,', '  through: 2,'],
+  ['Champions Cup: the worst of the rest go through', 'js/tournament.js', '.slice(0, C.bestOthers)', '.slice(-C.bestOthers)'],
+  ['Champions Cup: 1 v 9 in the round of 16', 'js/tournament.js', "'r16', seeds[i], seeds[15 - i]", "'r16', seeds[i], seeds[i + 8]"],
+  ['Champions Cup final not in Lyon', 'js/tournament.js', "neutral: { final: 'OL Stadium, Lyon' },", 'neutral: {},'],
+  ['Squads not kept between seasons', 'js/club.js', 'for (const side of t.teams) if (club.rosters[side.id]) side.roster = { ...club.rosters[side.id] };', ''],
+  ['Europe for the top six only', 'js/club.js', 'export const EUROPE_PLACES = 8;', 'export const EUROPE_PLACES = 6;'],
+  ['Winning run survives a defeat', 'js/club.js', '      club.run = 0;\n', ''],
+  ['Season one Champions Cup re-drawn', 'js/club.js', 'const pools = club.number === 1 ? CHAMPIONS_CUP.pools : drawPools(club.cupField, rng);', 'const pools = drawPools(club.cupField, rng);'],
+  ['The double never awarded', 'js/club.js', "if (season.league?.stage === 'champion' && season.europe?.stage === 'champion')", 'if (false)'],
+  ['Dynasty after two titles', 'js/career.js', '(c.tournament?.leagueTitles || 0) >= 3', '(c.tournament?.leagueTitles || 0) >= 2'],
+
+  // Weather and the bench.
+  ['Rain makes no difference', 'js/engine.js', 'const wet = !!match.weather?.rain && WET_HANDS', 'const wet = false && WET_HANDS'],
+  ['Everyone knocks on in the rain', 'js/engine.js', "export const WET_HANDS = ['F', 'C'];", "export const WET_HANDS = ['F', 'C', 'W', 'B'];"],
+  ['Rain left out of the pass odds', 'js/engine.js', 'const { face } = attackFace(match, team, pos, i);', 'const face = DICE[pos].faces[i];'],
+  ['Wind blows the same way all match', 'js/engine.js', 'return match.half === 1 ? w : other(w);', 'return w;'],
+  ['Wind helps both sides', 'js/engine.js', 'return team === w ? WIND_METRES : -WIND_METRES;', 'return WIND_METRES;'],
+  ['Wind left off the kick', 'js/engine.js', 'const bonus = parts.card + parts.wind;\n  const distance = rolled + bonus;', 'const bonus = parts.card;\n  const distance = rolled + bonus;'],
+  ['A replacement leaves the injury', 'js/engine.js', '        T.injuries[value] = 0;\n', ''],
+  ['The bench never runs out', 'js/engine.js', '        T.bench--;\n', ''],
+  ['No fresh replacement at half time', 'js/engine.js', '      t.bench = m.bench ? 1 : 0;\n', ''],
+  ['No bench decision after an injury', 'js/engine.js', "  if (hurt) offerBench(m, att, 'injury', carrier, m.step);\n", ''],
+  ['Bench offered with nobody on it', 'js/engine.js', 'const hurt = result.injury && A.bench > 0;', 'const hurt = result.injury;'],
+  ['No changes at half time', 'js/engine.js', "    if (!halfTimeBench(m)) startPossession(m, ev, other(m.firstReceiver), 'kickoff');", "    startPossession(m, ev, other(m.firstReceiver), 'kickoff');"],
+  ['Receivers choose first at half time', 'js/engine.js', 'const order = [other(receiver), receiver]', 'const order = [receiver, other(receiver)]'],
+  ['CPU never uses the bench', 'js/ai.js', "return cost(worst) >= hold ? worst : 'stay';", "return 'stay';"],
+  ['Rookie keeps the injured player on', 'js/ai.js', "case 'bench': return step.pos && step.options.includes(step.pos) ? step.pos : step.options[0];", "case 'bench': return 'stay';"],
+
   // Online play.
   ['Moves accepted out of turn', 'js/online.js', "if (actingTeam(match) !== remoteTeam) return { ok: false, reason: 'not their turn' };", ''],
   ['Unused dice accepted', 'js/online.js', "if (rng.consumed() !== values.length) return { ok: false, reason: 'bad dice' };", ''],
@@ -144,11 +183,12 @@ const MUTANTS = [
   ['Move order not checked', 'js/online.js', "if (!entry || entry.s !== match.seq) return { ok: false, reason: 'out of order' };", "if (!entry) return { ok: false, reason: 'out of order' };"],
   ['Phones compare who controls what', 'js/online.js', 'const { controllers, ...shared } = match;', 'const shared = match;'],
   ['Team names not cut to length', 'js/online.js', "name: String(team?.name || 'Visitors').slice(0, 14),", "name: String(team?.name || 'Visitors'),"],
+  ['Kits from the other phone not checked', 'js/online.js', 'kit: sanitiseKit(team?.kit),', 'kit: team?.kit ?? null,'],
 ];
 
 function run(cwd) {
   return new Promise(resolve => {
-    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob'].map(f => `test/${f}.test.mjs`);
+    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions'].map(f => `test/${f}.test.mjs`);
     const child = spawn(process.execPath, ['--test', ...files], { cwd, env: { ...process.env, FUZZ_MATCHES: '120' }, stdio: 'ignore' });
     child.on('exit', code => resolve(code));
   });
