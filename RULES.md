@@ -75,10 +75,12 @@ The printed game has no field position, so metres change nothing about who wins;
 
 | Roll | Metres |
 | --- | --- |
-| Tackled | Twice the intensity less the tackle total, never below 0 |
+| Tackled | The carrier's usual gain (Forwards 2, Scrum Half 3, Centres and Fly Half 4, Outside Backs 6), 1 less for each point the tackle total beat the run by after the first, never below 0 |
 | Big Hit on the second die, or a ruck contest | 0 |
-| Line break | 10, and 5 more for each point the tackle total fell short |
-| Try | 10 more for the run-in |
+| Line break | Forwards 12, Scrum Half 20, Centres and Fly Half 25, Outside Backs 35, and 3 more for each point the tackle total fell short |
+| Try | 5 more for the run-in |
+
+The Forwards carry most, so a flat rule (twice the intensity less the tackle, as before) had them making twice anyone else's metres. By position, over 600 matches on the clock, a side's Outside Backs make 27 m a match, the Forwards 25 (on nearly three times the carries), the Centres 20, the Fly Half 11 and the Scrum Half 9.
 
 ## House rules: weather and the bench
 

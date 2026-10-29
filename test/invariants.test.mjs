@@ -277,7 +277,7 @@ function checkEvents(before, after, events, label) {
   // Run metres: from the tackle dice, and the run-in for a try.
   for (const e of events.filter(x => x.type === 'tackle' || x.type === 'lineBreak')) {
     const outcome = e.type === 'lineBreak' ? 'break' : e.outcome;
-    assert.equal(e.metres, carryMetres(outcome, e.need, e.total), `${label}: metres for a ${outcome}`);
+    assert.equal(e.metres, carryMetres(outcome, e.need, e.total, e.pos), `${label}: metres for a ${outcome}`);
   }
   const metresEvents = events.reduce((n, e) => n + (['tackle', 'lineBreak', 'try'].includes(e.type) ? e.metres : 0), 0);
   const metresMade = after.teams.reduce((n, t, i) => n + t.stats.metres - before.teams[i].stats.metres, 0);

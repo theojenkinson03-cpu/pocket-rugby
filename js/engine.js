@@ -96,16 +96,23 @@ export function emptyPlayer() {
   return { carries: 0, metres: 0, lineBreaks: 0, tries: 0, tackles: 0, missed: 0, bigHits: 0, turnovers: 0, passes: 0, points: 0, errors: 0 };
 }
 
-// Run metres: how far a carry gets, read from the dice. Tackled, the carrier
-// makes twice the intensity less the tackle total, never below 0, so a tackle
-// that only just stops a Hit Up 5 (total 5) gives up 5 m and a crushing one
-// none. A Big Hit or a ruck contest stops the carry dead. A line break makes
-// 10 m and 5 m more for each point the tackle fell short, and a try adds the
-// run-in.
-export const TRY_RUN_IN = 10;
-export function carryMetres(outcome, intensity, total) {
-  if (outcome === 'break') return 10 + 5 * (intensity - total);
-  if (outcome === 'tackle') return Math.max(0, 2 * intensity - total);
+// Run metres (a stat, not a rule): how far a carry gets, read from the
+// dice and who carried. Tackled, a carrier makes their usual gain (Forwards
+// 2 m, the Scrum Half 3, the Centres and the Fly Half 4, an Outside Back 6),
+// 1 m less for each point the tackle beat the run by after the first, never
+// below 0; a Big Hit or a ruck contest stops the carry dead. A line break
+// goes 12 m for a Forward, 20 for the Scrum Half, 25 for the Centres and the
+// Fly Half and 35 for an Outside Back, and 3 m more for each point the
+// tackle fell short; a try adds the run-in. Over 600 matches on the clock
+// that comes to, per side: Outside Backs 27 m, Forwards 25 (on many more
+// carries), Centres 20, Fly Half 11, Scrum Half 9. (Twice the intensity less
+// the tackle had the Forwards making twice anyone else's metres.)
+export const TRY_RUN_IN = 5;
+export const CARRY_GAIN = { S: 3, F: 2, C: 4, W: 6, B: 4 };
+export const BREAK_GAIN = { S: 20, F: 12, C: 25, W: 35, B: 25 };
+export function carryMetres(outcome, intensity, total, pos) {
+  if (outcome === 'break') return BREAK_GAIN[pos] + 3 * (intensity - total);
+  if (outcome === 'tackle') return Math.max(0, CARRY_GAIN[pos] - Math.max(0, total - intensity - 1));
   return 0;
 }
 
@@ -625,7 +632,7 @@ function onTackle(m, ev, rng) {
   }
   const hurt = result.injury && A.bench > 0;
 
-  const metres = carryMetres(result.outcome, intensity, result.total);
+  const metres = carryMetres(result.outcome, intensity, result.total, carrier);
   A.stats.metres += metres;
   player(m, att, carrier).metres += metres;
   m.gained += metres;

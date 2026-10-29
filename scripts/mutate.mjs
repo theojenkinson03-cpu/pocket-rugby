@@ -200,6 +200,10 @@ const MUTANTS = [
   ['Team names not cut to length', 'js/online.js', "name: String(team?.name || 'Visitors').slice(0, 14),", "name: String(team?.name || 'Visitors'),"],
   ['Kits from the other phone not checked', 'js/online.js', 'kit: sanitiseKit(team?.kit),', 'kit: team?.kit ?? null,'],
 
+  // Run metres by position.
+  ['Everyone gains like a Forward', 'js/engine.js', "if (outcome === 'tackle') return Math.max(0, CARRY_GAIN[pos] - Math.max(0, total - intensity - 1));", "if (outcome === 'tackle') return Math.max(0, CARRY_GAIN.F - Math.max(0, total - intensity - 1));"],
+  ['Line breaks go the same way for everyone', 'js/engine.js', "if (outcome === 'break') return BREAK_GAIN[pos] + 3 * (intensity - total);", "if (outcome === 'break') return BREAK_GAIN.C + 3 * (intensity - total);"],
+
   // Kicking cards win the ball back; Squeaky Clean keeps the cards away.
   ['Kicking cards keep the ball after any score', 'js/engine.js', "return !timeUp(m) && (cardEffects(m, team).keepBall || []).includes(kind) && chargeLeft(m, team, 'keepBall');", "return !timeUp(m) && (cardEffects(m, team).keepBall || []).length > 0 && chargeLeft(m, team, 'keepBall');"],
   ['Keeping the ball never runs out', 'js/engine.js', "const keep = kind !== null && keepsBall(m, team, kind) && useCharge(m, team, 'keepBall');", 'const keep = kind !== null && keepsBall(m, team, kind);'],
