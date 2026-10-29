@@ -179,7 +179,13 @@ function verify(snap, label) {
   if (step.purpose === 'bench') {
     const choices = snap.buttons.filter(b => b.choice);
     check(choices.some(c => /Play on/.test(c.text)), `${label}: the bench offers to play on`);
-    for (const p of step.options.filter(o => o !== 'stay')) check(choices.some(c => c.text.startsWith(p === 'S' ? 'SH' : p === 'F' ? 'FW' : p === 'C' ? 'C' : p === 'W' ? 'OB' : 'FH')), `${label}: replace ${p}`);
+    // "i>pos": the sub's name on the button, and who they're for.
+    for (const o of step.options.filter(x => x !== 'stay')) {
+      const [i, pos] = o.split('>');
+      const sub = m.teams[step.team].subs[Number(i)];
+      const who = sub.name ? sub.name.replace(/^[A-Z]\.\s*/, '') : 'Replacement';
+      check(choices.some(c => c.text.includes(`${who} on`) && c.text.includes(`clears the −${m.teams[step.team].injuries[pos]}`)), `${label}: replace ${o} (${who})`);
+    }
   }
   m.teams.forEach((t, i) => check(snap.boardCount[i] === t.cards.length, `${label}: team ${i} has ${t.cards.length} cards on the board, shows ${snap.boardCount[i]}`));
   m.teams.forEach((t, i) => check(snap.boardRarity[i] === (t.cards[0]?.rarity || null), `${label}: team ${i} card's rarity on the board`));
