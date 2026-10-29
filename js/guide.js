@@ -142,7 +142,7 @@ function rangeFace(m, i) {
   const r = find(events, 'range');
   const tone = r.chance >= 2 / 3 ? 'good' : r.chance >= 1 / 3 ? 'ok' : 'bad';
   const extra = r.bonus ? ` (${r.bonus > 0 ? '+' : '−'}${metres(Math.abs(r.bonus))} on the kick)` : '';
-  return { tone, caption: metres(r.range), note: `${pct(r.chance)} kick`, text: `The posts ${metres(r.range)} away: ${pct(r.chance)} chance the kick lands${extra}.` };
+  return { tone, caption: pct(r.chance), note: 'to land', text: `The posts ${metres(r.range)} away: ${pct(r.chance)} chance the kick lands${extra}.` };
 }
 
 function kickFace(m, i) {

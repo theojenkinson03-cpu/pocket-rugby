@@ -1,4 +1,6 @@
 // Renders the dice: 3D cubes that tumble onto a face, and flat face tiles.
+// Given the roll they're part of, faces read for it: a brown die setting a
+// kick's range shows metres, not a tackle.
 // A cube has six faces round a solid core (so no gaps show at the rounded
 // edges as it turns) and a shadow on the table under it, drawn as its own
 // element: a filter on the cube's parent would flatten the 3D in Safari.
@@ -30,8 +32,34 @@ function refRow(label, result) {
   return `<span class="ref-row" data-row="${label.toLowerCase()}"><i class="light ${light}" aria-hidden="true"></i><b>${label}</b><em>${text}</em></span>`;
 }
 
-export function faceHTML(dieId, index) {
+const RESULT_WORD = { try: 'Try', notry: 'No try', video: 'Video ref', ruck: 'Held up' };
+const PIECE_WORD = { win: 'Won', lose: 'Lost', reset: 'Reset', notstraight: 'Crooked' };
+const metresHTML = n => `<span class="fv">${n * 10}<small>m</small></span>`;
+
+// What a face reads in the roll at hand (`roll`: {purpose, piece, ruckWins}):
+// the brown die sets a kick's range in metres, the black die a kick's
+// distance, a yellow card or not, a try or a ruck; the white die shows only
+// the piece being played. Null where the printed face says it best.
+function rollHTML(dieId, f, roll) {
+  const { purpose } = roll;
+  if (dieId === 'D' && (purpose === 'range' || purpose === 'penalty')) return `<span class="fl">To the posts</span>${metresHTML(f.value)}`;
+  if (dieId === 'K') {
+    if (purpose === 'kick') return `<span class="fl">Kick</span>${metresHTML(f.kick)}`;
+    if (purpose === 'penalty') return f.card ? '<i class="fcard" aria-hidden="true"></i><span class="fword">Yellow card</span>' : '<span class="fword dim">No card</span>';
+    if (purpose === 'try') return `<span class="fword${f.result === 'try' ? ' big' : ''}">${RESULT_WORD[f.result]}</span>`;
+    if (purpose === 'ruck') return (roll.ruckWins || ['ruck']).includes(f.result) ? '<span class="fword big">Turn&shy;over</span>' : '<span class="fword dim">Held</span>';
+  }
+  if (dieId === 'R' && purpose === 'setpiece' && !f.penalty) {
+    return `<span class="fl">${roll.piece === 'scrum' ? 'Scrum' : 'Lineout'}</span><span class="fword${f[roll.piece] === 'win' ? ' big' : ''}">${PIECE_WORD[f[roll.piece]]}</span>`;
+  }
+  return null;
+}
+
+// The face as printed, or as it reads in `roll` when one is given.
+export function faceHTML(dieId, index, roll = null) {
   const f = DICE[dieId].faces[index];
+  const inRoll = roll && rollHTML(dieId, f, roll);
+  if (inRoll) return inRoll;
   if (dieId === 'K') {
     return `<span class="fk" title="Kick distance">${f.kick}</span><span class="fr${f.label.length > 6 ? ' long' : ''}">${esc(f.label)}</span>${f.card ? '<i class="card-dot" aria-label="yellow card dot"></i>' : ''}`;
   }
@@ -63,8 +91,17 @@ export function faceHTML(dieId, index) {
   return '';
 }
 
-export function faceLabel(dieId, index) {
+export function faceLabel(dieId, index, roll = null) {
   const f = DICE[dieId].faces[index];
+  if (roll) {
+    const { purpose } = roll;
+    if (dieId === 'D' && (purpose === 'range' || purpose === 'penalty')) return `${f.value * 10} m to the posts`;
+    if (dieId === 'K' && purpose === 'kick') return `Kick of ${f.kick * 10} m`;
+    if (dieId === 'K' && purpose === 'penalty') return f.card ? 'Yellow card' : 'No card';
+    if (dieId === 'K' && purpose === 'try') return RESULT_WORD[f.result];
+    if (dieId === 'K' && purpose === 'ruck') return (roll.ruckWins || ['ruck']).includes(f.result) ? 'Turnover' : 'Held';
+    if (dieId === 'R' && purpose === 'setpiece' && !f.penalty) return `${roll.piece === 'scrum' ? 'Scrum' : 'Lineout'} ${PIECE_WORD[f[roll.piece]].toLowerCase()}`;
+  }
   if (dieId === 'K') return `${f.label}, kick ${f.kick}${f.card ? ', yellow dot' : ''}`;
   if (dieId === 'R') return f.penalty ? `Penalty ${f.penalty}` : `Scrum ${f.scrum}, lineout ${f.lineout}`;
   if (f.kind === 'pass') return f.to ? `Pass to ${PLAYERS[f.to].name}` : 'Pass';
@@ -81,7 +118,7 @@ function paint(node, dieId) {
 // The core: three planes through the middle, in the die's colour.
 const CORE = ['rotateX(90deg)', 'rotateY(90deg)', 'none'];
 
-export function createDie(dieId, faceIndex = 0, badges = []) {
+export function createDie(dieId, faceIndex = 0, badges = [], roll = null) {
   const die = document.createElement('div');
   die.className = 'die';
   paint(die, dieId);
@@ -101,7 +138,7 @@ export function createDie(dieId, faceIndex = 0, badges = []) {
     const face = document.createElement('div');
     face.className = 'face';
     face.style.transform = `${SIDE_TRANSFORMS[i]} translateZ(var(--half))`;
-    face.innerHTML = faceHTML(dieId, i);
+    face.innerHTML = faceHTML(dieId, i, roll);
     cube.append(face);
   });
   // The lift carries the perspective and the drop; the cube turns inside it.
@@ -110,6 +147,7 @@ export function createDie(dieId, faceIndex = 0, badges = []) {
   lift.append(cube);
   die.append(shadow, lift);
   addBadges(die, badges);
+  die._roll = roll;
   die._angle = { x: 0, y: 0 };
   setFace(die, faceIndex);
   return die;
@@ -155,7 +193,7 @@ export function setFace(die, faceIndex) {
 function markFace(die, faceIndex) {
   die.dataset.face = faceIndex;
   const badges = [...die.querySelectorAll('.die-badge')].map(b => b.title).filter(Boolean);
-  die.setAttribute('aria-label', `${DICE[die.dataset.die].name} die: ${faceLabel(die.dataset.die, faceIndex)}${badges.length ? `. ${badges.join('. ')}` : ''}`);
+  die.setAttribute('aria-label', `${DICE[die.dataset.die].name} die: ${faceLabel(die.dataset.die, faceIndex, die._roll)}${badges.length ? `. ${badges.join('. ')}` : ''}`);
   faceNodes(die).forEach((f, i) => f.classList.toggle('up', i === faceIndex));
 }
 
@@ -205,13 +243,13 @@ export function rollTo(die, faceIndex, { duration = 950, delay = 0, reduced = fa
   });
 }
 
-export function faceTile(dieId, index, extraClass = '') {
+export function faceTile(dieId, index, extraClass = '', roll = null) {
   const tile = document.createElement('div');
   tile.className = `face flat ${extraClass}`.trim();
   paint(tile, dieId);
-  tile.innerHTML = faceHTML(dieId, index);
+  tile.innerHTML = faceHTML(dieId, index, roll);
   tile.setAttribute('role', 'img');
-  tile.setAttribute('aria-label', faceLabel(dieId, index));
+  tile.setAttribute('aria-label', faceLabel(dieId, index, roll));
   return tile;
 }
 

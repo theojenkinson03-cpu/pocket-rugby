@@ -129,7 +129,9 @@ test('tries, kicks, ranges, rucks and the penalty check', () => {
   const over = rollGuide(boot).faces.filter(f => f.tone === 'good');
   assert.ok(over.length && over.every(f => f.note === 'ball back' && /wins the restart back/.test(f.text)));
   const r = rollGuide(stateAt({ step: { type: 'roll', purpose: 'range', dice: ['D'], team: 0, kick: 'conversion' }, scores: [5, 0] }));
-  assert.deepEqual(r.faces.map(f => f.caption), DICE.D.faces.map(f => `${f.value * 10} m`));
+  assert.deepEqual(r.faces.map(f => f.caption), ['100%', '83%', '67%', '67%', '50%', '33%']);
+  assert.ok(r.faces.every(f => f.note === 'to land'));
+  assert.match(r.faces[1].text, /The posts 20 m away: 83% chance/);
   const ruck = rollGuide(stateAt({ step: { type: 'roll', purpose: 'ruck', dice: ['K'], team: 1 } }));
   assert.deepEqual(tones(ruck), DICE.K.faces.map(f => (f.result === 'ruck' ? 'good' : 'bad')));
   const pen = rollGuide(stateAt({ step: { type: 'roll', purpose: 'penalty', dice: ['K', 'D'], team: 0, offender: 1 } }));

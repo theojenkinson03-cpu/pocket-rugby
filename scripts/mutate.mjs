@@ -128,8 +128,11 @@ const MUTANTS = [
   ['Set-Piece Kings steal every feed', 'js/engine.js', "(cardEffects(m, other(team)).stealFeed || []).includes(piece)", '(cardEffects(m, other(team)).stealFeed || []).length'],
   ['Set-Piece Kings lose their own feed anyway', 'js/engine.js', "if (outcome === 'lose' && cardEffects(m, team).ownFeedWins) {", 'if (false) {'],
   ['Squeaky Clean never turns their feed', 'js/engine.js', "} else if (outcome === 'penaltyWon' && useCharge(m, other(team), 'theirFeedPenalty')) {", '} else if (false) {'],
-  ['Win meter ignores the cards', 'js/winprob.js', 'const diff = cardsEdge(match, team) - cardsEdge(match, 1 - team);', 'const diff = 0;'],
-  ['Win meter edge never fades', 'js/winprob.js', 'return 1 / (1 + Math.exp(-(logit(p) + diff * left)));', 'return 1 / (1 + Math.exp(-(logit(p) + diff)));'],
+  ['Win meter ignores the cards', 'js/winprob.js', 'const cards = cardsEdge(match, team) - cardsEdge(match, 1 - team);', 'const cards = 0;'],
+  ['Win meter edge never fades', 'js/winprob.js', 'const diff = cards * left.match + setbacks', 'const diff = cards + setbacks'],
+  ['Win meter ignores the sin bin', 'js/winprob.js', "let cost = t.yellows >= 2 ? logit(0.5 + c.red) * left.match : t.sinBin ? logit(0.5 + c.sinBin) * left.half : 0;", "let cost = t.yellows >= 2 ? logit(0.5 + c.red) * left.match : 0;"],
+  ['Win meter: a sin bin never fades', 'js/winprob.js', "t.sinBin ? logit(0.5 + c.sinBin) * left.half : 0;", "t.sinBin ? logit(0.5 + c.sinBin) : 0;"],
+  ['Win meter ignores injuries', 'js/winprob.js', "for (const [pos, n] of Object.entries(t.injuries || {})) if (n) cost +=", "for (const [pos, n] of Object.entries({})) if (n) cost +="],
   ['Career keeps the first rarity it saw', 'js/career.js', "if (RARITY_IDS.indexOf(card.rarity) > RARITY_IDS.indexOf(c.cardRarity[card.id] ?? '')) c.cardRarity[card.id] = card.rarity;", 'c.cardRarity[card.id] ??= card.rarity;'],
   ['Mythic achievement for any card', 'js/career.js', "(m.teams[me].cards || []).some(card => card.rarity === 'mythic')", '(m.teams[me].cards || []).length > 0'],
 
@@ -200,6 +203,11 @@ const MUTANTS = [
   ['Team names not cut to length', 'js/online.js', "name: String(team?.name || 'Visitors').slice(0, 14),", "name: String(team?.name || 'Visitors'),"],
   ['Kits from the other phone not checked', 'js/online.js', 'kit: sanitiseKit(team?.kit),', 'kit: team?.kit ?? null,'],
 
+  // The dice on the table.
+  ['The sin bin left out of the defence total', 'js/duel.js', "if (mod) terms.push({ n: signed(2 * mod), label: mod === -2 ? 'red card' : 'sin bin' });", ''],
+  ['A run\'s card left out of the attack total', 'js/duel.js', "if (p.card) terms.push(", "if (false) terms.push("],
+  ['The kick die shows the try result', 'js/dice-view.js', "if (purpose === 'kick') return `<span class=\"fl\">Kick</span>${metresHTML(f.kick)}`;", ''],
+
   // Run metres by position.
   ['Everyone gains like a Forward', 'js/engine.js', "if (outcome === 'tackle') return Math.max(0, CARRY_GAIN[pos] - Math.max(0, total - intensity - 1));", "if (outcome === 'tackle') return Math.max(0, CARRY_GAIN.F - Math.max(0, total - intensity - 1));"],
   ['Line breaks go the same way for everyone', 'js/engine.js', "if (outcome === 'break') return BREAK_GAIN[pos] + 3 * (intensity - total);", "if (outcome === 'break') return BREAK_GAIN.C + 3 * (intensity - total);"],
@@ -246,7 +254,7 @@ const MUTANTS = [
 
 function run(cwd) {
   return new Promise(resolve => {
-    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions', 'daily', 'friends', 'clock', 'guide'].map(f => `test/${f}.test.mjs`);
+    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions', 'daily', 'friends', 'clock', 'guide', 'duel'].map(f => `test/${f}.test.mjs`);
     const child = spawn(process.execPath, ['--test', ...files], { cwd, env: { ...process.env, FUZZ_MATCHES: '120' }, stdio: 'ignore' });
     child.on('exit', code => resolve(code));
   });

@@ -3,7 +3,7 @@
 import { act, controllerOf, DECISION_SECONDS, drafterOf, kickBonus, kickCards, kickChance, kickParts, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollsLeft, rollWeather, TIMED_DECISIONS, windWith } from './engine.js';
 import { cpuChoiceAsync, LEVELS, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
-import { CARD_BY_ID, CARDS, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
+import { CARD_BY_ID, CARDS, cardEffects, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
 import { metres, narrate, scoreLine, weatherText } from './commentary.js';
 import { playerOfTheMatch, possessive, randomRoster, statLine, surname } from './players.js';
 import { winMeter } from './winprob.js';
@@ -14,6 +14,7 @@ import { applyRemote, encodeAction, hashState, makeCode, normaliseCode, OnlineSe
 import { $, button, el } from './dom.js';
 import { badgeNode, createDie, dieChip, faceLabel, faceTile, rollTo, setFace, wait } from './dice-view.js';
 import { dieBadges, playerBadge, rollGuide } from './guide.js';
+import { duelOf, restingDuel } from './duel.js';
 import { cardArt, cardChip, cardUses } from './card-view.js';
 import { careerPage } from './career-view.js';
 import { fixtureLabel, tournamentHub, tournamentSetup } from './tournament-view.js';
@@ -446,7 +447,7 @@ function resumeMatch(saved) {
   hideCoach(false);
   showView('match');
   const roll = ui.match.roll;
-  if (roll) showDice(roll.dice, roll.faces, roll);
+  if (roll) showDuel(restingDuel(ui.match), roll);
   else showCoin();
   setHeadline('Welcome back', scoreLine(ui.match));
   renderFeed(0);
@@ -834,7 +835,7 @@ async function present(before, after, events, story) {
     const dramatic = ['try', 'ruck', 'penalty', 'kick'].includes(step.purpose) && cinemaLevel() !== 'off';
     play('dice', roll.dice.length);
     if (dramatic) play('heartbeat', ui.prefs.fast ? 1 : 2);
-    await showDice(roll.dice, roll.faces, roll, true, dramatic, dieBadges(before));
+    await showDuel(duelOf(before, after, events), roll, { animate: true, dramatic, badges: dieBadges(before) });
     markGuide(roll);
     play('land');
     if (ui.prefs.haptics) buzz(12);
@@ -939,27 +940,87 @@ function setHeadline(headline, detail) {
   $('#detail').textContent = detail || '';
 }
 
-async function showDice(ids, faces, roll, animate = false, dramatic = false, badges = []) {
+// What the dice faces need to read for a roll (or the step about to roll):
+// its purpose, the set piece, and which black-die results win a ruck.
+function rollContext(match, roll) {
+  const ruckWins = roll.purpose === 'ruck' ? ['ruck', ...(cardEffects(match, roll.team).ruckAlsoWins || [])] : null;
+  return { purpose: roll.purpose, piece: roll.piece, ruckWins };
+}
+
+// The dice on the table: each side's dice in its own area, with what they
+// come to after every plus and minus, and the verdict under them.
+async function showDuel(duel, roll, { animate = false, dramatic = false, badges = [] } = {}) {
   const host = $('#tray-dice');
   const tray = $('#tray');
   tray.classList.toggle('dramatic', dramatic);
   tray.dataset.focus = roll.purpose === 'setpiece' ? roll.piece : FOCUS[roll.purpose] || '';
   host.innerHTML = '';
-  const dice = ids.map((id, i) => createDie(id, faces[i], badges[i] ? [badges[i]] : []));
-  dice.forEach(d => host.append(d));
-  if (!animate) {
-    dice.forEach((d, i) => {
-      setFace(d, faces[i]);
-      d.classList.add('landed');
-    });
-    return;
+  const context = rollContext(ui.match, roll);
+  const wrap = el('div', `duel${duel.columns.length > 1 ? ' two' : ''}`);
+  const rolling = [];
+  for (const col of duel.columns) {
+    const team = ui.match.teams[col.team];
+    const area = el('div', 'duel-side');
+    kitVars(area, team);
+    const head = el('p', 'duel-head');
+    head.append(el('span', 'kit'), el('b', null, team.name), el('small', null, col.role));
+    const row = el('div', 'duel-dice');
+    for (const d of col.dice) {
+      if (d.ghost) {
+        const ghost = el('span', 'die-ghost', '?');
+        ghost.dataset.die = d.id;
+        ghost.setAttribute('aria-hidden', 'true');
+        row.append(ghost);
+        continue;
+      }
+      const badge = d.rolled ? badges[d.slot] : null;
+      const die = createDie(d.id, d.face, badge ? [badge] : [], d.rolled ? context : null);
+      row.append(die);
+      if (d.rolled && animate) rolling.push([die, d.face]);
+      else {
+        setFace(die, d.face);
+        die.classList.add('landed');
+      }
+    }
+    area.append(head, row);
+    const sum = sumLine(col);
+    if (sum) area.append(sum);
+    wrap.append(area);
   }
+  if (duel.verdict) wrap.append(el('p', `duel-verdict tone-${duel.verdict.tone}`, duel.verdict.text));
+  host.append(wrap);
+  if (!rolling.length) return;
   // Rolls that decide a try, a kick, a card or a ruck tumble for longer.
   const duration = 950 * speed() * (dramatic ? 1.7 : 1);
   const reduced = reducedMotion.matches;
-  dice.forEach(d => setFace(d, Math.floor(Math.random() * 6)));
-  await Promise.all(dice.map((d, i) => rollTo(d, faces[i], { duration, delay: i * 160 * speed(), reduced })));
+  const verdict = wrap.querySelector('.duel-verdict');
+  const sums = [...wrap.querySelectorAll('.duel-sum')];
+  for (const x of [verdict, ...sums]) x?.classList.add('pending');
+  rolling.forEach(([d]) => setFace(d, Math.floor(Math.random() * 6)));
+  await Promise.all(rolling.map(([d, face], i) => rollTo(d, face, { duration, delay: i * 160 * speed(), reduced })));
+  for (const x of [verdict, ...sums]) x?.classList.remove('pending');
   tray.classList.remove('dramatic');
+}
+
+// "5 +1 Big Pack −1 injured = 5": each number over what it's for. One term
+// on its own needs no total; the defence waiting to tackle shows its target.
+function sumLine(col) {
+  const waiting = col.dice.some(d => d.ghost);
+  if (!col.terms.length && !waiting) return null;
+  const line = el('p', 'duel-sum');
+  const term = (n, label) => {
+    const t = el('span', 'term');
+    t.append(el('b', null, n), el('small', null, label));
+    return t;
+  };
+  col.terms.forEach(t => line.append(term(t.n, t.label)));
+  if (waiting) line.append(term(`${col.total}`, 'to stop it'));
+  else if (col.terms.length > 1) {
+    line.append(el('span', 'eq', '='));
+    line.append(term(String(col.total), 'total'));
+    line.lastChild.classList.add('total');
+  }
+  return line;
 }
 
 function showCoin() {
@@ -1367,12 +1428,13 @@ function renderGuide(m) {
   const who = mine ? '' : ' for you';
   const tally = g.good || g.bad ? `${g.good} good, ${g.bad} bad${who}` : `No risk either way${who}`;
   text.textContent = g.summary || `${tally}. Tap a face for more.`;
+  const context = rollContext(m, m.step);
   for (const f of g.faces) {
     const b = el('button', `gf tone-${f.tone}`);
     b.type = 'button';
     b.dataset.face = f.index;
-    b.append(faceTile(g.die, f.index, 'mini'), el('b', 'gf-cap', f.caption), el('small', 'gf-note', f.note || ' '));
-    b.setAttribute('aria-label', `${faceLabel(g.die, f.index)}: ${f.text} ${{ good: 'Good', bad: 'Bad', ok: 'Neither' }[f.tone]}${mine ? '' : ' for you'}.`);
+    b.append(faceTile(g.die, f.index, 'mini', context), el('b', 'gf-cap', f.caption), el('small', 'gf-note', f.note || ' '));
+    b.setAttribute('aria-label', `${faceLabel(g.die, f.index, context)}: ${f.text} ${{ good: 'Good', bad: 'Bad', ok: 'Neither' }[f.tone]}${mine ? '' : ' for you'}.`);
     b.addEventListener('click', () => {
       faces.querySelectorAll('.gf').forEach(x => x.classList.toggle('picked', x === b));
       text.textContent = f.text;
