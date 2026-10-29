@@ -2554,7 +2554,7 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 }
 .gf.tone-ok .face.flat.mini { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent); }
 .gf .face.flat.mini .fk { font-size: 1.2em; }
-.gf-cap { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 11px/1.1 var(--font-label); letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+.gf-cap { max-width: 100%; min-height: 2.2em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font: 700 10.5px/1.1 var(--font-label); letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); overflow-wrap: anywhere; }
 .gf.tone-good .gf-cap { color: #14804a; }
 .gf.tone-bad .gf-cap { color: #c02a20; }
 /* A tick or a cross, so the tone never rests on colour alone. */
@@ -2645,9 +2645,21 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
   .side-status { flex-wrap: nowrap; overflow: hidden; }
   .chip-more { display: none; }
 }
-@media (max-height: 640px) {
+@media (max-height: 700px) {
+  .side { padding-block: 6px 5px; }
   .side-score { font-size: 36px; }
-  .pitch-wrap { max-height: 13vh; max-height: 13dvh; }
+  .board-clock b { font-size: 25px; }
+  .meter { padding-block: 4px 6px; }
+  .pitch-wrap { margin-top: 6px; max-height: 13vh; max-height: 13dvh; }
+  .tray { gap: 5px; padding-top: 6px; }
+  .duel-side { min-height: 96px; }
+  .tray-dice .duel .die { --size: 42px; }
+  .tray-dice .duel .duel-dice:has(> :nth-child(2)) .die { --size: 38px; }
+  .duel-dice { min-height: 42px; }
+  .headline { font-size: 18px; }
+  .tray-text { min-height: 2.4em; }
+  .gf .face.flat.mini { max-width: 30px; font-size: 5.4px; }
+  .gf { gap: 2px; }
   .guide-text { display: none; }
 }
 
