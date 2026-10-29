@@ -93,31 +93,27 @@ function bestCard(match, personality) {
 // ball. The Forwards carry most; the Scrum Half mostly passes.
 export const CARRY_SHARE = { S: 0.1, F: 0.34, C: 0.2, W: 0.2, B: 0.16 };
 
-// How far through the half (or, in the second half, the match) play is:
-// 0 at the kick-off, 1 at the whistle, from the leading score.
-function halfProgress(match) {
-  if (match.format === 'rolls') return Math.min(1, match.clock / halfRolls(match));
-  const lead = Math.max(...match.teams.map(t => t.score));
-  return match.half === 1 ? Math.min(1, lead / match.target.half) : Math.min(1, (lead - match.target.half) / (match.target.full - match.target.half));
-}
-
-// The bench: replace the injury that costs most. `hold` is a cost below
-// which to keep the replacement for something worse, early in a half. Over
-// 40,000 simulated matches for each, holding at 0.18, 0.25 or always did no
-// better than replacing at once (49.9%, 49.8% and 49.6%), so the CPU
-// doesn't hold.
-export const BENCH_HOLD = 0;
-
-export function benchChoice(match, hold = BENCH_HOLD) {
+// The bench: bring on whoever helps most. A change is worth the injury it
+// clears, less 1 if the replacement plays out of position, weighed by how
+// often that position carries; an out-of-position replacement for a −1
+// injury gains nothing, so the CPU plays on. With three on the bench there's
+// no need to hold one back (over 40,000 matches each, holding a replacement
+// for something worse did no better than using it at once).
+export function benchChoice(match) {
   const step = match.step;
   const T = match.teams[step.team];
-  const injured = step.options.filter(o => o !== 'stay');
-  const cost = pos => CARRY_SHARE[pos] * T.injuries[pos];
-  const worst = injured.sort((a, b) => cost(b) - cost(a))[0];
-  if (!worst) return 'stay';
-  // Late in the half, a replacement left on the bench is wasted.
-  if (step.when === 'halftime' || halfProgress(match) >= 0.6) return worst;
-  return cost(worst) >= hold ? worst : 'stay';
+  let best = 'stay';
+  let most = 1e-9;
+  for (const option of step.options) {
+    if (option === 'stay') continue;
+    const [i, pos] = option.split('>');
+    const gain = CARRY_SHARE[pos] * (T.injuries[pos] - (T.subs[Number(i)].pos === pos ? 0 : 1));
+    if (gain > most) {
+      most = gain;
+      best = option;
+    }
+  }
+  return best;
 }
 
 function proChoice(match, personality) {
@@ -139,8 +135,8 @@ function rookieChoice(match, rng, personality) {
     case 'pass': return rng() < 0.5 ? pick() : bestReceiver(match, step.team, step.options, personality);
     case 'drop': return kickChance(step.range, kickBonus(match, step.team, 'drop')) >= 0.5 && rng() < 0.7 ? 'kick' : 'pass';
     case 'penalty': return rng() < 0.6 ? 'kick' : 'tap';
-    // Instinct: the injured player comes off straight away.
-    case 'bench': return step.pos && step.options.includes(step.pos) ? step.pos : step.options[0];
+    // Instinct: the injured player comes off straight away, for whoever is first on the bench.
+    case 'bench': return step.options[0];
     case 'draft': {
       // Instinct: grab the rarest card on the table, any of them if they tie.
       const rank = id => RARITY_IDS.indexOf(dealtRarity(match, id));

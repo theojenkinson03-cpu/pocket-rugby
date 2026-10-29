@@ -91,7 +91,7 @@ test('the starting match: second half, scores that add up, the situation and twi
       assert.equal(t.score, st.tries * 5 + st.conversions * 2 + st.penaltyGoals * 3 + st.dropGoals * 3, `${key}: team ${i}`);
       assert.equal(POSITIONS.reduce((n, p) => n + t.players[p].tries, 0), st.tries);
       assert.equal(POSITIONS.reduce((n, p) => n + t.players[p].metres, 0), st.metres);
-      assert.equal(t.bench, 1);
+      assert.equal(t.subs.length, 3, "three on the bench");
     });
     assert.ok(m.venue?.name);
     if (s.cards) {

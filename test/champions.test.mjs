@@ -144,6 +144,6 @@ test('the user: still in it in the pools, out if they miss the 16, and through a
     assert.equal(t.stage, 'done');
     assert.ok(teamOf(t, t.champion));
     assert.equal(t.fixtures.length, 48 + 8 + 4 + 2 + 1);
-    assert.ok(t.fixtures.every(f => f.result && f.result.players));
+    assert.ok(t.fixtures.every(f => f.result && f.result.lines));
   }
 });

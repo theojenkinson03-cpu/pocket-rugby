@@ -1,11 +1,12 @@
 // Optional rules: the weather (rain makes the Forwards and Centres knock on
 // with their free ‹Pass› face; wind is 10 m on every kick and swaps ends at
-// half time) and the bench (one replacement a half clears an injury).
+// half time) and the bench (three named replacements, each on once, for
+// injured players; out of position they run at −1).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, attackFace, injuredPositions, isLegal, kickBonus, kickParts, migrate, newMatch, receiverOdds, rollWeather, seededRng, VERSION, WET_HANDS, windBonus, windWith } from '../js/engine.js';
+import { act, attackFace, benchOptions, isLegal, kickBonus, kickParts, migrate, newMatch, receiverOdds, rollWeather, seededRng, VERSION, WET_HANDS, windBonus, windWith } from '../js/engine.js';
 import { benchChoice, cpuChoice, CARRY_SHARE } from '../js/ai.js';
 import { narrate } from '../js/commentary.js';
 import { tipFor } from '../js/coach.js';
@@ -137,48 +138,58 @@ test('an Epic Big Pack keeps hold of a wet ball', () => {
   assert.equal(state.step.purpose, 'pass');
 });
 
-// An injury from two Big Hits on a Hit Up 4 (a ruck contest follows).
+// An injury from two Big Hits on a Hit Up 4 (a ruck contest follows). The
+// injured side's bench: a Forward, a Centre and an Outside Back, by name.
+const BENCH = [{ name: 'A. Prop', pos: 'F' }, { name: 'B. Centre', pos: 'C' }, { name: 'C. Wing', pos: 'W' }];
 function injuredState({ bench = true, injuries = [{}, {}], half = 1, scores = [0, 0] } = {}) {
   const m = stateAt({ step: { type: 'roll', purpose: 'tackle', dice: ['D', 'D'], team: 1, intensity: 4, carrier: 'F', ruck: true, special: false }, carrier: 'F', injuries, half, scores });
   m.bench = bench;
-  m.teams.forEach(t => (t.bench = bench ? 1 : 0));
+  m.teams.forEach(t => {
+    t.roster = { S: 'S. Nine', F: 'F. Eight', C: 'C. Twelve', W: 'W. Eleven', B: 'B. Ten' };
+    t.subs = bench ? BENCH.map(x => ({ ...x, used: false })) : [];
+  });
   return m;
 }
 
-test('the bench: an injury asks the injured side whether to bring on a replacement', () => {
+test('the bench: an injury asks the injured side which replacement to bring on', () => {
   const { state, events } = roll(injuredState(), dice(bigHit, bigHit));
   assert.ok(events.some(e => e.type === 'injury' && e.pos === 'F'));
-  assert.equal(state.step.type, 'choose');
-  assert.equal(state.step.purpose, 'bench');
-  assert.equal(state.step.team, 0, 'the injured side decides');
-  assert.equal(state.step.pos, 'F');
-  assert.deepEqual(state.step.options, ['F', 'stay']);
+  assert.deepEqual(state.teams[0].injured, ['F. Eight'], 'noted for the next match');
+  assert.deepEqual([state.step.type, state.step.purpose, state.step.team, state.step.pos], ['choose', 'bench', 0, 'F']);
+  assert.deepEqual(state.step.options, ['0>F', '1>F', '2>F', 'stay'], 'the Forward on the bench first');
   assert.equal(state.step.next.purpose, 'ruck', 'then the ruck contest goes on');
-  // Replace: the injury goes and so does the replacement.
-  const replaced = choose(state, 'F', dice());
-  assert.equal(replaced.state.teams[0].injuries.F, 0);
-  assert.equal(replaced.state.teams[0].bench, 0);
+  // The Forward comes on: no injury, in position, and the player off keeps his numbers.
+  const replaced = choose(state, '0>F', dice());
+  const T = replaced.state.teams[0];
+  assert.deepEqual([T.injuries.F, T.offPos.F, T.roster.F, T.subs[0].used], [0, 0, 'A. Prop', true]);
+  assert.deepEqual(T.off, [{ name: 'F. Eight', pos: 'F', stats: state.teams[0].players.F }]);
+  assert.equal(T.players.F.carries, 0, 'the replacement starts afresh');
   assert.deepEqual(replaced.state.step, state.step.next);
   const e = replaced.events.find(x => x.type === 'replacement');
-  assert.deepEqual([e.team, e.pos, e.cleared, e.when], [0, 'F', 1, 'injury']);
-  // Play on: the injury stays, the replacement waits.
+  assert.deepEqual([e.team, e.pos, e.cleared, e.when, e.on, e.off, e.offPos], [0, 'F', 1, 'injury', 'A. Prop', 'F. Eight', false]);
+  // The Centre on for the Forward: out of position, so the Forwards run at −1.
+  const misfit = choose(state, '1>F', dice()).state;
+  assert.deepEqual([misfit.teams[0].injuries.F, misfit.teams[0].offPos.F], [0, 1]);
+  const run = roll({ ...structuredClone(misfit), step: { type: 'roll', purpose: 'attack', dice: ['F'], team: 0 }, attacker: 0, carrier: 'F', quickTap: 0 }, dice(0)).events.find(x => x.type === 'run');
+  assert.deepEqual([run.value, run.offPos, run.intensity], [5, 1, 4]);
+  // Play on: the injury stays, the bench waits.
   const stayed = choose(state, 'stay', dice());
   assert.equal(stayed.state.teams[0].injuries.F, 1);
-  assert.equal(stayed.state.teams[0].bench, 1);
+  assert.ok(stayed.state.teams[0].subs.every(x => !x.used));
   assert.ok(stayed.events.some(x => x.type === 'playOn'));
-  for (const r of [replaced, stayed]) for (const line of narrate(r.events, r.state).lines) assert.doesNotMatch(line.text, BROKEN_TEXT);
+  for (const r of [replaced, stayed, choose(state, '1>F', dice())]) for (const line of narrate(r.events, r.state).lines) assert.doesNotMatch(line.text, BROKEN_TEXT);
 });
 
-test('the bench: any injured player can come off, and none is offered without a replacement', () => {
+test('the bench: any injured player can come off, each replacement once, and none is offered without one', () => {
   const { state } = roll(injuredState({ injuries: [{ S: 1, W: 2 }, {}] }), dice(bigHit, bigHit));
-  assert.deepEqual(state.step.options, ['S', 'F', 'W', 'stay']);
-  const r = choose(state, 'W', dice());
+  assert.deepEqual(state.step.options, ['0>F', '1>F', '2>F', '0>S', '1>S', '2>S', '2>W', '0>W', '1>W', 'stay'], 'the one just hurt first, in-position replacements first');
+  const r = choose(state, '2>W', dice());
   assert.equal(r.events.find(e => e.type === 'replacement').cleared, 2, 'a fresh player: the whole penalty goes');
-  assert.ok(!isLegal(state, { type: 'choose', value: 'C' }), 'only injured players');
-  // No bench (off, or used this half): no question.
+  assert.ok(!isLegal(state, { type: 'choose', value: '0>C' }), 'only injured players');
+  // No bench (off, or all three used): no question.
   for (const m of [injuredState({ bench: false }), (() => {
     const used = injuredState();
-    used.teams[0].bench = 0;
+    used.teams[0].subs.forEach(x => (x.used = true));
     return used;
   })()]) {
     const out = roll(m, dice(bigHit, bigHit));
@@ -188,44 +199,49 @@ test('the bench: any injured player can come off, and none is offered without a 
   assert.notEqual(roll(injuredState(), dice(tackle1, tackle1)).state.step.purpose, 'bench');
 });
 
-test('the bench at half time: a fresh replacement each, and the chance to use it on an old injury', () => {
-  const m = stateAt({ step: { type: 'halftime' }, half: 1, scores: [15, 6], firstReceiver: 0, injuries: [{ C: 1 }, { B: 1 }] });
+test('the bench at half time: as many changes as there are replacements for the injured, the side kicking off first', () => {
+  const m = stateAt({ step: { type: 'halftime' }, half: 1, scores: [15, 6], firstReceiver: 0, injuries: [{ C: 1, F: 1 }, { B: 1 }] });
   m.bench = true;
-  m.teams.forEach(t => (t.bench = 0));
+  m.teams.forEach(t => (t.subs = BENCH.map(x => ({ ...x, used: false }))));
   let { state, events } = act(m, { type: 'continue' }, dice());
   assert.ok(events.some(e => e.type === 'secondHalf'));
-  assert.deepEqual(state.teams.map(t => t.bench), [1, 1], 'a fresh replacement each');
-  // The side kicking off decides first, the side receiving it last.
+  // The side kicking off decides first, and may make two changes.
   assert.deepEqual([state.step.purpose, state.step.when, state.step.team], ['bench', 'halftime', 0]);
-  ({ state, events } = choose(state, 'C', dice()));
-  assert.deepEqual([state.step.purpose, state.step.team], ['bench', 1]);
+  ({ state } = choose(state, '1>C', dice()));
+  assert.deepEqual([state.step.purpose, state.step.team], ['bench', 0], 'another change for the same side');
+  assert.deepEqual(state.step.options, ['0>F', '2>F', 'stay']);
+  ({ state } = choose(state, '0>F', dice()));
+  assert.deepEqual([state.step.purpose, state.step.team], ['bench', 1], 'then the side receiving');
   ({ state, events } = choose(state, 'stay', dice()));
   assert.ok(events.some(e => e.type === 'possession' && e.reason === 'kickoff' && e.team === 1), 'then the kick-off');
-  assert.deepEqual([state.teams[0].injuries.C, state.teams[0].bench, state.teams[1].injuries.B, state.teams[1].bench], [0, 0, 1, 1]);
+  assert.deepEqual([state.teams[0].injuries.C, state.teams[0].injuries.F, state.teams[1].injuries.B], [0, 0, 1]);
+  assert.equal(state.teams[0].subs.filter(x => x.used).length, 2);
   // Nobody hurt: straight to the kick-off.
   const fit = stateAt({ step: { type: 'halftime' }, half: 1, scores: [15, 6] });
   fit.bench = true;
   assert.equal(act(fit, { type: 'continue' }, dice()).state.step.purpose, 'attack');
 });
 
-test('the CPU and the bench: off comes the costliest injury, at once', () => {
-  const ask = (pos, injuries, { when = 'injury', half = 1, scores = [0, 0] } = {}) => stateAt({ step: { type: 'choose', purpose: 'bench', team: 0, when, pos, options: [...injuredPositions(stateAt({ injuries: [injuries, {}] }), 0), 'stay'], next: null }, half, scores, injuries: [injuries, {}] });
-  assert.equal(benchChoice(ask('F', { F: 1 })), 'F');
-  assert.equal(benchChoice(ask('S', { S: 1 })), 'S', 'holding on measured no better');
-  assert.equal(benchChoice(ask(null, { S: 1 }, { when: 'halftime' })), 'S');
-  // With two hurt, the one who carries more goes off; a −2 outweighs a −1.
-  assert.equal(benchChoice(ask('B', { B: 1, F: 1 })), 'F');
-  assert.equal(benchChoice(ask('F', { S: 2, F: 1 })), 'F', 'Forwards −1 (0.34) beats Scrum Half −2 (0.2)');
-  assert.equal(benchChoice(ask('W', { B: 2, W: 1 })), 'B');
+test('the CPU and the bench: a replacement in position for the costliest injury; out of position only for a bad one', () => {
+  const ask = (pos, injuries, subs = BENCH, when = 'injury') => {
+    const m = stateAt({ injuries: [injuries, {}] });
+    m.bench = true;
+    m.teams[0].subs = subs.map(x => ({ ...x, used: false }));
+    m.step = { type: 'choose', purpose: 'bench', team: 0, when, pos, options: benchOptions(m, 0, pos), next: null };
+    return m;
+  };
+  assert.equal(benchChoice(ask('F', { F: 1 })), '0>F');
+  assert.equal(benchChoice(ask('W', { W: 1 })), '2>W');
+  // Nobody of that position on the bench: a −1 injury is no worse than a replacement out of position.
+  assert.equal(benchChoice(ask('S', { S: 1 })), 'stay');
+  assert.equal(benchChoice(ask('S', { S: 2 })), '0>S', 'a −2 is worth a replacement at −1');
+  // With two hurt, the one who carries more goes off first.
+  assert.equal(benchChoice(ask('C', { C: 1, F: 1 })), '0>F');
+  assert.equal(benchChoice(ask(null, { C: 1 }, BENCH, 'halftime')), '1>C');
   assert.ok(CARRY_SHARE.F > CARRY_SHARE.S);
-  // A threshold keeps a small injury early in a half, but not late or at half time.
-  assert.equal(benchChoice(ask('S', { S: 1 }), 0.18), 'stay');
-  assert.equal(benchChoice(ask('S', { S: 1 }, { scores: [12, 4] }), 0.18), 'S');
-  assert.equal(benchChoice(ask(null, { S: 1 }, { when: 'halftime' }), 0.18), 'S');
-  assert.equal(benchChoice(ask('S', { S: 2 }), 0.18), 'S');
-  // Rookie: whoever was just hurt, straight off; Expert uses the Pro rule.
-  assert.equal(cpuChoice({ ...ask('B', { B: 1, F: 1 }), cpuLevel: 'rookie' }, seededRng(1)), 'B');
-  assert.equal(cpuChoice({ ...ask('B', { B: 1, F: 1 }), cpuLevel: 'expert' }), 'F');
+  // Rookie: the first offered; Expert uses the Pro rule.
+  assert.equal(cpuChoice({ ...ask('S', { S: 1 }), cpuLevel: 'rookie' }, seededRng(1)), '0>S');
+  assert.equal(cpuChoice({ ...ask('S', { S: 1 }), cpuLevel: 'expert' }), 'stay');
 });
 
 test('the coach explains the bench, the rain and the wind the first time', () => {
@@ -239,17 +255,39 @@ test('the coach explains the bench, the rain and the wind the first time', () =>
   assert.equal(tipFor(kick, [], ['kick'], true), 'wind');
 });
 
-test('saves from before the weather and the bench load with both off', () => {
+test('saves from before the weather and the bench load with both off; an old bench gets three nameless replacements', () => {
   const old = structuredClone(newMatch({ mode: '1p', cards: true }));
   old.version = 4;
   delete old.weather;
   delete old.bench;
-  old.teams.forEach(t => delete t.bench);
+  old.teams.forEach(t => {
+    delete t.subs;
+    delete t.off;
+    delete t.offPos;
+    delete t.injured;
+  });
   const m = migrate(old);
   assert.equal(m.version, VERSION);
   assert.equal(m.weather, null);
   assert.equal(m.bench, false);
-  assert.deepEqual(m.teams.map(t => t.bench), [0, 0]);
+  assert.deepEqual(m.teams.map(t => t.subs), [[], []]);
+  // Version 6, the bench on, mid-decision: positions become replacements.
+  const v6 = injuredState();
+  const asked = roll(v6, dice(bigHit, bigHit)).state;
+  asked.version = 6;
+  asked.step.options = ['F', 'stay'];
+  asked.teams.forEach(t => {
+    t.bench = 1;
+    delete t.subs;
+    delete t.off;
+    delete t.offPos;
+    delete t.injured;
+  });
+  const up = migrate(asked);
+  assert.deepEqual(up.teams[0].subs.map(x => [x.name, x.pos]), [[null, 'F'], [null, 'C'], [null, 'W']]);
+  assert.deepEqual(up.step.options, ['0>F', '1>F', '2>F', 'stay']);
+  assert.ok(up.teams.every(t => !('bench' in t)));
+  assert.equal(choose(up, '0>F', dice()).state.teams[0].injuries.F, 0);
 });
 
 test('whole matches with the weather and the bench, CPU against CPU, finish within the rules', () => {
@@ -260,9 +298,9 @@ test('whole matches with the weather and the bench, CPU against CPU, finish with
     for (let guard = 0; m.step.type !== 'fulltime'; guard++) {
       assert.ok(guard < 4000);
       const s = m.step;
-      // Half the matches keep a small injury's replacement early on, so both choices come up.
-      const bench = s.purpose === 'bench' && g % 2 ? benchChoice(m, 0.18) : null;
-      const a = s.type === 'roll' ? { type: 'roll' } : s.type === 'halftime' ? { type: 'continue' } : { type: 'choose', value: bench ?? cpuChoice({ ...m, cpuLevel: g % 3 ? 'pro' : 'rookie' }, rng) };
+      // A third of the matches pick changes at random, so out-of-position ones come up.
+      const random = s.purpose === 'bench' && g % 3 === 0 ? s.options[Math.floor(rng() * s.options.length)] : null;
+      const a = s.type === 'roll' ? { type: 'roll' } : s.type === 'halftime' ? { type: 'continue' } : { type: 'choose', value: random ?? cpuChoice({ ...m, cpuLevel: g % 3 ? 'pro' : 'rookie' }, rng) };
       const out = act(m, a, rng);
       for (const e of out.events) {
         if (e.type === 'wetBall') seen.wet++;

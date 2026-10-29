@@ -23,7 +23,7 @@ export const TIPS = {
   'line-break': { title: 'Line break!', text: 'The tackle total fell short of the intensity. The black die decides whether it ends in a try.' },
   'sin-bin': { title: 'Sin bin', text: 'A yellow card means −1 on each brown die that side rolls in a tackle, for the rest of the half. A second yellow makes it −2 for the match.' },
   injury: { title: 'Injury', text: 'Two Big Hits in one tackle hurt the ball carrier: that player runs at −1 for the rest of the match, unless a replacement comes on.' },
-  bench: { title: 'The bench', text: 'One replacement a half clears an injured player’s penalty. Use it now, or keep it in case someone who carries more (the Forwards) gets hurt. An unused one is gone at half time.' },
+  bench: { title: 'The bench', text: 'Three replacements, each on once, for a hurt player: the replacement has no injury. One playing out of position runs at −1, so a Forward for a Forward is best. Injured players miss their next match.' },
   rain: { title: 'Rain', text: 'A wet ball: the Forwards’ and Centres’ ‹Pass› face is a knock-on in the rain. Their Hit Ups are as good as ever; the Scrum Half’s passes are safe.' },
   wind: { title: 'Wind', text: 'Kicks with the wind at your back go 10 m further, and 10 m shorter into it. The ends change at half time, so the wind swaps sides.' },
   'card-played': { title: 'Team card in play', text: '' },

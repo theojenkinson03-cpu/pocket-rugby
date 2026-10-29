@@ -334,16 +334,19 @@ export function narrate(events, match) {
         break;
 
       case 'replacement': {
-        const off = player(e.team, e.pos);
+        const bare = n => n.replace(/^[A-Z]\.\s*/, '');
+        const on = e.on ? `${bare(e.on)} (${PLAYERS[e.from].one})` : `a replacement ${PLAYERS[e.from].one}`;
+        const off = e.off ? bare(e.off) : `the ${PLAYERS[e.pos].one}`;
         const when = e.when === 'halftime' ? 'Half-time change' : 'Fresh legs';
-        say(`${when}: a replacement comes on for ${off}. The −${e.cleared} injury is gone.`, e.team, 'big');
-        head('Replacement', `${name(e.team)} clear the −${e.cleared} on the ${PLAYERS[e.pos].name}. No more replacements this half.`);
-        out.moments.push({ kind: 'replacement', team: e.team, pos: e.pos, title: 'Replacement', sub: `${pos(e.pos)}: fresh legs` });
+        const misfit = e.offPos ? ` Out of position at ${PLAYERS[e.pos].one}: −1 on those runs.` : '';
+        say(`${when}: ${on} comes on for ${off}. The −${e.cleared} injury is gone.${misfit}`, e.team, 'big');
+        head('Replacement', `${cap(on)} on for ${off}${e.offPos ? ', out of position (−1)' : ''}.`);
+        out.moments.push({ kind: 'replacement', team: e.team, pos: e.pos, title: 'Replacement', sub: `${e.on ? bare(e.on) : pos(e.from)} on for ${off}` });
         break;
       }
       case 'playOn':
-        say(`${name(e.team)} play on, keeping their replacement for later${e.when === 'halftime' ? ' in the half' : ''}.`, e.team);
-        head('Playing on', `${name(e.team)} keep the replacement on the bench.`);
+        say(`${name(e.team)} play on and keep the bench for later.`, e.team);
+        head('Playing on', `${name(e.team)} keep their replacements on the bench.`);
         break;
       case 'wetBall':
         break;

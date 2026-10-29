@@ -7,13 +7,15 @@ import assert from 'node:assert/strict';
 import { act, MATCH_LENGTHS, newMatch, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import {
-  bonusFor, classCards, ratingOf, WORLD_CUP, worldCupRound16,
+  bonusFor, classCards, ratingOf, selectSide, unavailable, WORLD_CUP, worldCupRound16,
   advance, clash, createCup, createLeague, currentRound, isUserFixture, kits, LEAGUES, matchOptions, migrateTournament, NATIONS, NEUTRAL_GROUNDS,
   POINTS, QUALIFY, recordResult, resultFromMatch, roundName, roundRobin, SHORT_SEASON, simulateFixture, simulateRound, stageName, standings,
   TEAM_BY_ID, teamOf, userAlive, userFixture, userRecord, venue,
 } from '../js/tournament.js';
 import { PATTERNS } from '../js/color.js';
-import { SQUADS } from '../js/squads.js';
+import { realRoster, realSquad, SQUAD_SHAPE, SQUADS } from '../js/squads.js';
+import { STAT_KEYS } from '../js/season.js';
+import { POSITIONS } from '../js/dice.js';
 
 const pairKey = (a, b) => [a, b].sort().join('-');
 
@@ -65,7 +67,7 @@ test('the World Cup: the real 2027 pools, 24 nations, the user in one of them', 
     // Every match at one of the eight grounds in Australia.
     assert.ok(t.fixtures.every(f => WORLD_CUP.venues.includes(f.venue)));
     // Every side has its real five.
-    for (const team of t.teams) assert.deepEqual(team.roster, SQUADS[team.id]);
+    for (const team of t.teams) assert.deepEqual(team.roster, realRoster(team.id));
     assert.equal(currentRound(t), 0);
     assert.ok(isUserFixture(t, userFixture(t)));
   }
@@ -512,7 +514,8 @@ test('tournaments saved before grounds and kits get them on load', () => {
 });
 
 test('a match result is recorded from the right side', () => {
-  const m = newMatch({ mode: '1p' });
+  const names = side => Object.fromEntries(POSITIONS.map(p => [p, `${side}. ${p}name`]));
+  const m = newMatch({ mode: '1p', teams: [{ name: 'Mine', color: '#123456', roster: names('M') }, { name: 'Theirs', color: '#654321', roster: names('T') }] });
   m.teams[0].score = 30;
   m.teams[1].score = 12;
   m.teams[0].stats.tries = 5;
@@ -526,12 +529,17 @@ test('a match result is recorded from the right side', () => {
   const away = resultFromMatch(f, m, false);
   assert.deepEqual(brief(home), { score: [30, 12], tries: [5, 2], winner: 'home' });
   assert.deepEqual(brief(away), { score: [12, 30], tries: [2, 5], winner: 'away' });
-  // Player numbers go with their side, and so does the Player of the Match.
-  assert.equal(home.players[0].W[3], 3, 'the user at home: their Outside Backs scored 3');
-  assert.equal(away.players[1].W[3], 3, 'the user away: their numbers are the away side\'s');
-  assert.equal(away.players[0].F[4], 9);
-  assert.deepEqual(home.potm, { side: 0, pos: 'W' });
-  assert.deepEqual(away.potm, { side: 1, pos: 'W' });
+  // Player numbers go with their side, by name, and so does the Player of the Match.
+  const tries = (r, side, pos) => r.lines[side].find(([, p]) => p === pos)[2 + STAT_KEYS.indexOf('tries')];
+  assert.equal(tries(home, 0, 'W'), 3, 'the user at home: their Outside Back scored 3');
+  assert.equal(tries(away, 1, 'W'), 3, 'the user away: their numbers are the away side\'s');
+  assert.equal(away.lines[0].find(([, p]) => p === 'F')[2 + STAT_KEYS.indexOf('tackles')], 9);
+  assert.equal(home.lines[0].find(([, p]) => p === 'W')[0], m.teams[0].roster.W);
+  assert.deepEqual(home.potm, { side: 0, pos: 'W', name: m.teams[0].roster.W });
+  assert.deepEqual(away.potm, { side: 1, pos: 'W', name: m.teams[0].roster.W });
+  // Who was hurt goes with their side too.
+  m.teams[0].injured = [m.teams[0].roster.F];
+  assert.deepEqual(resultFromMatch(f, m, false).injured, [[], [m.teams[0].roster.F]]);
 });
 
 test('simulated fixtures are real matches: a winner on the target, tries that add up', () => {
@@ -598,21 +606,97 @@ test('whole tournaments play out to one champion, the user alive exactly while t
   }
 });
 
-test('real squads: five different players for every nation and club, short enough for the dice', () => {
+test('the team sheet: five to start, three on the bench, the injured left out', () => {
+  const t = createLeague({ league: 'prem', userTeam: 'bath', bench: true, rng: seededRng(3) });
+  const bath = teamOf(t, 'bath');
+  const at = pos => bath.squad.filter(x => x.pos === pos).map(x => x.name);
+  // By itself: the first at each position, and a Forward, a Centre and an Outside Back on the bench.
+  const side = selectSide(bath);
+  assert.deepEqual(side.roster, bath.roster);
+  assert.deepEqual(side.bench, [{ name: at('F')[1], pos: 'F' }, { name: at('C')[1], pos: 'C' }, { name: at('W')[1], pos: 'W' }]);
+  assert.deepEqual(side.offPos, {});
+  // Injured: the next fit player at the position starts.
+  const hurt = selectSide(bath, [at('F')[0], at('S')[0]]);
+  assert.deepEqual([hurt.roster.F, hurt.roster.S], [at('F')[1], at('S')[1]]);
+  assert.ok(!hurt.bench.some(b => [at('F')[0], at('S')[0]].includes(b.name)));
+  // Both Scrum Halves out: someone fit plays there, out of position.
+  const none = selectSide(bath, at('S'));
+  assert.ok(!at('S').includes(none.roster.S));
+  assert.deepEqual(none.offPos, { S: 1 });
+  // A team sheet is kept where its players are fit, the rest filled in.
+  const pick = { start: { F: at('F')[3], W: at('C')[2] }, bench: [at('S')[1], at('B')[1]] };
+  const picked = selectSide(bath, [], pick);
+  assert.deepEqual([picked.roster.F, picked.roster.W, picked.roster.S], [at('F')[3], at('C')[2], at('S')[0]]);
+  assert.deepEqual(picked.offPos, { W: 1 }, 'a Centre on the wing plays out of position');
+  assert.deepEqual(picked.bench.map(b => b.name), [at('S')[1], at('B')[1], at('F')[0]]);
+  assert.deepEqual(selectSide(bath, [at('F')[3]], pick).roster.F, at('F')[0], 'an injured pick sits out');
+  // No duplicates, ever.
+  for (const s2 of [side, hurt, none, picked]) {
+    const names = [...Object.values(s2.roster), ...s2.bench.map(b => b.name)];
+    assert.equal(new Set(names).size, 8);
+  }
+});
+
+test('injuries: a player hurt in a match misses the side\'s next one, then is back', () => {
+  const t = createLeague({ league: 'urc', userTeam: 'munster', length: 'quick', bench: true, rng: seededRng(4) });
+  t.userTeam = 'nobody';
+  let checked = 0;
+  for (let guard = 0; t.stage === 'league' && guard < 20; guard++) {
+    // Before the round: each side's injured from its last match are out of its picked side.
+    const round = currentRound(t);
+    for (const f of t.fixtures.filter(x => x.round === round && !x.result)) {
+      for (const id of [f.home, f.away]) {
+        const out = unavailable(t, id);
+        const [home, away] = kits(t, f);
+        const side = id === f.home ? home : away;
+        const playing = [...Object.values(side.roster), ...side.bench.map(b => b.name)];
+        assert.ok(out.every(name => !playing.includes(name)), `${id}: the injured sit out`);
+        checked += out.length;
+      }
+    }
+    simulateRound(t, seededRng(guard + 1));
+    advance(t);
+  }
+  assert.ok(checked > 3, `${checked} injured players kept out`);
+  // A match with injuries, then the side's next.
+  const f = t.fixtures.find(x => x.result?.injured?.[0]?.length);
+  const id = f.home;
+  const later = t.fixtures.filter(x => x.result && (x.home === id || x.away === id));
+  const i = later.indexOf(f);
+  assert.ok(i >= 0);
+  if (i + 1 < later.length) {
+    const next = later[i + 1];
+    const lines = next.result.lines[next.home === id ? 0 : 1].map(([name]) => name);
+    assert.ok(f.result.injured[0].every(name => !lines.includes(name)), 'missed the next match');
+  }
+});
+
+test('real squads: fifteen different players for every nation and club, by position, short enough for the dice', () => {
   const sides = [...NATIONS, ...Object.values(LEAGUES).flatMap(l => l.teams)];
   assert.equal(sides.length, 24 + 51);
+  let real = 0;
   for (const side of sides) {
-    const squad = SQUADS[side.id];
-    assert.ok(squad, `${side.id} has a squad`);
-    assert.deepEqual(Object.keys(squad), ['S', 'F', 'C', 'W', 'B']);
-    assert.equal(new Set(Object.values(squad)).size, 5, `${side.id}: five different players`);
-    for (const name of Object.values(squad)) {
-      assert.match(name, /^[A-Z]\. [A-Za-zÀ-ÿ' -]+$/, `${side.id}: "${name}"`);
+    const known = SQUADS[side.id];
+    assert.ok(known, `${side.id} has a squad`);
+    assert.deepEqual(Object.keys(known), ['S', 'F', 'C', 'W', 'B']);
+    for (const pos of POSITIONS) assert.ok(known[pos].length >= 1 && known[pos].length <= SQUAD_SHAPE[pos], `${side.id} ${pos}`);
+    real += POSITIONS.reduce((n, p) => n + known[p].length, 0);
+    const squad = realSquad(side.id, side.flavour);
+    assert.equal(squad.length, 15);
+    assert.deepEqual(POSITIONS.map(p => squad.filter(x => x.pos === p).length), [2, 5, 3, 3, 2]);
+    assert.equal(new Set(squad.map(x => x.name)).size, 15, `${side.id}: fifteen different players`);
+    for (const pos of POSITIONS) assert.deepEqual(squad.filter(x => x.pos === pos).slice(0, known[pos].length).map(x => x.name), known[pos], 'the real ones first');
+    assert.deepEqual(realSquad(side.id, side.flavour), squad, 'the same every time');
+    for (const { name } of squad) {
+      assert.match(name, /^[A-Z]\. [\p{L}' -]+$/u, `${side.id}: "${name}"`);
       assert.ok(name.length <= 26, `${side.id}: "${name}" fits`);
     }
+    assert.deepEqual(realRoster(side.id), Object.fromEntries(POSITIONS.map(p => [p, known[p][0]])));
   }
+  assert.ok(real > 900, `${real} real players`);
   assert.equal(Object.keys(SQUADS).length, sides.length, 'no squad without a side');
   // Leagues and the Champions Cup field real players too.
   const t = createLeague({ league: 'urc', userTeam: 'munster', rng: seededRng(2) });
-  assert.deepEqual(teamOf(t, 'leinster').roster, SQUADS.leinster);
+  assert.deepEqual(teamOf(t, 'leinster').roster, realRoster('leinster'));
+  assert.equal(teamOf(t, 'leinster').squad.length, 15);
 });

@@ -1,6 +1,7 @@
 // Player names, ratings and Player of the Match.
 
 import { PLAYERS, POSITIONS } from './dice.js';
+import { lineup } from './engine.js';
 
 // Common surnames, grouped by the flavour of a side. Picked at random, so any
 // match with a real person is a coincidence; the most famous rugby surnames
@@ -64,12 +65,13 @@ export function rating(p) {
   return p.tries * 6 + p.lineBreaks * 2.5 + p.carries * 0.3 + (p.metres || 0) * 0.1 + p.tackles + p.bigHits * 1.5 + p.turnovers * 3 + (p.passes || 0) * 0.1 + p.points * 0.8 - p.errors * 1.5 - (p.missed || 0);
 }
 
+// Everyone who played, replacements and those they replaced included.
 export function playerRatings(match) {
   const rows = [];
   match.teams.forEach((t, team) => {
-    for (const pos of POSITIONS) {
-      const stats = t.players?.[pos];
-      if (stats) rows.push({ team, pos, name: fullName(match, team, pos), stats, rating: rating(stats) });
+    if (!t.players) return;
+    for (const p of lineup(match, team)) {
+      rows.push({ team, pos: p.pos, name: p.name || `${t.name} ${PLAYERS[p.pos].one}`, stats: p.stats, rating: rating(p.stats), sub: p.sub, onField: p.onField });
     }
   });
   return rows.sort((a, b) => b.rating - a.rating);

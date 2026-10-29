@@ -2,7 +2,8 @@
 // momentum chart of each side's chance of winning through the match.
 
 import { PLAYERS, POSITIONS } from './dice.js';
-import { playerOfTheMatch, possessive, statLine, surname } from './players.js';
+import { playerOfTheMatch, possessive, statLine } from './players.js';
+import { lineup } from './engine.js';
 import { dieChip } from './dice-view.js';
 import { el, svgEl } from './dom.js';
 import { kitVars } from './color.js';
@@ -58,14 +59,19 @@ export function playersTables(match, potm = playerOfTheMatch(match)) {
     const thead = el('thead');
     thead.append(head);
     const body = el('tbody');
-    const best = COLUMNS.map(([, short, get]) => (WORSE.has(short) ? null : Math.max(1, ...POSITIONS.map(p => get(team.players[p])))));
-    for (const pos of POSITIONS) {
-      const p = team.players[pos];
+    // Everyone who played, in position order: a player taken off, then their replacement.
+    const players = lineup(match, t).sort((a, b) => POSITIONS.indexOf(a.pos) - POSITIONS.indexOf(b.pos));
+    const best = COLUMNS.map(([, short, get]) => (WORSE.has(short) ? null : Math.max(1, ...players.map(p => get(p.stats)))));
+    for (const player of players) {
+      const p = player.stats;
       const row = el('tr');
+      if (!player.onField) row.classList.add('off');
       const name = el('th', 'pl-name');
       name.scope = 'row';
-      name.append(dieChip(pos), el('span', null, surname(match, t, pos) || PLAYERS[pos].name));
-      if (potm && potm.team === t && potm.pos === pos) {
+      name.append(dieChip(player.pos), el('span', null, player.name ? player.name.replace(/^[A-Z]\.\s*/, '') : PLAYERS[player.pos].name));
+      if (player.sub) name.append(el('span', 'pl-sub', '↑'));
+      if (!player.onField) name.append(el('span', 'pl-off', '↓'));
+      if (potm && potm.team === t && potm.pos === player.pos && potm.name === (player.name || potm.name)) {
         const star = el('span', 'pl-star', '★');
         star.title = 'Player of the Match';
         name.append(star);

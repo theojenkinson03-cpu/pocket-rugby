@@ -4,7 +4,7 @@
 import { DICE, POSITIONS } from './dice.js';
 import { CARD_IDS, cardEffects, cardsWith, cardWith, DEAL_SIZE, DRAFT_ORDER, rollRarity } from './cards.js';
 
-export const VERSION = 6;
+export const VERSION = 7;
 
 // Two ways to play a match. 'points': first to `full` wins, with half time
 // when either side reaches `half`. 'rolls': a match clock of `rolls` dice
@@ -33,11 +33,19 @@ export const QUICK_TAP_RUNS = 3;
 // One side has it at their backs in the first half and the ends change at
 // half time.
 //
-// The bench: once a half each side may bring on a replacement for an
-// injured player, which clears that player's injury penalty. The choice
-// comes when a player is hurt (any injured player may be replaced then) and
-// at half time, with the second half's replacement.
+// The bench: up to three named replacements of any position, each coming
+// on once, for an injured player: the replacement has none of the injury.
+// One playing out of position runs at −1. The choice comes when a player is
+// hurt (any injured player may come off then) and at half time, when a side
+// may make as many changes as it has replacements for injured players.
 export const WET_HANDS = ['F', 'C'];
+
+// The bench a side gets when none is named: a Forward, a Centre and an
+// Outside Back, the players who carry (and so get hurt) most.
+export const DEFAULT_BENCH = [{ name: null, pos: 'F' }, { name: null, pos: 'C' }, { name: null, pos: 'W' }];
+export const BENCH_SIZE = 3;
+const benchOf = kit => (kit.bench || DEFAULT_BENCH).slice(0, BENCH_SIZE).map(s => ({ name: s.name ?? null, pos: POSITIONS.includes(s.pos) ? s.pos : 'F', used: false }));
+const zeros = () => ({ S: 0, F: 0, C: 0, W: 0, B: 0 });
 export const WIND_METRES = 1;
 
 // Conditions for a match: rain on about one match in three, wind on half of
@@ -206,13 +214,19 @@ export function newMatch({
       color: kit.color,
       // A patterned shirt (see color.js), or null for plain.
       kit: kit.kit || null,
+      // Who is on the field at each position now.
       roster: kit.roster ? { ...kit.roster } : null,
       score: 0,
-      injuries: { S: 0, F: 0, C: 0, W: 0, B: 0 },
+      injuries: zeros(),
       yellows: 0,
       sinBin: false,
-      // Replacements left this half.
-      bench: bench ? 1 : 0,
+      // The bench: [{name, pos, used}]; who has come off, with their numbers;
+      // positions played out of position (−1); everyone hurt this match.
+      subs: bench ? benchOf(kit) : [],
+      off: [],
+      // A team sheet with nobody fit at a position starts someone out of it.
+      offPos: { ...zeros(), ...kit.offPos },
+      injured: [],
       // Team cards drafted for this match: [{id, rarity}].
       cards: [],
       cardUses: freshUses(),
@@ -258,6 +272,8 @@ export function migrate(match) {
   m.lastPlay ??= false;
   m.suddenDeath ??= false;
   m.target = { ...MATCH_LENGTHS[m.length], ...m.target };
+  // A bench decision saved part way through offered positions, not players.
+  const migrateBench = m.step.purpose === 'bench' && m.step.options.some(o => POSITIONS.includes(o));
   // A draft saved part way through: the picks so far say whose turn it is.
   if (m.step.purpose === 'draft' && m.step.pick === undefined) {
     m.step.pick = m.teams.reduce((n, t) => n + (t.cards?.length || (t.card ? 1 : 0)), 0);
@@ -265,8 +281,13 @@ export function migrate(match) {
   }
   for (const t of m.teams) {
     t.kit ??= null;
-    t.bench ??= 0;
     t.roster ??= null;
+    // Before version 7 the bench was one nameless replacement a half.
+    t.subs ??= m.bench ? benchOf({}) : [];
+    delete t.bench;
+    t.off ??= [];
+    t.offPos ??= zeros();
+    t.injured ??= [];
     // One card each before version 6.
     t.cards ??= t.card ? [{ id: t.card, rarity: t.cardRarity || 'common' }] : [];
     delete t.card;
@@ -275,6 +296,7 @@ export function migrate(match) {
     t.players = Object.fromEntries(POSITIONS.map(p => [p, { ...emptyPlayer(), ...t.players?.[p] }]));
     t.stats = { ...emptyStats(), ...t.stats };
   }
+  if (migrateBench) m.step.options = benchOptions(m, m.step.team);
   m.version = VERSION;
   return m;
 }
@@ -289,7 +311,8 @@ export function defenceModifier(match, team) {
   return t.sinBin ? -1 : 0;
 }
 
-// Intensity of a run once quick tap, team cards and injuries are counted.
+// Intensity of a run once quick tap, team cards, injuries and a replacement
+// out of position are counted.
 // With no face given, only the quick tap and the injury apply.
 export function intensityParts(match, team, pos, value, face = null) {
   const quickTap = match.attacker === team && match.quickTap > 0 ? 1 : 0;
@@ -298,7 +321,8 @@ export function intensityParts(match, team, pos, value, face = null) {
   const defence = face ? cardEffects(match, other(team)) : NO_EFFECTS;
   const fortress = (face?.special ? defence.specialDefence : value >= (defence.hitUpDefenceFrom || 0) ? defence.hitUpDefence : 0) || 0;
   const injury = match.teams[team].injuries[pos];
-  return { value, quickTap, card, fortress, injury, intensity: Math.max(1, value + quickTap + card - fortress - injury) };
+  const offPos = match.teams[team].offPos?.[pos] || 0;
+  return { value, quickTap, card, fortress, injury, offPos, intensity: Math.max(1, value + quickTap + card - fortress - injury - offPos) };
 }
 
 export function runIntensity(match, team, pos, value, face = null) {
@@ -628,9 +652,11 @@ function onTackle(m, ev, rng) {
 
   if (result.injury) {
     A.injuries[carrier]++;
+    const name = A.roster?.[carrier] ?? null;
+    if (name && !A.injured.includes(name)) A.injured.push(name);
     ev.push({ type: 'injury', team: att, pos: carrier, penalty: A.injuries[carrier] });
   }
-  const hurt = result.injury && A.bench > 0;
+  const hurt = result.injury && freeSubs(A).length > 0;
 
   const metres = carryMetres(result.outcome, intensity, result.total, carrier);
   A.stats.metres += metres;
@@ -677,23 +703,48 @@ function onTackle(m, ev, rng) {
 
 // The injured positions a replacement could come on for.
 export const injuredPositions = (match, team) => POSITIONS.filter(p => match.teams[team].injuries[p] > 0);
+// Replacements still on the bench, with their places in it.
+export const freeSubs = t => t.subs.map((sub, i) => ({ ...sub, i })).filter(sub => !sub.used);
+const canChange = (m, team) => freeSubs(m.teams[team]).length > 0 && injuredPositions(m, team).length > 0;
+
+// Every change a side could make: "i>pos" brings replacement i on at an
+// injured position (one in position first), or 'stay' plays on.
+export function benchOptions(m, team, first = null) {
+  const T = m.teams[team];
+  const hurt = injuredPositions(m, team).sort((a, b) => (b === first) - (a === first));
+  const options = [];
+  for (const pos of hurt) {
+    const subs = freeSubs(T).sort((a, b) => (b.pos === pos) - (a.pos === pos));
+    for (const sub of subs) options.push(`${sub.i}>${pos}`);
+  }
+  return [...options, 'stay'];
+}
 
 // Asks `team` whether to bring on a replacement, then carries on with
 // `next` (a step, or 'kickoff' for the second half's kick-off).
 function offerBench(m, team, when, pos, next) {
-  const options = [...injuredPositions(m, team), 'stay'];
-  m.step = { type: 'choose', purpose: 'bench', team, when, pos, options, next };
+  m.step = { type: 'choose', purpose: 'bench', team, when, pos, options: benchOptions(m, team, pos), next };
 }
 
-// Half time: each side with an injury and a replacement may make a change,
+// Half time: each side with an injury and a replacement may make changes,
 // the side receiving the kick-off last. Returns false when nobody can.
 function halfTimeBench(m, after = null) {
   const receiver = other(m.firstReceiver);
   const order = [other(receiver), receiver].filter(t => after === null || (after !== receiver && t === receiver));
-  const team = order.find(t => m.teams[t].bench > 0 && injuredPositions(m, t).length);
+  const team = order.find(t => canChange(m, t));
   if (team === undefined) return false;
   offerBench(m, team, 'halftime', null, 'kickoff');
   return true;
+}
+
+// Everyone who has played for a side, with their numbers: those on the
+// field now and those who came off.
+export function lineup(match, team) {
+  const T = match.teams[team];
+  const subs = new Set(T.subs.filter(s => s.used).map(s => s.name));
+  const on = POSITIONS.map(pos => ({ name: T.roster?.[pos] ?? null, pos, stats: T.players[pos], sub: subs.has(T.roster?.[pos]), onField: true }));
+  const off = T.off.map(o => ({ name: o.name, pos: o.pos, stats: o.stats, sub: subs.has(o.name), onField: false }));
+  return [...off, ...on];
 }
 
 function onRuck(m, ev, rng) {
@@ -917,12 +968,22 @@ function onChoose(m, ev, value) {
       if (value === 'stay') {
         ev.push({ type: 'playOn', team: step.team, pos: step.pos, when: step.when });
       } else {
-        const cleared = T.injuries[value];
-        T.injuries[value] = 0;
-        T.bench--;
-        ev.push({ type: 'replacement', team: step.team, pos: value, cleared, when: step.when });
+        const [i, pos] = value.split('>');
+        const sub = T.subs[Number(i)];
+        const cleared = T.injuries[pos];
+        const offName = T.roster?.[pos] ?? null;
+        // The player coming off keeps their numbers; the replacement starts afresh.
+        T.off.push({ name: offName, pos, stats: T.players[pos] });
+        T.players[pos] = emptyPlayer();
+        if (T.roster) T.roster[pos] = sub.name;
+        T.injuries[pos] = 0;
+        T.offPos[pos] = sub.pos === pos ? 0 : 1;
+        sub.used = true;
+        ev.push({ type: 'replacement', team: step.team, pos, cleared, when: step.when, on: sub.name, off: offName, from: sub.pos, offPos: sub.pos !== pos });
       }
       if (step.next !== 'kickoff') m.step = step.next;
+      // At half time a side may make another change before the other side's turn.
+      else if (value !== 'stay' && canChange(m, step.team)) offerBench(m, step.team, 'halftime', null, 'kickoff');
       else if (!halfTimeBench(m, step.team)) startPossession(m, ev, other(m.firstReceiver), 'kickoff');
       break;
     }
@@ -1014,7 +1075,6 @@ export function actInPlace(m, action, rng = Math.random) {
     m.lastPlay = false;
     m.teams.forEach((t, i) => {
       t.sinBin = false;
-      t.bench = m.bench ? 1 : 0;
       refreshUses(m, i);
     });
     ev.push({ type: 'secondHalf', ...(windWith(m) !== null ? { wind: windWith(m) } : {}) });

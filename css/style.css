@@ -2150,6 +2150,10 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 .players-table td.top { font-weight: 800; }
 .players-table td.zero { color: var(--muted); }
 .pl-star { margin-left: 4px; color: #c98a0b; }
+.pl-sub, .pl-off { margin-left: 3px; font-size: 0.8em; font-weight: 800; }
+.pl-sub { color: #23955a; }
+.pl-off { color: #c8432f; }
+.players-table tr.off { opacity: 0.75; }
 .sheet .players-key { margin: 0; font-size: 12px; color: var(--muted); }
 
 .momentum { display: grid; gap: 8px; margin: 0; text-align: left; }

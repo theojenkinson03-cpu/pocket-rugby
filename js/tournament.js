@@ -3,12 +3,13 @@
 // play-off format. Other fixtures are played out by the engine, CPU against
 // CPU, with the stronger side given the edge.
 
-import { act, newMatch, rollWeather } from './engine.js';
+import { act, lineup, newMatch, rollWeather } from './engine.js';
 import { cpuChoice } from './ai.js';
 import { CARD_IDS } from './cards.js';
-import { playerOfTheMatch, randomRoster } from './players.js';
-import { packPlayers } from './season.js';
-import { realRoster } from './squads.js';
+import { playerOfTheMatch } from './players.js';
+import { packLineup } from './season.js';
+import { realSquad } from './squads.js';
+import { POSITIONS } from './dice.js';
 
 // The 24 nations at the 2027 World Cup. rating: how strong a side is, 1 to
 // 5, which gives the stronger side the edge in matches the CPU plays out
@@ -265,10 +266,75 @@ function fixture(id, stage, round, home, away, group = null) {
   return { id, stage, round, group, home, away, result: null };
 }
 
-// Every side with its real players (made-up names for a side we don't know).
-function makeTeams(roster, rng) {
-  return roster.map(team => ({ ...team, roster: realRoster(team.id) || randomRoster(team.flavour, rng) }));
+// Every side with its squad of fifteen (see squads.js) and its first-choice five.
+function makeTeams(roster) {
+  return roster.map(team => {
+    const squad = realSquad(team.id, team.flavour);
+    return { ...team, squad, roster: firstFive(squad) };
+  });
 }
+const firstFive = squad => Object.fromEntries(POSITIONS.map(p => [p, squad.find(x => x.pos === p)?.name ?? null]));
+
+// ---- Squads, the team sheet and injuries -------------------------------------
+//
+// A match day picks five to start, one for each die, and three replacements
+// of any position. Anyone hurt in a side's last match misses this one.
+
+// Who is out injured for a side's next match: those hurt in its last one.
+export function unavailable(t, id) {
+  const fixtures = t.fixtures || [];
+  for (let i = fixtures.length - 1; i >= 0; i--) {
+    const f = fixtures[i];
+    if (!f.result || (f.home !== id && f.away !== id)) continue;
+    return f.result.injured?.[f.home === id ? 0 : 1] || [];
+  }
+  return [];
+}
+
+// The replacements a side picks by itself: a Forward, a Centre and an
+// Outside Back (the players who carry, and get hurt, most), then anyone.
+const BENCH_ORDER = ['F', 'C', 'W', 'B', 'S'];
+
+// A side for a match: {roster, bench, offPos}. `pick` is a team sheet,
+// {start: {pos: name}, bench: [name]}, kept where those players are fit;
+// the rest is the first fit player at each position, and the bench as above.
+// With nobody fit at a position, the first fit player plays out of position.
+export function selectSide(team, out = [], pick = null) {
+  const squad = team.squad?.length ? team.squad : POSITIONS.map(pos => ({ name: team.roster?.[pos] ?? null, pos }));
+  const fit = squad.filter(p => !out.includes(p.name));
+  const used = new Set();
+  const roster = {};
+  const offPos = {};
+  for (const pos of POSITIONS) {
+    const free = p => !used.has(p.name);
+    const player = fit.find(p => free(p) && p.name === pick?.start?.[pos]) || fit.find(p => free(p) && p.pos === pos) || fit.find(free);
+    if (!player) continue;
+    used.add(player.name);
+    roster[pos] = player.name;
+    if (player.pos !== pos) offPos[pos] = 1;
+  }
+  const bench = [];
+  for (const name of pick?.bench || []) {
+    const player = fit.find(p => p.name === name && !used.has(p.name));
+    if (player && bench.length < 3) {
+      used.add(player.name);
+      bench.push(player);
+    }
+  }
+  for (let round = 0; bench.length < 3 && round < 3; round++) {
+    for (const pos of BENCH_ORDER) {
+      const player = fit.find(p => p.pos === pos && !used.has(p.name));
+      if (player && bench.length < 3 && (round > 0 || !bench.some(b => b.pos === pos))) {
+        used.add(player.name);
+        bench.push(player);
+      }
+    }
+  }
+  return { roster, bench: bench.map(({ name, pos }) => ({ name, pos })), offPos };
+}
+
+// A side picked for a fixture: the user's team sheet for the user's side.
+export const sideFor = (t, id) => selectSide(teamOf(t, id), unavailable(t, id), t.picks?.[id]);
 
 // The World Cup: the real pools, three matches each, at the eight grounds.
 export function createCup({ userTeam, length = 'quick', format = 'points', cards = true, bench = false, weather = false, rng = Math.random }) {
@@ -284,7 +350,7 @@ export function createCup({ userTeam, length = 'quick', format = 'points', cards
     }));
   }
   const field = Object.values(pools).flat().map(id => NATIONS.find(x => x.id === id));
-  return { kind: 'cup', worldCup: true, name: W.name, short: W.short, length, format, cards, bench, weather, userTeam, host: W.host, teams: makeTeams(field, rng), pools, fixtures, stage: 'pool', champion: null, byes: [] };
+  return { kind: 'cup', worldCup: true, name: W.name, short: W.short, length, format, cards, bench, weather, userTeam, host: W.host, teams: makeTeams(field), pools, fixtures, stage: 'pool', champion: null, byes: [] };
 }
 
 // The round of 16 from the pool tables: winners and runners-up into their
@@ -330,7 +396,7 @@ export function createLeague({ league = 'prem', userTeam, length = 'quick', form
     bench,
     weather,
     userTeam,
-    teams: makeTeams(L.teams, rng),
+    teams: makeTeams(L.teams),
     pools: { L: field },
     fixtures,
     stage: 'league',
@@ -393,7 +459,7 @@ export function createChampions({ userTeam, length = 'quick', format = 'points',
     bench,
     weather,
     userTeam,
-    teams: makeTeams(field, rng),
+    teams: makeTeams(field),
     pools,
     poolRounds: C.poolRounds,
     neutral: { ...C.neutral },
@@ -432,7 +498,22 @@ export function migrateTournament(t) {
     side.ground ??= known.ground;
     side.rating ??= known.rating;
     if (known.kit) side.kit ??= known.kit;
+    // Squads of fifteen came with the team sheet: the five already playing
+    // stay first at their positions (made-up ones take the first place).
+    if (!side.squad) {
+      const squad = realSquad(side.id, known.flavour);
+      for (const pos of POSITIONS) {
+        const name = side.roster?.[pos];
+        const first = squad.findIndex(x => x.pos === pos);
+        const at = squad.findIndex(x => x.name === name && x.pos === pos);
+        if (!name || at === first) continue;
+        if (at < 0) squad[first] = { name, pos };
+        else [squad[first], squad[at]] = [squad[at], squad[first]];
+      }
+      side.squad = squad;
+    }
   }
+  t.picks ??= {};
   t.byes ??= [];
   t.format ??= 'points';
   return t;
@@ -484,13 +565,13 @@ function stripAgainst(team, other) {
   return { color: [team.alt, ...NEUTRALS].find(c => c && !clash(c, other)) || team.color, kit: null };
 }
 
-const dressed = (team, strip) => ({ name: team.name, ...strip, roster: team.roster });
+const dressed = (team, strip, side) => ({ name: team.name, ...strip, roster: side.roster, bench: side.bench, offPos: side.offPos });
 
-// Kits for a fixture, home first. The away side changes strip on a clash.
+// Kits and sides for a fixture, home first. The away side changes strip on a clash.
 export function kits(t, f) {
   const home = teamOf(t, f.home);
   const away = teamOf(t, f.away);
-  return [dressed(home, { color: home.color, kit: home.kit || null }), dressed(away, stripAgainst(away, home.color))];
+  return [dressed(home, { color: home.color, kit: home.kit || null }, sideFor(t, f.home)), dressed(away, stripAgainst(away, home.color), sideFor(t, f.away))];
 }
 
 // A competition's rules for one of its matches: length and format, cards,
@@ -507,24 +588,27 @@ export function matchOptions(t, f) {
   const userHome = f.home === t.userTeam;
   const me = teamOf(t, t.userTeam);
   const opponent = teamOf(t, userHome ? f.away : f.home);
-  const mine = dressed(me, { color: me.color, kit: me.kit || null });
-  const theirs = dressed(opponent, stripAgainst(opponent, me.color));
+  const mine = dressed(me, { color: me.color, kit: me.kit || null }, sideFor(t, me.id));
+  const theirs = dressed(opponent, stripAgainst(opponent, me.color), sideFor(t, opponent.id));
   return { mode: '1p', teams: [mine, theirs], ...matchRules(t, Math.random, f), cpuLevel: opponent.level, cpuPersonality: opponent.personality, venue: venue(t, f) };
 }
 
 // A finished match as a fixture result, home side first: the score, tries,
-// each player's numbers (for the season stats) and the Player of the Match.
+// everyone who played with their numbers (for the season stats), who was
+// hurt (they miss the side's next match) and the Player of the Match.
 export function resultFromMatch(f, match, userIsHome) {
   const [mine, theirs] = match.teams;
   const home = userIsHome ? mine : theirs;
   const away = userIsHome ? theirs : mine;
+  const sides = userIsHome ? [0, 1] : [1, 0];
   const potm = playerOfTheMatch(match);
   return {
     score: [home.score, away.score],
     tries: [home.stats.tries, away.stats.tries],
     winner: match.winner === null ? 'draw' : (match.winner === 0) === userIsHome ? 'home' : 'away',
-    players: [packPlayers(home.players), packPlayers(away.players)],
-    potm: potm ? { side: (potm.team === 0) === userIsHome ? 0 : 1, pos: potm.pos } : null,
+    lines: sides.map(i => packLineup(lineup(match, i))),
+    injured: [[...(home.injured || [])], [...(away.injured || [])]],
+    potm: potm ? { side: (potm.team === 0) === userIsHome ? 0 : 1, pos: potm.pos, name: potm.name } : null,
   };
 }
 

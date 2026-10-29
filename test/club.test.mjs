@@ -22,10 +22,9 @@ function playOut(t, rng, userWins = null) {
         const userHome = f.home === t.userTeam;
         const want = userWins ? (userHome ? 'home' : 'away') : (userHome ? 'away' : 'home');
         if (r.winner !== want) {
+          // The players keep their sides: only the score turns round.
           r.score.reverse();
           r.tries.reverse();
-          r.players.reverse();
-          if (r.potm) r.potm.side = 1 - r.potm.side;
           r.winner = want;
         }
       }

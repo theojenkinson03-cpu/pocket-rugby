@@ -1,6 +1,6 @@
 // Screen controller: menus, the match loop, animation and persistence.
 
-import { act, controllerOf, DECISION_SECONDS, drafterOf, kickBonus, kickCards, kickChance, kickParts, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollsLeft, rollWeather, TIMED_DECISIONS, windWith } from './engine.js';
+import { act, controllerOf, DECISION_SECONDS, drafterOf, freeSubs, kickBonus, kickCards, kickChance, kickParts, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollsLeft, rollWeather, TIMED_DECISIONS, windWith } from './engine.js';
 import { cpuChoiceAsync, LEVELS, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
 import { CARD_BY_ID, CARDS, cardEffects, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
@@ -1209,10 +1209,10 @@ function renderBoard(m) {
     }
     if (m.attacker === team && m.quickTap > 0) status.append(chip(`Tap +1 ×${m.quickTap}`, null, 'tap'));
     // A replacement waiting on the bench matters once someone is hurt.
-    if (t.bench > 0 && POSITIONS.some(p => t.injuries[p])) {
+    if (freeSubs(t).length && POSITIONS.some(p => t.injuries[p])) {
       const c = chip('Bench', null, 'bench');
       c.append(el('span', 'chip-more', ' ready'));
-      c.title = `${t.name} can bring on a replacement this half`;
+      c.title = `${t.name} have ${freeSubs(t).length} on the bench`;
       status.append(c);
     }
   }
@@ -1576,21 +1576,25 @@ function renderDock(m, locked) {
     return;
   }
   if (step.purpose === 'bench') {
-    const injured = step.options.filter(o => o !== 'stay');
-    actions.classList.add(injured.length + 1 >= 3 ? 'three' : 'two');
+    const changes = step.options.filter(o => o !== 'stay');
+    actions.classList.add('two');
     const T = m.teams[step.team];
-    for (const pos of injured) {
-      const name = surname(m, step.team, pos);
+    for (const option of changes) {
+      const [i, pos] = option.split('>');
+      const sub = T.subs[Number(i)];
+      const off = surname(m, step.team, pos) || PLAYERS[pos].one;
+      const misfit = sub.pos !== pos;
       actions.append(choiceButton({
         die: pos,
-        title: `Replace ${name || PLAYERS[pos].one}`,
-        sub: `Clears the −${T.injuries[pos]}`,
-        suggested: tip === pos,
-        onClick: choose(pos),
+        title: `${sub.name ? sub.name.replace(/^[A-Z]\.\s*/, '') : `Replacement ${PLAYERS[sub.pos].one}`} on`,
+        sub: `For ${off} · clears the −${T.injuries[pos]}${misfit ? ` · a ${PLAYERS[sub.pos].one} out of position: −1` : ''}`,
+        suggested: tip === option,
+        onClick: choose(option),
         locked,
       }));
     }
-    actions.append(choiceButton({ icon: '↺', title: 'Play on', sub: 'Keep the sub for later', suggested: tip === 'stay', onClick: choose('stay'), locked }));
+    const left = freeSubs(T).length;
+    actions.append(choiceButton({ icon: '↺', title: 'Play on', sub: `Keep the bench (${left} left)`, suggested: tip === 'stay', onClick: choose('stay'), locked }));
     return;
   }
   if (step.purpose === 'pass') {

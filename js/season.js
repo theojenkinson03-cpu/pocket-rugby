@@ -14,6 +14,9 @@ export function packPlayers(players) {
   return Object.fromEntries(POSITIONS.map(pos => [pos, STAT_KEYS.map(k => players?.[pos]?.[k] || 0)]));
 }
 
+// Everyone who played for a side, as [name, pos, ...values of STAT_KEYS].
+export const packLineup = players => players.map(p => [p.name, p.pos, ...STAT_KEYS.map(k => p.stats?.[k] || 0)]);
+
 export function unpackPlayer(row) {
   const p = emptyPlayer();
   STAT_KEYS.forEach((k, i) => (p[k] = row?.[i] || 0));
@@ -33,25 +36,43 @@ export const LEADER_STATS = [
   ['lineBreaks', 'Most line breaks', p => p.lineBreaks, ['line break', 'line breaks']],
 ];
 
-// Everyone who has played: one row per team and position, with their
-// totals, appearances, summed match rating and Player of the Match awards.
+// Everyone who has played: one row per team and player, with their totals,
+// appearances, summed match rating and Player of the Match awards. A
+// player's position is where their squad lists them. Results saved before
+// squads kept numbers by position, for the side's five.
 export function seasonPlayers(t) {
   const rows = new Map();
   const teams = new Map(t.teams.map(team => [team.id, team]));
+  const add = (id, name, slot, values, potm) => {
+    const team = teams.get(id);
+    const pos = team?.squad?.find(x => x.name === name)?.pos || slot;
+    const key = `${id}:${name ?? slot}`;
+    if (!rows.has(key)) rows.set(key, { key, team: id, pos, name: name || slot, apps: 0, rating: 0, potm: 0, ...emptyPlayer() });
+    const row = rows.get(key);
+    const match = unpackPlayer(values);
+    row.apps++;
+    for (const k of STAT_KEYS) row[k] += match[k];
+    row.rating += rating(match);
+    if (potm) row.potm++;
+  };
   for (const f of t.fixtures) {
-    const lines = f.result?.players;
-    if (!lines) continue;
+    const r = f.result;
+    if (!r?.lines && !r?.players) continue;
     [f.home, f.away].forEach((id, side) => {
-      const team = teams.get(id);
-      for (const pos of POSITIONS) {
-        const key = `${id}:${pos}`;
-        if (!rows.has(key)) rows.set(key, { key, team: id, pos, name: team?.roster?.[pos] || pos, apps: 0, rating: 0, potm: 0, ...emptyPlayer() });
-        const row = rows.get(key);
-        const match = unpackPlayer(lines[side]?.[pos]);
-        row.apps++;
-        for (const k of STAT_KEYS) row[k] += match[k];
-        row.rating += rating(match);
-        if (f.result.potm && f.result.potm.side === side && f.result.potm.pos === pos) row.potm++;
+      const isPotm = (name, pos) => !!r.potm && r.potm.side === side && (r.potm.name ? r.potm.name === name : r.potm.pos === pos);
+      if (r.lines) {
+        // A player who came off and on again in another place counts once.
+        const seen = new Map();
+        for (const [name, pos, ...values] of r.lines[side] || []) {
+          const prior = seen.get(name);
+          if (prior) values.forEach((v, i) => (prior[i] += v));
+          else seen.set(name, [...values]);
+          if (!prior) seen.get(name).pos = pos;
+        }
+        for (const [name, values] of seen) add(id, name, values.pos, values, isPotm(name, values.pos));
+      } else {
+        const team = teams.get(id);
+        for (const pos of POSITIONS) add(id, team?.roster?.[pos] || null, pos, r.players[side]?.[pos], isPotm(team?.roster?.[pos], pos));
       }
     });
   }

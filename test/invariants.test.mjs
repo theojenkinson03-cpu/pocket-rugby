@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, carryMetres, controllerOf, defenceModifier, halfRolls, isLegal, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, rollWeather, seededRng, TIMED_DECISIONS, timeUp, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
+import { act, carryMetres, controllerOf, defenceModifier, halfRolls, isLegal, lineup, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, rollWeather, seededRng, TIMED_DECISIONS, timeUp, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { cardEffects, CARD_IDS, RARITY_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
@@ -112,18 +112,25 @@ function checkState(m, label) {
     const pending = step.purpose === 'tackle' && m.attacker === i ? 1 : 0;
     assert.equal(s.runs, m.teams[1 - i].stats.tackles + s.lineBreaks + pending, `${label}: team ${i} runs = tackles faced + breaks`);
     assert.equal(s.lineBreaks, m.teams[1 - i].stats.missedTackles, `${label}: breaks = missed tackles`);
+    // Everyone who has played, on the field or off it.
     for (const [player, team] of PLAYER_SUMS) {
-      assert.equal(POSITIONS.reduce((n, p) => n + t.players[p][player], 0), s[team], `${label}: team ${i} players' ${player} add up`);
+      assert.equal(lineup(m, i).reduce((n, p) => n + p.stats[player], 0), s[team], `${label}: team ${i} players' ${player} add up`);
     }
   });
   checkCards(m, label);
 
-  // The bench: at most one replacement a half, none with the bench off.
-  m.teams.forEach((t, i) => assert.ok(m.bench ? t.bench === 0 || t.bench === 1 : t.bench === 0, `${label}: team ${i} bench ${t.bench}`));
+  // The bench: up to three, none with the bench off; each comes on once, and
+  // a position is off-position exactly when a replacement from elsewhere plays it.
+  m.teams.forEach((t, i) => {
+    assert.ok(m.bench ? t.subs.length <= 3 : t.subs.length === 0, `${label}: team ${i} bench`);
+    assert.equal(t.off.length, t.subs.filter(x => x.used).length, `${label}: one off for each on`);
+    for (const pos of POSITIONS) assert.ok(t.offPos[pos] === 0 || t.offPos[pos] === 1, `${label}: off position`);
+  });
   if (step.purpose === 'bench') {
     const T = m.teams[step.team];
-    assert.ok(m.bench && T.bench === 1, `${label}: a replacement is only offered with one on the bench`);
-    assert.deepEqual(step.options, [...POSITIONS.filter(p => T.injuries[p] > 0), 'stay'], `${label}: any injured player, or play on`);
+    assert.ok(m.bench && T.subs.some(x => !x.used), `${label}: a replacement is only offered with one on the bench`);
+    const want = POSITIONS.filter(p => T.injuries[p] > 0).flatMap(p => T.subs.map((x, j) => (x.used ? null : `${j}>${p}`)).filter(Boolean));
+    assert.deepEqual([...step.options].sort(), [...want, 'stay'].sort(), `${label}: any replacement for any injured player, or play on`);
     assert.ok(step.options.length >= 2, `${label}: someone is injured`);
     if (step.when === 'injury') assert.ok(T.injuries[step.pos] > 0, `${label}: the player just hurt`);
   }
@@ -216,16 +223,20 @@ function checkEvents(before, after, events, label) {
   assert.equal(injuryDelta, injured - cleared, `${label}: injuries`);
   for (const e of events.filter(x => x.type === 'replacement')) {
     assert.equal(before.step.purpose, 'bench', `${label}: replacements come from the bench decision`);
-    assert.equal(after.teams[e.team].injuries[e.pos], 0, `${label}: a fresh player has no injury`);
-    assert.equal(after.teams[e.team].bench, before.teams[e.team].bench - 1, `${label}: the replacement is used up`);
+    const [T0, T1] = [before.teams[e.team], after.teams[e.team]];
+    assert.equal(T1.injuries[e.pos], 0, `${label}: a fresh player has no injury`);
+    assert.equal(T1.subs.filter(x => x.used).length, T0.subs.filter(x => x.used).length + 1, `${label}: the replacement is used up`);
+    assert.equal(T1.offPos[e.pos], e.from === e.pos ? 0 : 1, `${label}: out of position only from elsewhere`);
+    assert.deepEqual(T1.off.at(-1), { name: T0.roster?.[e.pos] ?? null, pos: e.pos, stats: T0.players[e.pos] }, `${label}: the player off keeps their numbers`);
+    if (T1.roster) assert.equal(T1.roster[e.pos], e.on, `${label}: the replacement takes the place`);
   }
-  // An injury with a replacement on the bench always asks the question.
+  // An injury with a replacement on the bench always asks the question, and the player hurt is noted.
   const hurt = events.find(e => e.type === 'injury');
-  if (hurt && before.teams[hurt.team].bench > 0) {
+  if (hurt && before.teams[hurt.team].subs.some(x => !x.used)) {
     assert.equal(after.step.purpose, 'bench', `${label}: bench decision after an injury`);
     assert.equal(after.step.team, hurt.team, `${label}: the injured side decides`);
   }
-  if (events.some(e => e.type === 'secondHalf')) after.teams.forEach((t, i) => assert.equal(t.bench, before.bench ? 1 : 0, `${label}: team ${i} has a fresh replacement for the second half`));
+  if (hurt && before.teams[hurt.team].roster) assert.ok(after.teams[hurt.team].injured.includes(before.teams[hurt.team].roster[hurt.pos]), `${label}: the injured player is noted`);
 
   // Weather: a wet ball only for the Forwards and Centres, in the rain, on a free pass.
   for (const e of events.filter(x => x.type === 'wetBall')) {
@@ -295,7 +306,8 @@ function checkEvents(before, after, events, label) {
     assert.equal(e.fortress, (face.special ? fort.specialDefence : face.value >= (fort.hitUpDefenceFrom || 0) ? fort.hitUpDefence : 0) || 0, `${label}: Fortress`);
     assert.equal(e.quickTap, before.attacker === e.team && before.quickTap > 0 ? 1 : 0, `${label}: quick tap`);
     assert.equal(e.injury, before.teams[e.team].injuries[e.pos], `${label}: injury`);
-    assert.equal(e.intensity, Math.max(1, e.value + e.quickTap + e.card - e.fortress - e.injury), `${label}: intensity`);
+    assert.equal(e.offPos, before.teams[e.team].offPos[e.pos], `${label}: out of position`);
+    assert.equal(e.intensity, Math.max(1, e.value + e.quickTap + e.card - e.fortress - e.injury - e.offPos), `${label}: intensity`);
   }
 
   // Cards: never change once picked; only play for the side holding them.
