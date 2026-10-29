@@ -132,7 +132,18 @@ export function narrate(events, match) {
 
       case 'possession':
         if (e.reason === 'kickoff') say(`${name(e.team)} gather the kick-off. Scrum Half to play.`, e.team);
-        else if (e.reason === 'restart') say(`${name(e.team)} take the restart. Scrum Half to play.`, e.team);
+        else if (e.reason === 'restart' && !events.some(x => x.type === 'restart')) say(`${name(e.team)} take the restart. Scrum Half to play.`, e.team);
+        break;
+
+      case 'restart':
+        if (e.regathered) {
+          say(`${name(e.team)} kick off and chase... ${e.kick} on the black die: they win it back!`, e.team, 'big');
+          head('Won back!', `${name(e.team)} regather the kick-off. Their ball.`);
+          out.moments.push({ kind: 'turnover', team: e.team, title: 'Won back', sub: 'The kick-off' });
+        } else {
+          say(`${name(e.team)} kick off. ${e.kick} on the black die: ${name(e.receiver)} take it cleanly.`, e.receiver);
+          head('Kick-off caught', `${name(e.receiver)} have the ball. It needed 4 or more to win it back.`);
+        }
         break;
 
       case 'run': {

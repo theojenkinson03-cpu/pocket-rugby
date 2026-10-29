@@ -63,7 +63,7 @@ async function snapshot(page) {
       };
     });
     const drafting = !document.querySelector('#draft').hidden;
-    const buttons = [...document.querySelectorAll(drafting ? '#draft-cards button' : '#actions button')].map(b => ({ text: b.textContent.trim(), disabled: b.disabled, waiting: b.classList.contains('waiting'), choice: b.hasAttribute('data-choice'), card: b.dataset.card || null, rarity: b.dataset.rarity || null }));
+    const buttons = [...document.querySelectorAll(drafting ? '#draft-cards button' : '#actions button:not(.auto-btn)')].map(b => ({ text: b.textContent.trim(), disabled: b.disabled, waiting: b.classList.contains('waiting'), choice: b.hasAttribute('data-choice'), card: b.dataset.card || null, rarity: b.dataset.rarity || null }));
     const carrier = document.querySelector('.tok.carrier');
     return {
       match: saved?.match || null,
@@ -85,11 +85,14 @@ async function snapshot(page) {
       wind: document.querySelector('#conditions .wind')?.textContent || null,
       // The dice guide and the badges, and the match clock.
       guide: document.querySelector('#guide').hidden ? null : [...document.querySelectorAll('#guide .gf')].map(b => [...b.classList].find(c => c.startsWith('tone-'))),
-      guideTitle: document.querySelector('#guide-head')?.textContent || '',
+      guideTitle: document.querySelector('#guide-text')?.textContent || '',
       rollBadge: document.querySelector('#actions .roll-btn .die-badge')?.textContent || null,
       clock: document.querySelector('#board-clock').hidden ? null : document.querySelector('#board-clock b').textContent,
       boardCount: [0, 1].map(t => document.querySelectorAll(`.side[data-team="${t}"] .side-card .tc-chip`).length),
       order: [...document.querySelectorAll('#draft-order .dp')].map(li => li.textContent),
+      // The dice on the table: each one's die, face and which end it's on.
+      table: [...document.querySelectorAll('#tray-dice .die')].map(d => ({ die: d.dataset.die, face: Number(d.dataset.face), team: Number(d.closest('.duel-side')?.dataset.team) })),
+      ends: [...document.querySelectorAll('#tray-dice .duel-side')].map(s => Number(s.dataset.team)),
     };
   });
 }
@@ -103,6 +106,7 @@ const ROLL_LABELS = {
   penalty: () => /Card check/,
   kick: () => /Kick! Need \d+ m/,
   setpiece: () => /Feed the scrum|Throw in/,
+  restart: () => /Kick off/,
 };
 const NAMES = { S: 'Scrum Half', F: 'Forwards', C: 'Centres', W: 'Outside Backs', B: 'Fly Half' };
 
@@ -122,8 +126,13 @@ function verify(snap, label) {
   const step = m.step;
   const halfText = step.type === 'halftime' ? 'Half time' : m.suddenDeath ? 'Sudden death' : m.half === 1 ? '1st half' : '2nd half';
   check(snap.half === halfText, `${label}: board says "${snap.half}", expected "${halfText}"`);
-  if (step.type === 'roll' || step.type === 'choose') {
+  // A decision names the side over its buttons; a roll names it on the button.
+  if (step.type === 'choose' && step.purpose !== 'draft') {
     check(snap.prompt.includes(m.teams[step.team].name), `${label}: prompt "${snap.prompt}" names ${m.teams[step.team].name}`);
+  }
+  if (step.type === 'roll') {
+    const roll = snap.buttons[0];
+    check(roll && (roll.waiting || roll.text.includes(m.teams[step.team].name)), `${label}: roll button "${roll?.text}" names ${m.teams[step.team].name}`);
   }
   if (step.type === 'roll') {
     const main = snap.buttons[0];
@@ -187,6 +196,13 @@ function verify(snap, label) {
       check(choices.some(c => c.text.includes(`${who} on`) && c.text.includes(`clears the −${m.teams[step.team].injuries[pos]}`)), `${label}: replace ${o} (${who})`);
     }
   }
+  // The table: the left team's end on the left, and the last roll's dice on it as they landed.
+  if (snap.ends.length) check(JSON.stringify(snap.ends) === '[0,1]', `${label}: table ends ${snap.ends}`);
+  if (m.roll && snap.table.length) {
+    for (const [i, id] of m.roll.dice.entries()) {
+      check(snap.table.some(d => d.die === id && d.face === m.roll.faces[i]), `${label}: ${id} die shows face ${m.roll.faces[i]} (${m.roll.purpose}); table ${JSON.stringify(snap.table)}`);
+    }
+  }
   m.teams.forEach((t, i) => check(snap.boardCount[i] === t.cards.length, `${label}: team ${i} has ${t.cards.length} cards on the board, shows ${snap.boardCount[i]}`));
   m.teams.forEach((t, i) => check(snap.boardRarity[i] === (t.cards[0]?.rarity || null), `${label}: team ${i} card's rarity on the board`));
   if (m.attacker !== null && snap.meter) {
@@ -202,7 +218,7 @@ const tapAny = page => page.evaluate(() => {
     document.querySelector('#coach-ok').click();
     return;
   }
-  const buttons = [...document.querySelectorAll('#draft:not([hidden]) #draft-cards button:not([disabled]), #actions button:not([disabled])')];
+  const buttons = [...document.querySelectorAll('#draft:not([hidden]) #draft-cards button:not([disabled]), #actions button:not([disabled]):not(.auto-btn)')];
   buttons[Math.floor(Math.random() * buttons.length)]?.click();
 });
 
@@ -626,7 +642,8 @@ const SCENARIOS = {
     const prefs = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:prefs')));
     check(prefs.cinema === 'short', 'setting persisted');
     // The match log lists what happened, newest first.
-    await page.click('#feed .feed-more');
+    await page.click('#btn-menu');
+    await page.click('#dlg-menu [data-open="dlg-log"]');
     const logLines = await page.$$eval('#log-list li', li => li.length);
     check(logLines > 10, `match log has ${logLines} lines`);
     await page.click('#dlg-log [data-close]');

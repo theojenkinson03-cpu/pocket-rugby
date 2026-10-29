@@ -3,7 +3,8 @@
 // through the rules engine with the dice set to it, so the guide always
 // agrees with the rules, the team cards, injuries, the sin bin, the weather
 // and the clock. Each face gets a tone (good, so-so or bad for the side
-// rolling), a caption of a few words, and a sentence for anyone who taps it.
+// rolling), a caption of a few words, a tag (only what the face itself doesn't
+// already say, or nothing) and a sentence for anyone who taps it.
 
 import { act, defenceModifier, intensityParts, kickParts, tackleBonusFor } from './engine.js';
 import { DICE, METRES_PER_POINT, PLAYERS } from './dice.js';
@@ -52,18 +53,20 @@ function attackFace(m, i) {
     return {
       tone: run.special || p >= 0.3 ? 'good' : 'ok',
       caption: `Run ${run.intensity}`,
+      tag: run.intensity !== run.value ? `Runs ${run.intensity}` : `${pct(p)} break`,
       note: `${pct(p)} break`,
       text: `${label}: a run at intensity ${run.intensity}${changed}. The defence need ${run.intensity}+ on two brown dice to stop it; ${pct(p)} chance of a line break.`,
     };
   }
   const pass = find(events, 'pass');
-  if (pass) return { tone: 'ok', caption: `Pass ${PLAYERS[pass.to].short}`, note: 'keeps it', text: `A pass to the ${PLAYERS[pass.to].name}, who rolls next.` };
-  if (find(events, 'passChoice')) return { tone: 'ok', caption: 'Pass', note: `you pick${card}`, text: `A pass to anyone you choose${card}.` };
+  if (pass) return { tone: 'ok', caption: `Pass ${PLAYERS[pass.to].short}`, tag: '', note: 'keeps it', text: `A pass to the ${PLAYERS[pass.to].name}, who rolls next.` };
+  if (find(events, 'passChoice')) return { tone: 'ok', caption: 'Pass', tag: 'You pick', note: `you pick${card}`, text: `A pass to anyone you choose${card}.` };
   const drop = find(events, 'dropChance');
   if (drop) {
     return {
       tone: 'good',
       caption: 'Drop goal',
+      tag: 'Chance',
       note: 'chance',
       text: `${drop.from ? `The ${PLAYERS[drop.from].one} gives it back to the Fly Half` : 'The Fly Half drops into the pocket'}: a drop-goal chance${card}. Roll for the range, then kick or pass.`,
     };
@@ -72,10 +75,11 @@ function attackFace(m, i) {
   const error = find(events, 'error');
   if (error) {
     const caption = error.wet ? 'Wet ball' : error.error === 'knockon' ? 'Knock on' : 'Into touch';
-    return { tone: 'bad', caption, note: end?.note || (error.piece === 'scrum' ? 'their scrum' : 'their lineout'), text: `${error.wet ? 'In the rain this pass slips loose: knock on.' : `${caption}.`} ${end ? `The ball is dead: ${end.note.toLowerCase()}.` : `${error.piece === 'scrum' ? 'Scrum' : 'Lineout'} to the other side.`}` };
+    const note = end?.note || (error.piece === 'scrum' ? 'their scrum' : 'their lineout');
+    return { tone: 'bad', caption, tag: error.wet ? 'Wet ball' : note, note, text: `${error.wet ? 'In the rain this pass slips loose: knock on.' : `${caption}.`} ${end ? `The ball is dead: ${end.note.toLowerCase()}.` : `${error.piece === 'scrum' ? 'Scrum' : 'Lineout'} to the other side.`}` };
   }
-  if (find(events, 'intercept')) return { tone: 'bad', caption: 'Intercept', note: end?.note || 'their ball', text: 'Intercepted: the other side have the ball.' };
-  return { tone: 'ok', caption: DICE[pos].faces[i].label, note: '', text: DICE[pos].faces[i].label };
+  if (find(events, 'intercept')) return { tone: 'bad', caption: 'Intercept', tag: end?.note || 'their ball', note: end?.note || 'their ball', text: 'Intercepted: the other side have the ball.' };
+  return { tone: 'ok', caption: DICE[pos].faces[i].label, tag: '', note: '', text: DICE[pos].faces[i].label };
 }
 
 function tackleGuide(m) {
@@ -97,6 +101,7 @@ function tackleGuide(m) {
       return {
         tone: 'good',
         caption: 'Big Hit',
+        tag: ruck ? 'Ruck' : '',
         note: ruck ? 'ruck on 1st die' : 'stops it on 2nd',
         text: ruck ? 'Big Hit: on the first die it sets up a ruck contest for the ball; on the second it always completes the tackle.' : 'Big Hit: on the second die it always completes the tackle. Against a big move there is no ruck contest.',
       };
@@ -105,6 +110,7 @@ function tackleGuide(m) {
     return {
       tone: value * 2 >= intensity ? 'good' : 'ok',
       caption: `Counts ${value}`,
+      tag: diff ? `Counts ${value}` : '',
       note: diff ? `${f.value} ${diff > 0 ? '+' : '−'}${Math.abs(diff)}` : `of ${intensity}`,
       text: `${value}${diff ? ` (${f.value} on the die, ${diff > 0 ? '+' : '−'}${Math.abs(diff)})` : ''} towards the ${intensity} needed, with the other brown die.`,
     };
@@ -119,8 +125,8 @@ function ruckFace(m, i) {
   const card = find(events, 'cardPlayed') ? ' (team card)' : '';
   const end = whistle(events, m.step.team);
   return won
-    ? { tone: 'good', caption: 'Turnover', note: end?.note || (card ? 'card' : 'ball won'), text: `The ruck is won${card}: the ball changes hands${end ? `, and the ball is dead: ${end.note.toLowerCase()}` : ''}.` }
-    : { tone: 'bad', caption: 'Held', note: 'their ball', text: 'The attackers keep the ball and go again.' };
+    ? { tone: 'good', caption: 'Turnover', tag: end?.note || '', note: end?.note || (card ? 'card' : 'ball won'), text: `The ruck is won${card}: the ball changes hands${end ? `, and the ball is dead: ${end.note.toLowerCase()}` : ''}.` }
+    : { tone: 'bad', caption: 'Held', tag: '', note: 'their ball', text: 'The attackers keep the ball and go again.' };
 }
 
 function tryFace(m, i) {
@@ -128,13 +134,13 @@ function tryFace(m, i) {
   const { events } = rollWith(m, i);
   if (find(events, 'try')) {
     const end = whistle(events, team);
-    return { tone: 'good', caption: 'TRY', note: end?.note === 'Full time' ? 'wins it' : '+5', text: end?.note === 'Full time' ? 'A try, and that wins the match.' : 'A try: 5 points, then the conversion.' };
+    return { tone: 'good', caption: 'TRY', tag: end?.note === 'Full time' ? 'Wins it' : '+5', note: end?.note === 'Full time' ? 'wins it' : '+5', text: end?.note === 'Full time' ? 'A try, and that wins the match.' : 'A try: 5 points, then the conversion.' };
   }
-  if (find(events, 'videoRef')) return { tone: 'ok', caption: 'Video ref', note: 'roll again', text: 'Over to the video referee: roll the black die again.' };
-  if (find(events, 'cardPlayed')) return { tone: 'ok', caption: 'Roll again', note: 'team card', text: 'Not this time, but the team card gives another roll.' };
+  if (find(events, 'videoRef')) return { tone: 'ok', caption: 'Video ref', tag: 'Again', note: 'roll again', text: 'Over to the video referee: roll the black die again.' };
+  if (find(events, 'cardPlayed')) return { tone: 'ok', caption: 'Roll again', tag: 'Again', note: 'team card', text: 'Not this time, but the team card gives another roll.' };
   const no = find(events, 'noTry');
   const end = whistle(events, team);
-  return { tone: 'bad', caption: no?.heldUp ? 'Held up' : 'No try', note: end?.note || 'their ball', text: `${no?.heldUp ? 'Held up over the line' : 'No try'}: the other side have the ball.` };
+  return { tone: 'bad', caption: no?.heldUp ? 'Held up' : 'No try', tag: end?.note || 'their ball', note: end?.note || 'their ball', text: `${no?.heldUp ? 'Held up over the line' : 'No try'}: the other side have the ball.` };
 }
 
 function rangeFace(m, i) {
@@ -142,7 +148,7 @@ function rangeFace(m, i) {
   const r = find(events, 'range');
   const tone = r.chance >= 2 / 3 ? 'good' : r.chance >= 1 / 3 ? 'ok' : 'bad';
   const extra = r.bonus ? ` (${r.bonus > 0 ? '+' : '−'}${metres(Math.abs(r.bonus))} on the kick)` : '';
-  return { tone, caption: pct(r.chance), note: 'to land', text: `The posts ${metres(r.range)} away: ${pct(r.chance)} chance the kick lands${extra}.` };
+  return { tone, caption: pct(r.chance), tag: pct(r.chance), note: 'to land', text: `The posts ${metres(r.range)} away: ${pct(r.chance)} chance the kick lands${extra}.` };
 }
 
 function kickFace(m, i) {
@@ -155,15 +161,15 @@ function kickFace(m, i) {
   // A kicking card wins the restart back.
   const kept = events.some(e => e.type === 'cardPlayed' && e.what === 'keepBall');
   return k.good
-    ? { tone: 'good', caption: 'Over', note: end?.note === 'Full time' && end.tone === 'good' ? 'wins it' : end?.note || (kept ? 'ball back' : metres(k.distance)), text: `${what}: ${metres(k.distance)} reaches the ${metres(k.range)} needed.${after}${kept ? ' The team card wins the restart back.' : ''}` }
-    : { tone: 'bad', caption: 'Short', note: end?.note || metres(k.distance), text: `${metres(k.distance)} falls short of the ${metres(k.range)} needed.${after}` };
+    ? { tone: 'good', caption: 'Over', tag: kept ? 'Ball back' : 'Over', note: end?.note === 'Full time' && end.tone === 'good' ? 'wins it' : end?.note || (kept ? 'ball back' : metres(k.distance)), text: `${what}: ${metres(k.distance)} reaches the ${metres(k.range)} needed.${after}${kept ? ' The team card wins the restart back.' : ''}` }
+    : { tone: 'bad', caption: 'Short', tag: 'Short', note: end?.note || metres(k.distance), text: `${metres(k.distance)} falls short of the ${metres(k.range)} needed.${after}` };
 }
 
 function penaltyFace(m, i) {
   const { events } = rollWith(m, i, 0);
   const card = find(events, 'card');
-  if (card) return { tone: 'good', caption: card.color === 'red' ? 'Red card' : 'Yellow', note: 'for them', text: `The yellow dot: ${card.color === 'red' ? 'a second yellow, so a red card: −2 on each of their tackle dice for the match' : 'a yellow card: −1 on each of their tackle dice this half'}.` };
-  return { tone: 'ok', caption: 'No card', note: 'range next', text: 'No card. The brown die sets the distance for a kick at goal.' };
+  if (card) return { tone: 'good', caption: card.color === 'red' ? 'Red card' : 'Yellow', tag: card.color === 'red' ? 'Red' : '', note: 'for them', text: `The yellow dot: ${card.color === 'red' ? 'a second yellow, so a red card: −2 on each of their tackle dice for the match' : 'a yellow card: −1 on each of their tackle dice this half'}.` };
+  return { tone: 'ok', caption: 'No card', tag: '', note: 'range next', text: 'No card. The brown die sets the distance for a kick at goal.' };
 }
 
 function setPieceFace(m, i) {
@@ -172,19 +178,32 @@ function setPieceFace(m, i) {
   const sp = find(events, 'setPiece');
   const pen = find(events, 'penalty');
   const card = find(events, 'cardPlayed') ? ' (team card)' : '';
-  if (pen) return pen.team === team ? { tone: 'good', caption: 'Penalty', note: `to us${card}`, text: `Penalty to the side feeding${card}.` } : { tone: 'bad', caption: 'Penalty', note: 'to them', text: `Penalty to the other side${card}.` };
+  if (pen) return pen.team === team ? { tone: 'good', caption: 'Penalty', tag: card ? 'Card' : '', note: `to us${card}`, text: `Penalty to the side feeding${card}.` } : { tone: 'bad', caption: 'Penalty', tag: '', note: 'to them', text: `Penalty to the other side${card}.` };
   const end = whistle(events, team);
   const got = find(events, 'possession');
   if (got || end) {
     const ours = got ? got.team === team : end.tone === 'good';
     const word = sp.outcome === 'reset' ? 'Reset' : sp.outcome === 'notstraight' ? 'Crooked' : ours ? 'Clean ball' : 'Stolen';
-    return { tone: ours ? 'good' : 'bad', caption: word, note: end?.note || (ours ? `our ball${card}` : 'their ball'), text: `${ours ? 'The feeding side keep the ball' : 'The other side take it'}${card}.` };
+    return { tone: ours ? 'good' : 'bad', caption: word, tag: end?.note || (card ? 'Card' : ''), note: end?.note || (ours ? `our ball${card}` : 'their ball'), text: `${ours ? 'The feeding side keep the ball' : 'The other side take it'}${card}.` };
   }
-  if (sp.outcome === 'reset') return { tone: 'ok', caption: 'Reset', note: 'roll again', text: 'The scrum collapses: reset, roll again.' };
-  return { tone: 'bad', caption: 'Crooked', note: 'their throw', text: 'Not straight: the other side throw in instead.' };
+  if (sp.outcome === 'reset') return { tone: 'ok', caption: 'Reset', tag: 'Again', note: 'roll again', text: 'The scrum collapses: reset, roll again.' };
+  return { tone: 'bad', caption: 'Crooked', tag: 'their throw', note: 'their throw', text: 'Not straight: the other side throw in instead.' };
 }
 
-const FACES = { attack: attackFace, ruck: ruckFace, try: tryFace, range: rangeFace, kick: kickFace, penalty: penaltyFace, setpiece: setPieceFace };
+// The kick-off after a score, for the side kicking it: 4, 5 or 6 wins it back.
+function restartFace(m, i) {
+  const { events } = rollWith(m, i);
+  const r = find(events, 'restart');
+  return r.regathered
+    ? { tone: 'good', caption: 'Won back', tag: '', note: 'our ball', text: `${r.kick} on the black die: the chasers win the kick-off back.` }
+    : { tone: 'bad', caption: 'Caught', tag: '', note: 'their ball', text: `${r.kick} on the black die: the kick-off is caught. It needs 4 or more to win it back.` };
+}
+
+const FACES = { attack: attackFace, ruck: ruckFace, try: tryFace, range: rangeFace, kick: kickFace, penalty: penaltyFace, setpiece: setPieceFace, restart: restartFace };
+
+// Left to right, the faces read 1 to 6: the black die by the number on each
+// face, the others in the order of their faces (already low to high).
+export const faceOrder = dieId => DICE[dieId].faces.map((f, i) => i).sort((a, b) => (dieId === 'K' ? DICE.K.faces[a].kick - DICE.K.faces[b].kick : a - b));
 const FLIP = { good: 'bad', bad: 'good', ok: 'ok' };
 // Notes are written for the side rolling; for the other side, "our" is "their".
 const SWAP = { our: 'their', their: 'our', us: 'them', them: 'us' };
@@ -206,7 +225,10 @@ export function rollGuide(match, forTeam = match.step.team) {
     faces = DICE[step.dice[0]].faces.map((_, i) => FACES[step.purpose](match, i));
     if (step.purpose === 'penalty') summary = 'The black die checks for a card; the brown die sets the distance for a kick at goal.';
   }
-  const shown = faces.map((f, index) => ({ index, ...f, tone: flip ? FLIP[f.tone] : f.tone, note: flip ? swapped(f.note) : f.note }));
+  const shown = faceOrder(step.purpose === 'tackle' ? 'D' : step.dice[0]).map(index => {
+    const f = faces[index];
+    return { index, ...f, tone: flip ? FLIP[f.tone] : f.tone, note: flip ? swapped(f.note) : f.note, tag: flip ? swapped(f.tag) : f.tag };
+  });
   const good = shown.filter(f => f.tone === 'good').length;
   const bad = shown.filter(f => f.tone === 'bad').length;
   return { team: step.team, purpose: step.purpose, die: step.dice[0], dice: step.dice, faces: shown, summary, chance, good, bad };

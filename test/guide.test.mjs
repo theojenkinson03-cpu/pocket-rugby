@@ -6,12 +6,33 @@ import assert from 'node:assert/strict';
 
 import { act, halfRolls, newMatch, rollWeather, seededRng } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
-import { dieBadges, playerBadge, rollGuide } from '../js/guide.js';
+import { dieBadges, faceOrder, playerBadge, rollGuide as shownGuide } from '../js/guide.js';
 import { DICE } from '../js/dice.js';
 import { dice, faceOf, stateAt } from './helpers.mjs';
 
 const attack = (pos, opts = {}) => stateAt({ step: { type: 'roll', purpose: 'attack', dice: [pos], team: 0 }, carrier: pos, ...opts });
 const tones = g => g.faces.map(f => f.tone);
+// The guide as shown is in reading order (1 to 6); these tests look faces up by the die's own order.
+const rollGuide = (...args) => {
+  const g = shownGuide(...args);
+  return g && { ...g, faces: [...g.faces].sort((a, b) => a.index - b.index) };
+};
+
+test('the guide reads 1 to 6 left to right: the black die by its numbers, the others as they come', () => {
+  const kick = shownGuide(stateAt({ step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 4, kicker: 'B' } }));
+  assert.deepEqual(kick.faces.map(f => DICE.K.faces[f.index].kick), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(faceOrder('K').map(i => DICE.K.faces[i].kick), [1, 2, 3, 4, 5, 6]);
+  for (const id of ['S', 'F', 'C', 'W', 'B', 'D', 'R']) assert.deepEqual(faceOrder(id), [0, 1, 2, 3, 4, 5], id);
+  const tackle = shownGuide(stateAt({ step: { type: 'roll', purpose: 'tackle', dice: ['D', 'D'], team: 1, intensity: 5, carrier: 'F' } }));
+  assert.deepEqual(tackle.faces.map(f => DICE.D.faces[f.index].value), [1, 2, 3, 3, 4, 5]);
+});
+
+test('the kick-off guide: 4, 5 and 6 win it back for the side kicking', () => {
+  const m = stateAt({ step: { type: 'roll', purpose: 'restart', dice: ['K'], team: 1, receiver: 0 } });
+  const kicker = shownGuide(m);
+  assert.deepEqual(kicker.faces.map(f => f.tone), ['bad', 'bad', 'bad', 'good', 'good', 'good']);
+  assert.deepEqual(shownGuide(m, 0).faces.map(f => f.tone), ['good', 'good', 'good', 'bad', 'bad', 'bad'], 'the other way round for the scorers');
+});
 
 test('the guide only speaks when a roll is coming', () => {
   assert.equal(rollGuide(stateAt({ step: { type: 'choose', purpose: 'pass', team: 0, from: 'F', options: ['C', 'W', 'B'] } })), null);
@@ -52,7 +73,8 @@ test('in real matches, every face of every roll is what the guide says', () => {
       if (step.type === 'roll' && step.dice.length === 1) {
         const g = rollGuide(m);
         const team = step.team;
-        g.faces.forEach((f, i) => {
+        g.faces.forEach(f => {
+          const i = f.index;
           const { state, events } = act(m, { type: 'roll' }, dice(i));
           const label = `${step.purpose} face ${i}: ${f.caption}`;
           const gained = state.teams[team].score - m.teams[team].score;

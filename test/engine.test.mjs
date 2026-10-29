@@ -128,10 +128,13 @@ test('a try scores five, video ref re-rolls, and the conversion follows', () => 
   assert.equal(m.step.purpose, 'kick');
   const { state, events } = roll(m, dice(face('K', f => f.kick === 3)));
   assert.equal(state.teams[0].score, 7);
-  // The side that conceded has the ball from the restart.
-  assert.equal(state.attacker, 1);
-  assert.equal(state.step.dice[0], 'S');
-  assert.equal(events.find(e => e.type === 'possession').reason, 'restart');
+  // The side that conceded kicks off; caught, the scorers have the ball.
+  assert.ok(events.some(e => e.type === 'kick' && e.good));
+  assert.deepEqual(state.step, { type: 'roll', purpose: 'restart', dice: ['K'], team: 1, receiver: 0 });
+  const caught = roll(state, dice(face('K', f => f.kick === 1)));
+  assert.equal(caught.state.attacker, 0);
+  assert.equal(caught.events.find(e => e.type === 'possession').reason, 'restart');
+  assert.equal(roll(state, dice(face('K', f => f.kick === 6))).state.attacker, 1, 'won back');
 });
 
 test('no try is a changeover', () => {

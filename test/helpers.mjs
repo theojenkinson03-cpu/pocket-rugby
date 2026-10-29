@@ -157,8 +157,12 @@ export const RULES = {
 export function expectedAfterScore(scores, scorer, half, target) {
   if (scores[scorer] >= target.full) return { type: 'fulltime' };
   if (half === 1 && scores.some(s => s >= target.half)) return { type: 'halftime' };
-  return { type: 'roll', purpose: 'attack', team: 1 - scorer, die: 'S' };
+  // The side that conceded kicks off, to the scorers.
+  return { type: 'roll', purpose: 'restart', team: 1 - scorer, receiver: scorer };
 }
+
+// The kick-off after a score: `kicker` (the side that conceded) to roll.
+export const kickOffBy = kicker => ({ type: 'roll', purpose: 'restart', dice: ['K'], team: kicker, receiver: 1 - kicker });
 
 export const OUTSIDE_BACKS = POSITIONS.filter(p => p !== 'S');
 

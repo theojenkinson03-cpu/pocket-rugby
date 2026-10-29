@@ -670,23 +670,25 @@ const goalWith = (card, kick, uses = 0) => {
 };
 
 test('kicking cards win the restart back after their own goals: Golden Boot after penalty goals, Drop-Goal Artist after drop goals', () => {
+  // Without a card, the side that conceded kicks off; with one, the scorers keep the ball.
+  const kept = r => r.state.step.purpose === 'attack' && r.state.attacker === 0;
   const plain = goalWith(null, 'penalty');
-  assert.deepEqual([plain.state.attacker, plain.events.find(e => e.type === 'possession').reason], [1, 'restart']);
+  assert.deepEqual(plain.state.step, { type: 'roll', purpose: 'restart', dice: ['K'], team: 1, receiver: 0 });
   // Golden Boot, Common: once a match, after a penalty goal only.
   const pen = goalWith('golden-boot', 'penalty');
-  assert.equal(pen.state.attacker, 0);
+  assert.ok(kept(pen));
   assert.deepEqual(played(pen.events).map(e => [e.what, e.kick]), [['keepBall', 'penalty']]);
   assert.equal(pen.state.teams[0].cardUses.keepBall, 1);
   assert.deepEqual(pen.events.find(e => e.type === 'possession'), { type: 'possession', team: 0, reason: 'restart', changed: false });
-  assert.equal(goalWith('golden-boot', 'penalty', 1).state.attacker, 1, 'once a match');
-  assert.equal(goalWith('golden-boot', 'conversion').state.attacker, 1, 'not after a conversion');
-  assert.equal(goalWith('golden-boot', 'drop').state.attacker, 1, 'not after a drop goal');
+  assert.ok(!kept(goalWith('golden-boot', 'penalty', 1)), 'once a match');
+  assert.ok(!kept(goalWith('golden-boot', 'conversion')), 'not after a conversion');
+  assert.ok(!kept(goalWith('golden-boot', 'drop')), 'not after a drop goal');
   // Mythic: drop goals too.
-  assert.equal(goalWith('golden-boot:mythic', 'drop').state.attacker, 0);
+  assert.ok(kept(goalWith('golden-boot:mythic', 'drop')));
   // Drop-Goal Artist: after drop goals, not penalty goals.
-  assert.equal(goalWith('drop-artist', 'drop').state.attacker, 0);
-  assert.equal(goalWith('drop-artist', 'penalty').state.attacker, 1);
-  assert.equal(goalWith('drop-artist:mythic', 'drop', 1).state.attacker, 1, 'once a half');
+  assert.ok(kept(goalWith('drop-artist', 'drop')));
+  assert.ok(!kept(goalWith('drop-artist', 'penalty')));
+  assert.ok(!kept(goalWith('drop-artist:mythic', 'drop', 1)), 'once a half');
   // With the clock out the ball goes dead anyway, and the use is kept.
   const late = carded(['golden-boot', null], { format: 'rolls', step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 1, kicker: 'B' } });
   late.clock = halfRolls(late);

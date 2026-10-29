@@ -6,7 +6,7 @@
 // for the live win meter and as the Expert CPU's judge at the end of each
 // look-ahead.
 
-import { halfRolls, keepsBall, kickBonus, kickChance, rollsLeft, timeUp, tryChance } from './engine.js';
+import { REGATHER, halfRolls, keepsBall, kickBonus, kickChance, rollsLeft, timeUp, tryChance } from './engine.js';
 import { cardWorth, teamCards } from './cards.js';
 
 // How a possession ends: points the attackers scored, and who has the next
@@ -18,6 +18,10 @@ export const POSSESSION = {
   five: 0.0662, // try, conversion missed
   seven: 0.1431, // try and conversion
 };
+
+// After a score the side that conceded kicks off, and wins it back on
+// REGATHER or more on the black die: the chance the scorers have the ball next.
+export const CATCH = (REGATHER - 1) / 6;
 
 const tables = new Map();
 
@@ -46,8 +50,8 @@ function table(halfAt, full) {
   for (let a = max - 1; a >= 0; a--) {
     for (let b = max - 1; b >= 0; b--) {
       if (a >= full || b >= full) continue;
-      // After a score the other side has the ball.
-      const [x, y] = solve(ourScore(a, b, (p, q) => v2(p, q, 1)), theirScore(a, b, (p, q) => v2(p, q, 0)));
+      // After a score, the kick-off: the scorers catch it or the other side win it back.
+      const [x, y] = solve(ourScore(a, b, (p, q) => CATCH * v2(p, q, 0) + (1 - CATCH) * v2(p, q, 1)), theirScore(a, b, (p, q) => CATCH * v2(p, q, 1) + (1 - CATCH) * v2(p, q, 0)));
       h2[idx(a, b) * 2] = x;
       h2[idx(a, b) * 2 + 1] = y;
     }
@@ -59,7 +63,7 @@ function table(halfAt, full) {
     };
     for (let a = halfAt - 1; a >= 0; a--) {
       for (let b = halfAt - 1; b >= 0; b--) {
-        const [x, y] = solve(ourScore(a, b, (p, q) => v1(p, q, 1)), theirScore(a, b, (p, q) => v1(p, q, 0)));
+        const [x, y] = solve(ourScore(a, b, (p, q) => CATCH * v1(p, q, 0) + (1 - CATCH) * v1(p, q, 1)), theirScore(a, b, (p, q) => CATCH * v1(p, q, 1) + (1 - CATCH) * v1(p, q, 0)));
         h1[(idx(a, b) * 2 + shr) * 2] = x;
         h1[(idx(a, b) * 2 + shr) * 2 + 1] = y;
       }
@@ -100,9 +104,11 @@ function clockValues() {
     const row = new Float64Array(width * 2);
     for (let d = -SPAN; d <= SPAN; d++) {
       const i = (d + SPAN) * 2;
-      // After a score the other side has the ball.
-      row[i] = po * at(prev, d, 1) + ps * at(prev, d, 0) + three * at(prev, d + 3, 1) + five * at(prev, d + 5, 1) + seven * at(prev, d + 7, 1);
-      row[i + 1] = po * at(prev, d, 0) + ps * at(prev, d, 1) + three * at(prev, d - 3, 0) + five * at(prev, d - 5, 0) + seven * at(prev, d - 7, 0);
+      // After a score, the kick-off: the scorers catch it or the other side win it back.
+      const ours = e => CATCH * at(prev, d + e, 0) + (1 - CATCH) * at(prev, d + e, 1);
+      const theirs = e => CATCH * at(prev, d - e, 1) + (1 - CATCH) * at(prev, d - e, 0);
+      row[i] = po * at(prev, d, 1) + ps * at(prev, d, 0) + three * ours(3) + five * ours(5) + seven * ours(7);
+      row[i + 1] = po * at(prev, d, 0) + ps * at(prev, d, 1) + three * theirs(3) + five * theirs(5) + seven * theirs(7);
     }
     clockTable.push(row);
     prev = row;
@@ -184,23 +190,27 @@ export function winProbability(match, team) {
       return v(s[team], s[1 - team], ball === team ? 0 : 1, match.half, shr);
     };
   }
+  // After a score, the kick-off: the scorers catch it or the other side win it back.
+  const restart = extra => CATCH * at(extra, att) + (1 - CATCH) * at(extra, 1 - att);
+  if (step.purpose === 'restart') return CATCH * winFromPossession(match, team, step.receiver) + (1 - CATCH) * winFromPossession(match, team, step.team);
   if (step.purpose === 'try') {
     const p = tryChance();
     const conv = 4 / 6;
-    // Whatever happens, the other side has the ball next.
-    return p * (conv * at(7, 1 - att) + (1 - conv) * at(5, 1 - att)) + (1 - p) * at(0, 1 - att);
+    // A try and its conversion, then the kick-off; no try, the other side's ball.
+    return p * (conv * restart(7) + (1 - conv) * restart(5)) + (1 - p) * at(0, 1 - att);
   }
-  // After a goal the other side has the ball, unless a kicking card wins it back.
-  const after = kind => (keepsBall(match, att, kind) ? att : 1 - att);
+  // After a goal, the kick-off, unless a kicking card wins the ball back.
+  const scored = (points, kind) => (keepsBall(match, att, kind) ? at(points, att) : restart(points));
   if (step.purpose === 'kick') {
     const p = kickChance(step.range, kickBonus(match, att, step.kick));
     const points = step.kick === 'conversion' ? 2 : 3;
-    return p * at(points, after(step.kick)) + (1 - p) * at(0, 1 - att);
+    // A missed conversion still restarts with a kick-off; other misses hand the ball over.
+    return p * scored(points, step.kick) + (1 - p) * (step.kick === 'conversion' ? restart(0) : at(0, 1 - att));
   }
   // A shot at goal on offer: the side with the ball takes whichever is better.
   if (step.type === 'choose' && (step.purpose === 'penalty' || step.purpose === 'drop')) {
     const p = kickChance(step.range, kickBonus(match, att, step.purpose));
-    const kick = p * at(3, after(step.purpose)) + (1 - p) * at(0, 1 - att);
+    const kick = p * scored(3, step.purpose) + (1 - p) * at(0, 1 - att);
     const play = winFromPossession(match, team);
     return team === att ? Math.max(kick, play) : Math.min(kick, play);
   }

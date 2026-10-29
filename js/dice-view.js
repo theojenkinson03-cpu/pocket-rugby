@@ -1,13 +1,14 @@
 // Renders the dice: 3D cubes that tumble onto a face, and flat face tiles.
 // Given the roll they're part of, faces read for it: a brown die setting a
 // kick's range shows metres, not a tackle.
-// A cube has six faces round a solid core (so no gaps show at the rounded
-// edges as it turns) and a shadow on the table under it, drawn as its own
+// A cube has six faces round a solid inner cube (so no gaps show at the
+// rounded corners as it turns) and a shadow on the table under it, drawn as its own
 // element: a filter on the cube's parent would flatten the 3D in Safari.
 // Badges in a die's top-right corner show what changes its numbers: an
 // injury, the sin bin, a red card, advantage, the wind or a team card.
 
 import { DICE, PLAYERS } from './dice.js';
+import { REGATHER } from './engine.js';
 
 export const DIE_COLORS = {
   S: { fill: '#d4433b', ink: '#ffffff', name: 'red' },
@@ -45,6 +46,7 @@ function rollHTML(dieId, f, roll) {
   if (dieId === 'D' && (purpose === 'range' || purpose === 'penalty')) return `<span class="fl">To the posts</span>${metresHTML(f.value)}`;
   if (dieId === 'K') {
     if (purpose === 'kick') return `<span class="fl">Kick</span>${metresHTML(f.kick)}`;
+    if (purpose === 'restart') return `<span class="fl">${f.kick >= REGATHER ? 'Won back' : 'Caught'}</span><span class="fv">${f.kick}</span>`;
     if (purpose === 'penalty') return f.card ? '<i class="fcard" aria-hidden="true"></i><span class="fword">Yellow card</span>' : '<span class="fword dim">No card</span>';
     if (purpose === 'try') return `<span class="fword${f.result === 'try' ? ' big' : ''}">${RESULT_WORD[f.result]}</span>`;
     if (purpose === 'ruck') return (roll.ruckWins || ['ruck']).includes(f.result) ? '<span class="fword big">Turn&shy;over</span>' : '<span class="fword dim">Held</span>';
@@ -97,6 +99,7 @@ export function faceLabel(dieId, index, roll = null) {
     const { purpose } = roll;
     if (dieId === 'D' && (purpose === 'range' || purpose === 'penalty')) return `${f.value * 10} m to the posts`;
     if (dieId === 'K' && purpose === 'kick') return `Kick of ${f.kick * 10} m`;
+    if (dieId === 'K' && purpose === 'restart') return `Kick-off ${f.kick}: ${f.kick >= REGATHER ? 'won back' : 'caught'}`;
     if (dieId === 'K' && purpose === 'penalty') return f.card ? 'Yellow card' : 'No card';
     if (dieId === 'K' && purpose === 'try') return RESULT_WORD[f.result];
     if (dieId === 'K' && purpose === 'ruck') return (roll.ruckWins || ['ruck']).includes(f.result) ? 'Turnover' : 'Held';
@@ -115,8 +118,8 @@ function paint(node, dieId) {
   node.dataset.die = dieId;
 }
 
-// The core: three planes through the middle, in the die's colour.
-const CORE = ['rotateX(90deg)', 'rotateY(90deg)', 'none'];
+// The core: a square-cornered cube just inside the faces, in a darker shade
+// of the die's colour, so the rounded corners never show daylight.
 
 export function createDie(dieId, faceIndex = 0, badges = [], roll = null) {
   const die = document.createElement('div');
@@ -128,10 +131,10 @@ export function createDie(dieId, faceIndex = 0, badges = [], roll = null) {
   shadow.setAttribute('aria-hidden', 'true');
   const cube = document.createElement('div');
   cube.className = 'cube';
-  for (const t of CORE) {
+  for (const t of SIDE_TRANSFORMS) {
     const plane = document.createElement('i');
     plane.className = 'core';
-    plane.style.transform = t;
+    plane.style.transform = `${t} translateZ(calc(var(--half) - 1px))`;
     cube.append(plane);
   }
   DICE[dieId].faces.forEach((_, i) => {
@@ -221,9 +224,9 @@ export function rollTo(die, faceIndex, { duration = 950, delay = 0, reduced = fa
   cube.style.transform = `rotateX(${x}deg) rotateY(${y}deg)`;
 
   // The cube drops in and bounces; its shadow grows as it nears the table.
-  const drift = (Math.random() - 0.5) * 60;
+  const drift = (Math.random() - 0.5) * 30;
   die.querySelector('.lift').animate([
-    { transform: `translate(${drift}px, -70px) scale(.55)`, opacity: 0 },
+    { transform: `translate(${drift}px, -36px) scale(.7)`, opacity: 0 },
     { opacity: 1, offset: 0.15 },
     { transform: `translate(${drift * 0.3}px, 8px) scale(1.06)`, offset: 0.62 },
     { transform: 'translate(0, -6px) scale(.99)', offset: 0.8 },

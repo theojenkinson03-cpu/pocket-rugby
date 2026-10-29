@@ -58,7 +58,7 @@
       <button type="button" class="icon-btn" id="btn-setup-back" aria-label="Back to the title screen">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
       </button>
-      <h2 id="setup-title">Team sheet</h2>
+      <h2 id="setup-title">New match</h2>
     </header>
     <form class="setup-form" id="setup-form" novalidate>
       <fieldset class="seg" id="seg-mode">
@@ -71,16 +71,22 @@
         <div class="team-editor" data-team="0">
           <label class="team-tag" for="team0-name" id="team0-tag">You</label>
           <input class="team-name" id="team0-name" maxlength="14" autocomplete="off" spellcheck="false">
-          <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team0-kits"></div>
-          <div class="patterns" role="radiogroup" aria-label="Kit pattern" id="team0-patterns"></div>
+          <details class="kit-pick">
+            <summary><span class="kit-now" id="team0-kit-now" aria-hidden="true"></span><span>Kit</span></summary>
+            <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team0-kits"></div>
+            <div class="patterns" role="radiogroup" aria-label="Kit pattern" id="team0-patterns"></div>
+          </details>
           <button type="button" class="squad-btn" data-squad="0"><span class="squad-names" id="team0-squad"></span><span class="squad-edit">Squad</span></button>
         </div>
         <div class="team-vs" aria-hidden="true">v</div>
         <div class="team-editor" data-team="1">
           <label class="team-tag" for="team1-name" id="team1-tag">CPU</label>
           <input class="team-name" id="team1-name" maxlength="14" autocomplete="off" spellcheck="false">
-          <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team1-kits"></div>
-          <div class="patterns" role="radiogroup" aria-label="Kit pattern" id="team1-patterns"></div>
+          <details class="kit-pick">
+            <summary><span class="kit-now" id="team1-kit-now" aria-hidden="true"></span><span>Kit</span></summary>
+            <div class="swatches" role="radiogroup" aria-label="Kit colour" id="team1-kits"></div>
+            <div class="patterns" role="radiogroup" aria-label="Kit pattern" id="team1-patterns"></div>
+          </details>
           <button type="button" class="squad-btn" data-squad="1"><span class="squad-names" id="team1-squad"></span><span class="squad-edit">Squad</span></button>
         </div>
       </div>
@@ -114,10 +120,10 @@
       </fieldset>
 
       <label class="toggle toggle-card" for="setup-cards"><span><b>Team cards</b><small>Five cards are dealt after the toss; you pick two each. The toss loser picks first.</small></span><input type="checkbox" id="setup-cards"><i aria-hidden="true"></i></label>
-      <label class="toggle toggle-card" for="setup-bench"><span><b>Bench</b><small>One replacement a half clears an injured player’s penalty.</small></span><input type="checkbox" id="setup-bench"><i aria-hidden="true"></i></label>
+      <label class="toggle toggle-card" for="setup-bench"><span><b>Bench</b><small>Three named subs to replace an injured player.</small></span><input type="checkbox" id="setup-bench"><i aria-hidden="true"></i></label>
       <label class="toggle toggle-card" for="setup-weather"><span><b>Weather</b><small>Rain makes the Forwards and Centres knock on; wind adds or takes 10 m off every kick.</small></span><input type="checkbox" id="setup-weather"><i aria-hidden="true"></i></label>
 
-      <button type="submit" class="btn btn-primary btn-wide">To the coin toss</button>
+      <div class="sticky-go"><button type="submit" class="btn btn-primary btn-wide">To the coin toss</button></div>
     </form>
   </section>
 
@@ -237,17 +243,12 @@
         <p class="detail" id="detail"></p>
       </div>
       <section class="guide" id="guide" hidden aria-label="What each face would do">
-        <p class="guide-head" id="guide-head"></p>
         <div class="guide-faces" id="guide-faces"></div>
         <p class="guide-text" id="guide-text" aria-live="polite"></p>
       </section>
       <div class="moment" id="moment" hidden></div>
     </div>
 
-    <div class="feed" id="feed">
-      <ol class="feed-list" id="feed-list"></ol>
-      <button type="button" class="feed-more" data-open="dlg-log">Match log</button>
-    </div>
     <div class="sr-only" aria-live="polite" id="announcer"></div>
 
     <aside class="coach" id="coach" hidden aria-live="polite" aria-labelledby="coach-title">
@@ -355,7 +356,7 @@
     </section>
     <section>
       <h3>Restarts</h3>
-      <p>After any score the side that <b>conceded</b> gets the ball back from the restart, so a lead is never safe. (The printed game gives it to the scorers; over 2,000 simulated matches that let one side run away with too many games.) The coin toss decides who has the ball first; the other side starts the second half with it.</p>
+      <p>After any score the side that <b>conceded</b> kicks off to the scorers, and the black die decides it: <b>4, 5 or 6</b> and the chasers win it back, <b>1, 2 or 3</b> and it's caught. An even contest, so scoring never costs you the ball and a lead is never safe. The kick-off doesn't use up the clock. The coin toss decides who has the ball first; the other side starts the second half with it.</p>
     </section>
     <section>
       <h3>Team cards</h3>

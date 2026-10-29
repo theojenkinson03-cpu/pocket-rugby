@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, carryMetres, controllerOf, defenceModifier, halfRolls, isLegal, lineup, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, rollWeather, seededRng, TIMED_DECISIONS, timeUp, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
+import { act, carryMetres, controllerOf, defenceModifier, halfRolls, isLegal, lineup, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, REGATHER, rollWeather, seededRng, TIMED_DECISIONS, timeUp, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { cardEffects, CARD_IDS, RARITY_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
@@ -177,14 +177,26 @@ function checkState(m, label) {
 }
 
 function checkEvents(before, after, events, label) {
-  // After a score the side that conceded restarts, unless a kicking card wins
-  // the ball back after its own kind of goal.
+  // After a score the side that conceded kicks off to the scorers (a contest
+  // on the black die), unless a kicking card wins the ball straight back
+  // after its own kind of goal.
   const scored = events.find(e => e.type === 'score');
   const restart = events.find(e => e.type === 'possession' && e.reason === 'restart');
   const kept = events.find(e => e.type === 'cardPlayed' && e.what === 'keepBall');
   if (scored && restart) {
-    assert.equal(restart.team, kept ? scored.team : 1 - scored.team, `${label}: the restart after a score`);
-    if (kept) assert.ok((fx(before, scored.team).keepBall || []).includes(scored.kind), `${label}: kept the ball after a ${scored.kind}`);
+    assert.ok(kept, `${label}: the ball changes hands after a score only by a kicking card or the kick-off`);
+    assert.equal(restart.team, scored.team, `${label}: the card keeps it`);
+    assert.ok((fx(before, scored.team).keepBall || []).includes(scored.kind), `${label}: kept the ball after a ${scored.kind}`);
+  }
+  if (scored && !kept && after.step.purpose === 'restart') {
+    assert.deepEqual([after.step.team, after.step.receiver], [1 - scored.team, scored.team], `${label}: the side that conceded kicks off`);
+  }
+  const contest = events.find(e => e.type === 'restart');
+  if (contest) {
+    assert.equal(before.step.purpose, 'restart', `${label}: a kick-off contest only at a kick-off`);
+    assert.equal(contest.regathered, DICE.K.faces[after.roll.faces[0]].kick >= REGATHER, `${label}: 4 or more wins it back`);
+    assert.equal(after.attacker, contest.regathered ? contest.team : contest.receiver, `${label}: the kick-off's ball`);
+    assert.equal(after.clock, before.clock, `${label}: the kick-off doesn't run the clock`);
   }
   if (kept) assert.ok(scored && restart, `${label}: the ball is only kept after a goal`);
   // Squeaky Clean (Rare up) is never shown a card.
@@ -212,7 +224,7 @@ function checkEvents(before, after, events, label) {
 
   // Possession only changes hands for a reason the rules give.
   if (before.attacker !== null && after.attacker !== before.attacker && after.step.type !== 'fulltime') {
-    const reasons = new Set(['intercept', 'ruck', 'noTry', 'setPiece', 'kick', 'secondHalf', 'penalty', 'replacement', 'playOn', 'suddenDeath']);
+    const reasons = new Set(['intercept', 'ruck', 'noTry', 'setPiece', 'kick', 'secondHalf', 'penalty', 'replacement', 'playOn', 'suddenDeath', 'restart']);
     assert.ok(events.some(e => reasons.has(e.type)), `${label}: possession changed without a reason (${events.map(e => e.type)})`);
   }
 

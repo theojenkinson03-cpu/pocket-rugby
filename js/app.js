@@ -218,6 +218,7 @@ function renderSetup() {
     const editor = document.querySelector(`.team-editor[data-team="${team}"]`);
     editor.style.setProperty('--kit', s.colors[team]);
     $(`#team${team}-squad`).textContent = squadLine(s.rosters[team]);
+    kitVars($(`#team${team}-kit-now`), { color: s.colors[team], kit: customKit(s.patterns[team], s.colors[team]) });
     const host = $(`#team${team}-kits`);
     host.innerHTML = '';
     for (const kit of KITS) {
@@ -972,7 +973,9 @@ async function present(before, after, events, story) {
   const tryEvent = has('try');
   if (tryEvent) ui.pitch.flourish('try', after, { team: tryEvent.team, pos: tryEvent.pos });
 
-  if (story.headline) setHeadline(story.headline, story.detail);
+  // When the table already shows the numbers and the verdict, the headline needs no detail.
+  const told = !!document.querySelector('#tray-dice .duel-verdict')?.textContent.trim() || document.querySelectorAll('#tray-dice .duel-side:not(.quiet)').length === 2;
+  if (story.headline) setHeadline(story.headline, told ? null : story.detail);
   renderFeed(story.lines.length);
 
   const moments = story.moments
@@ -1059,8 +1062,9 @@ function rollContext(match, roll) {
   return { purpose: roll.purpose, piece: roll.piece, ruckWins };
 }
 
-// The dice on the table: each side's dice in its own area, with what they
-// come to after every plus and minus, and the verdict under them.
+// The dice on the table: each side has its own end, under its name on the
+// scoreboard (the left team on the left, always), with its dice and what they
+// come to after every plus and minus; the verdict goes under both.
 async function showDuel(duel, roll, { animate = false, dramatic = false, badges = [] } = {}) {
   const host = $('#tray-dice');
   const tray = $('#tray');
@@ -1068,38 +1072,45 @@ async function showDuel(duel, roll, { animate = false, dramatic = false, badges 
   tray.dataset.focus = roll.purpose === 'setpiece' ? roll.piece : FOCUS[roll.purpose] || '';
   host.innerHTML = '';
   const context = rollContext(ui.match, roll);
-  const wrap = el('div', `duel${duel.columns.length > 1 ? ' two' : ''}`);
+  const wrap = el('div', 'duel');
   const rolling = [];
-  for (const col of duel.columns) {
-    const team = ui.match.teams[col.team];
-    const area = el('div', 'duel-side');
-    kitVars(area, team);
+  const byTeam = [0, 1].map(team => duel.columns.find(c => c.team === team) || null);
+  for (const [team, col] of byTeam.entries()) {
+    const t = ui.match.teams[team];
+    const area = el('div', `duel-side${col ? '' : ' quiet'}`);
+    area.dataset.team = team;
+    kitVars(area, t);
     const head = el('p', 'duel-head');
-    head.append(el('span', 'kit'), el('b', null, team.name), el('small', null, col.role));
-    const row = el('div', 'duel-dice');
-    for (const d of col.dice) {
-      if (d.ghost) {
-        const ghost = el('span', 'die-ghost', '?');
-        ghost.dataset.die = d.id;
-        ghost.setAttribute('aria-hidden', 'true');
-        row.append(ghost);
-        continue;
+    head.append(el('span', 'kit'), el('b', null, t.name));
+    if (col) head.append(el('small', null, col.role));
+    area.append(head);
+    if (col) {
+      const row = el('div', 'duel-dice');
+      for (const d of col.dice) {
+        if (d.ghost) {
+          const ghost = el('span', 'die-ghost', '?');
+          ghost.dataset.die = d.id;
+          ghost.setAttribute('aria-hidden', 'true');
+          row.append(ghost);
+          continue;
+        }
+        const badge = d.rolled ? badges[d.slot] : null;
+        const die = createDie(d.id, d.face, badge ? [badge] : [], d.rolled ? context : null);
+        row.append(die);
+        if (d.rolled && animate) rolling.push([die, d.face]);
+        else {
+          setFace(die, d.face);
+          die.classList.add('landed');
+        }
       }
-      const badge = d.rolled ? badges[d.slot] : null;
-      const die = createDie(d.id, d.face, badge ? [badge] : [], d.rolled ? context : null);
-      row.append(die);
-      if (d.rolled && animate) rolling.push([die, d.face]);
-      else {
-        setFace(die, d.face);
-        die.classList.add('landed');
-      }
+      area.append(row);
+      const sum = sumLine(col);
+      if (sum) area.append(sum);
     }
-    area.append(head, row);
-    const sum = sumLine(col);
-    if (sum) area.append(sum);
     wrap.append(area);
   }
-  if (duel.verdict) wrap.append(el('p', `duel-verdict tone-${duel.verdict.tone}`, duel.verdict.text));
+  // The verdict row is always there, empty or not, so the table never changes height.
+  wrap.append(el('p', `duel-verdict tone-${duel.verdict?.tone || 'ok'}`, duel.verdict?.text || '\u00a0'));
   host.append(wrap);
   if (!rolling.length) return;
   // Rolls that decide a try, a kick, a card or a ruck tumble for longer.
@@ -1118,7 +1129,8 @@ async function showDuel(duel, roll, { animate = false, dramatic = false, badges 
 // on its own needs no total; the defence waiting to tackle shows its target.
 function sumLine(col) {
   const waiting = col.dice.some(d => d.ghost);
-  if (!col.terms.length && !waiting) return null;
+  // A die on its own says what it is: only sums need writing out.
+  if (col.terms.length < 2 && !waiting) return null;
   const line = el('p', 'duel-sum');
   const term = (n, label) => {
     const t = el('span', 'term');
@@ -1287,7 +1299,7 @@ function renderBoard(m) {
     }
     side.querySelector('.side-bar').hidden = rolls;
     side.querySelector('.side-bar i').style.width = `${Math.min(100, (t.score / m.target.full) * 100)}%`;
-    const hasBall = m.attacker === team && !over && m.step.type !== 'halftime';
+    const hasBall = m.attacker === team && !over && m.step.type !== 'halftime' && m.step.purpose !== 'restart';
     side.classList.toggle('has-ball', hasBall);
     side.querySelector('.poss').hidden = !hasBall;
 
@@ -1394,10 +1406,9 @@ function renderSituation(m) {
   }
 }
 
+// The commentary goes to the match log and to screen readers; the screen
+// itself shows only the headline.
 function renderFeed(freshCount) {
-  const list = $('#feed-list');
-  list.innerHTML = '';
-  ui.feed.slice(0, 3).forEach((line, i) => list.append(feedItem(line, i < freshCount)));
   if (freshCount) $('#announcer').textContent = ui.feed.slice(0, freshCount).reverse().map(l => l.text).join(' ');
 }
 
@@ -1512,10 +1523,12 @@ const GUIDE_TITLES = {
   penalty: () => 'Penalty · card check',
   kick: () => 'Kick · black die',
   setpiece: (g, m) => `${m.step.piece === 'scrum' ? 'Scrum' : 'Lineout'} · white die`,
+  restart: () => 'Kick-off · black die',
 };
 
 // What each face of the coming roll would do, under the dice: green good,
 // red bad, for this phone's side (or the side rolling, two on one phone).
+// Six faces, read 1 to 6 left to right; tap one for the detail.
 function renderGuide(m) {
   const host = $('#guide');
   const on = ui.prefs.guide && m.step.type === 'roll' && m.attacker !== null;
@@ -1526,30 +1539,26 @@ function renderGuide(m) {
   const viewer = viewerOf(m);
   const g = rollGuide(m, viewer ?? m.step.team);
   host.dataset.focus = g.purpose === 'kick' ? 'kick' : '';
-  const roller = m.teams[g.team];
-  const head = $('#guide-head');
-  const badge = dieBadges(m)[0];
-  const swatch = el('span', 'kit');
-  kitVars(swatch, roller);
-  head.replaceChildren(swatch, el('b', null, `${roller.name} · ${GUIDE_TITLES[g.purpose](g, m)}`));
-  if (badge) head.append(badgeNode(badge));
   const faces = $('#guide-faces');
   faces.innerHTML = '';
   const text = $('#guide-text');
   const mine = viewer === null || viewer === g.team;
   const who = mine ? '' : ' for you';
+  const title = GUIDE_TITLES[g.purpose](g, m);
   const tally = g.good || g.bad ? `${g.good} good, ${g.bad} bad${who}` : `No risk either way${who}`;
-  text.textContent = g.summary || `${tally}. Tap a face for more.`;
+  const intro = `${title} · ${g.purpose === 'tackle' ? `${pct(g.chance)} stop it` : g.summary ? g.summary.replace(/\.$/, '') : tally}`;
+  text.textContent = intro;
   const context = rollContext(m, m.step);
   for (const f of g.faces) {
     const b = el('button', `gf tone-${f.tone}`);
     b.type = 'button';
     b.dataset.face = f.index;
-    b.append(faceTile(g.die, f.index, 'mini', context), el('b', 'gf-cap', f.caption), el('small', 'gf-note', f.note || ' '));
+    b.append(faceTile(g.die, f.index, 'mini', context), el('b', 'gf-cap', f.tag || '\u00a0'));
     b.setAttribute('aria-label', `${faceLabel(g.die, f.index, context)}: ${f.text} ${{ good: 'Good', bad: 'Bad', ok: 'Neither' }[f.tone]}${mine ? '' : ' for you'}.`);
     b.addEventListener('click', () => {
-      faces.querySelectorAll('.gf').forEach(x => x.classList.toggle('picked', x === b));
-      text.textContent = f.text;
+      const again = b.classList.contains('picked');
+      faces.querySelectorAll('.gf').forEach(x => x.classList.toggle('picked', x === b && !again));
+      text.textContent = again ? intro : f.text;
     });
     faces.append(b);
   }
@@ -1575,6 +1584,7 @@ const ROLL_TEXT = {
   penalty: () => ['Card check & range', ['K', 'D']],
   kick: step => [`Kick! Need ${metres(step.range)}`, ['K']],
   setpiece: step => [step.piece === 'scrum' ? 'Feed the scrum' : 'Throw in', ['R']],
+  restart: () => ['Kick off', ['K']],
 };
 
 // "Harris (Outside Back)", or the position for a side without names.
@@ -1597,6 +1607,7 @@ function promptText(m) {
     case 'penalty': return 'Penalty awarded';
     case 'kick': return `${{ conversion: 'Conversion', penalty: 'Penalty kick', drop: 'Drop goal' }[step.kick]} · ${pct(kickChance(step.range, kickBonus(m, team, step.kick)))} to land`;
     case 'setpiece': return step.piece === 'scrum' ? 'Scrum feed' : 'Lineout throw';
+    case 'restart': return 'Kick-off · 4+ wins it back';
     case 'pass': return `Pass from ${playerName(m, team, step.from)} · pick a receiver`;
     case 'drop': return `${metres(step.range)} out · kick or pass?`;
     case 'bench': return step.when === 'halftime' ? 'Half-time change?' : `${surname(m, team, step.pos) || PLAYERS[step.pos].one} hurt · bring on a sub?`;
@@ -1643,11 +1654,13 @@ function renderDock(m, locked) {
   }
 
   const team = m.teams[step.team];
-  const swatch = el('span', 'kit');
-  kitVars(swatch, team);
   const cpuTurn = isAutomatic(m);
-  prompt.append(swatch, el('b', null, team.name), el('span', null, `· ${promptText(m)}`));
-  if (m.attacker !== null && who !== 'cpu') prompt.append(autoButton());
+  // A decision says what it's about over the buttons; a roll says it all on its button.
+  if (step.type === 'choose' && step.purpose !== 'draft') {
+    const swatch = el('span', 'kit');
+    kitVars(swatch, team);
+    prompt.append(swatch, el('b', null, team.name), el('span', null, `· ${promptText(m)}`));
+  }
 
   if (who === 'remote') {
     actions.append(waitingButton(team, `Waiting for ${team.name}…`));
@@ -1657,6 +1670,8 @@ function renderDock(m, locked) {
 
   if (step.type === 'roll' || cpuTurn) {
     const [label, chips] = step.type === 'roll' ? ROLL_TEXT[step.purpose](step) : ['Thinking', []];
+    actions.classList.add('roll-row');
+    if (m.attacker !== null && who !== 'cpu' && step.type === 'roll') actions.append(autoButton());
     const btn = el('button', 'roll-btn');
     btn.type = 'button';
     btn.dataset.primary = '';
@@ -1670,7 +1685,9 @@ function renderDock(m, locked) {
     } else {
       const chipRow = el('span', 'chips');
       chips.forEach((id, i) => chipRow.append(dieChip(id, undefined, badges[i] ? [badges[i]] : [])));
-      btn.append(chipRow, el('span', null, label));
+      const words = el('span', 'roll-words');
+      words.append(el('small', null, `${team.name} · ${promptText(m)}`), el('span', null, label));
+      btn.append(chipRow, words);
     }
     btn.disabled = locked && !cpuTurn;
     btn.addEventListener('click', () => humanAct({ type: 'roll' }));
@@ -2963,9 +2980,6 @@ function bindDialogs() {
     });
   });
   $('#btn-menu').addEventListener('click', () => openDialog('dlg-menu'));
-  $('#feed').addEventListener('click', e => {
-    if (!e.target.closest('button')) openDialog('dlg-log');
-  });
   $('#btn-restart').addEventListener('click', () => openDialog('dlg-confirm'));
   $('#btn-confirm-restart').addEventListener('click', () => {
     $('#dlg-confirm').close();

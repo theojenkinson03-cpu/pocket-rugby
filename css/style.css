@@ -205,13 +205,15 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
   will-change: transform;
   pointer-events: none;
 }
-/* Three planes through the middle, so the rounded edges never show daylight. */
+/* A square inner cube just under the faces: the rounded corners show its
+   darker shade, like a bevel, never daylight. */
 .cube .core {
   position: absolute;
-  inset: 3%;
-  border-radius: 10%;
-  background: color-mix(in srgb, var(--die) 82%, #000);
-  backface-visibility: visible;
+  inset: 0;
+  border-radius: 5%;
+  background: color-mix(in srgb, var(--die) 72%, #000);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 .die-shadow {
   position: absolute;
@@ -248,7 +250,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
     inset 0 0.25em 0.45em rgb(255 255 255 / 0.22);
   overflow: hidden;
 }
-.cube .face { border-radius: 12%; }
+.cube .face { border-radius: 9%; }
 
 /* Badges: what changes a die's numbers, in its top-right corner. */
 .die-badges {
@@ -724,31 +726,6 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 @media (prefers-reduced-motion: reduce) { .rain { animation: none; } }
 .situation .chip.tap { background: var(--accent); color: var(--accent-ink); }
 
-.tray {
-  position: relative;
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 10px var(--gutter-r) 4px var(--gutter-l);
-  text-align: center;
-}
-.tray-dice { display: flex; gap: 18px; justify-content: center; align-items: center; min-height: 74px; }
-.tray-dice .die { --size: 78px; }
-.tray-dice .die.idle .cube { animation: idle 2.4s ease-in-out infinite; }
-@keyframes idle { 50% { translate: 0 -4px; } }
-.tray-dice .die.ghost { opacity: 0.45; }
-.tray-text { min-height: 52px; max-width: 34em; }
-.headline {
-  margin: 0;
-  font: 900 30px/1 var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 0.01em;
-}
-.detail { margin: 4px 0 0; font-size: 15px; line-height: 1.35; color: var(--muted); }
-
 .coin {
   width: 78px;
   height: 78px;
@@ -802,35 +779,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 @keyframes band-in { from { transform: skewY(-4deg) scale(0.4); opacity: 0; } }
 @keyframes band-out { to { transform: skewY(-4deg) scale(1.15); opacity: 0; } }
 
-.feed {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: start;
-  gap: 8px;
-  margin: 0 var(--gutter-r) 8px var(--gutter-l);
-  padding: 8px 6px 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-  text-align: left;
-  min-height: 0;
-  flex: 0 1 auto;
-  overflow: hidden;
-  cursor: pointer;
-}
-.feed-list { min-width: 0; }
-.feed-more {
-  border: 0;
-  background: var(--surface-2);
-  border-radius: 7px;
-  padding: 4px 8px;
-  font: 600 12px/1.2 var(--font-label);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.feed-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
-.feed-list li, .log-list li {
+.log-list li {
   display: grid;
   grid-template-columns: 10px 1fr;
   gap: 8px;
@@ -838,11 +787,7 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
   font-size: 14px;
   line-height: 1.3;
 }
-.feed-list li:nth-child(2) { opacity: 0.62; }
-.feed-list li:nth-child(n + 3) { display: none; }
-.feed-list li.fresh { animation: fresh 400ms ease-out; }
-@keyframes fresh { from { transform: translateY(-6px); opacity: 0; } }
-.feed-list li i, .log-list li i {
+.log-list li i {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -850,9 +795,9 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent);
   transform: translateY(-1px);
 }
-.feed-list li.big, .log-list li.big { font-weight: 600; }
-.feed-list li.score, .log-list li.score { font-weight: 700; }
-.feed-list li.bad b, .log-list li.bad b { color: var(--bad); }
+.log-list li.big { font-weight: 600; }
+.log-list li.score { font-weight: 700; }
+.log-list li.bad b { color: var(--bad); }
 
 .dock {
   flex: none;
@@ -1679,7 +1624,6 @@ button.tcard:disabled { cursor: default; }
 /* ---------- Draft ---------- */
 .view-match.drafting > .pitch-wrap,
 .view-match.drafting > .tray,
-.view-match.drafting > .feed,
 .view-match.drafting > .dock { display: none; }
 .draft {
   flex: 1 1 auto;
@@ -2331,23 +2275,6 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
   .team-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* ---------- Bigger screens ---------- */
-@media (min-height: 760px) {
-  .tray-dice .die { --size: 88px; }
-  .tray-dice .coin { width: 88px; height: 88px; }
-  .feed-list li:nth-child(3) { display: grid; opacity: 0.38; }
-}
-@media (min-height: 860px) {
-  .tray-dice .die { --size: 100px; }
-}
-@media (max-height: 640px) {
-  .side-score { font-size: 42px; }
-  .tray { min-height: 120px; gap: 6px; }
-  .tray-dice .die { --size: 64px; }
-  .headline { font-size: 25px; }
-  .detail { font-size: 14px; }
-  .feed { display: none; }
-}
 @media (max-width: 360px) {
   .team-editors { grid-template-columns: 1fr; }
   .team-vs { justify-self: center; }
@@ -2411,135 +2338,6 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 .waiting-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--board-ink); font-size: 14px; }
 .team-tile.taken { opacity: 0.55; }
 .friends-create { display: grid; gap: 12px; }
-
-/* ---------- The dice guide ----------
-   Under the dice: what each face of the coming roll would do. Green is good
-   for you, red bad, grey neither. Tapping a face explains it. */
-.guide { width: 100%; max-width: 30rem; display: grid; gap: 5px; }
-.guide-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 0;
-  font: 700 13px/1.2 var(--font-label);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.guide-head b { color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.guide-head .die-badge { margin-left: auto; text-transform: none; }
-.guide-faces { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
-.gf {
-  --tone: var(--line);
-  position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-  min-width: 0;
-  padding: 4px 2px 5px;
-  border: 0;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--tone) 12%, var(--surface));
-  box-shadow: inset 0 0 0 2px var(--tone);
-  color: var(--ink);
-  touch-action: manipulation;
-  transition: transform 160ms ease, opacity 200ms ease, box-shadow 160ms ease;
-}
-.gf.tone-good { --tone: #1fa055; }
-.gf.tone-bad { --tone: #d63a2f; }
-.gf.tone-ok { --tone: color-mix(in srgb, var(--ink) 22%, transparent); }
-.gf .face.flat.mini { --size: 100%; width: 100%; max-width: 46px; height: auto; aspect-ratio: 1; font-size: 7.4px; padding: 6%; border-radius: 18%; }
-.gf .face.flat.mini .fk { font-size: 1.2em; }
-.gf-cap { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 800 12px/1.1 var(--font-label); letter-spacing: 0.02em; text-transform: uppercase; }
-.gf.tone-good .gf-cap { color: #14804a; }
-.gf.tone-bad .gf-cap { color: #c02a20; }
-/* A tick or a cross in the corner, so the tone never rests on colour alone. */
-.gf.tone-good::before, .gf.tone-bad::before {
-  position: absolute;
-  top: -5px;
-  left: -4px;
-  display: grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--tone);
-  color: #fff;
-  font: 900 10px/1 var(--font-label);
-  box-shadow: 0 0 0 2px var(--bg);
-}
-.gf.tone-good::before { content: "✓"; }
-.gf.tone-bad::before { content: "✕"; }
-.gf-note { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 10.5px/1.1 var(--font-label); letter-spacing: 0.02em; color: var(--muted); }
-.gf.picked { box-shadow: inset 0 0 0 2px var(--tone), 0 0 0 2px var(--ink); }
-.guide[data-focus="kick"] .gf .fk { position: static; font-size: 2.6em; opacity: 1; }
-.guide[data-focus="kick"] .gf .fr { font-size: 0.8em; opacity: 0.7; }
-.guide[data-focus="kick"] .gf .card-dot { display: none; }
-.guide-text { margin: 0; min-height: 2.6em; font-size: 13px; line-height: 1.3; color: var(--muted); }
-.guide.rolled .gf:not(.hit) { opacity: 0.38; transform: scale(0.94); }
-.guide.rolled .gf.hit { transform: translateY(-3px) scale(1.06); box-shadow: inset 0 0 0 3px var(--tone), 0 6px 14px rgb(0 0 0 / 0.18); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .gf.tone-good .gf-cap { color: #4cc777; }
-  :root:not([data-theme="light"]) .gf.tone-bad .gf-cap { color: #ff7a6b; }
-}
-:root[data-theme="dark"] .gf.tone-good .gf-cap { color: #4cc777; }
-:root[data-theme="dark"] .gf.tone-bad .gf-cap { color: #ff7a6b; }
-/* Room for the guide: smaller dice and headline, one line of the feed. */
-.tray.guided { gap: 6px; justify-content: flex-start; padding-top: 8px; }
-.tray.guided .tray-dice { min-height: 60px; }
-.tray.guided .tray-dice .die { --size: 62px; }
-.tray.guided .tray-dice .coin { width: 62px; height: 62px; }
-.tray.guided .headline { font-size: 24px; }
-.tray.guided .detail { font-size: 14px; }
-.tray.guided .tray-text { min-height: 0; }
-.view-match:has(.tray.guided) .feed-list li:nth-child(n + 2) { display: none; }
-@media (min-height: 860px) {
-  .tray.guided .tray-dice .die { --size: 76px; }
-  .view-match:has(.tray.guided) .feed-list li:nth-child(2) { display: grid; }
-}
-/* Shorter phones: everything a little tighter so the match fits the screen. */
-@media (max-height: 780px) {
-  .board .side-card { flex-direction: row; gap: 4px; }
-  .board .side-card .tc-chip { position: relative; width: 24px; height: 22px; padding: 0; justify-content: center; }
-  .board .side-card .tc-chip span { display: none; }
-  .board .side-card .tc-chip .tc-gem { position: absolute; top: -3px; right: -3px; }
-  .side-score { font-size: 44px; }
-  .pitch-wrap { max-height: 19vh; max-height: 19dvh; }
-  .tray.guided { gap: 4px; padding-top: 4px; }
-  .tray.guided .tray-dice { min-height: 50px; }
-  .tray.guided .tray-dice .die { --size: 50px; }
-  .tray.guided .tray-dice .coin { width: 50px; height: 50px; }
-  .tray.guided .headline { font-size: 21px; }
-  .tray.guided .detail { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .gf { padding: 3px 1px 4px; }
-  .gf .face.flat.mini { max-width: 38px; font-size: 6.4px; }
-  .gf-cap { font-size: 11px; }
-  .gf-note { font-size: 10px; }
-  .guide-text { min-height: 0; font-size: 12px; }
-  .view-match:has(.tray.guided) .feed { padding-block: 5px; margin-bottom: 6px; }
-  .dock { padding-top: 8px; padding-bottom: 10px; gap: 6px; }
-  .roll-btn { min-height: 52px; }
-  /* Choices: a smaller die above them, and tighter buttons. */
-  .tray { gap: 6px; padding-top: 6px; }
-  .tray-dice { min-height: 58px; }
-  .tray-dice .die { --size: 58px; }
-  .tray-dice .coin { width: 58px; height: 58px; }
-  .tray .headline { font-size: 22px; }
-  .tray-text { min-height: 0; }
-  /* When something has to give, the pitch shrinks (the turf fills the
-     sides) and the feed keeps at least its newest line. */
-  .pitch-wrap { flex: 0 1 auto; min-height: 72px; }
-  .feed { min-height: 34px; flex-shrink: 0.4; }
-  /* Last of all the tray gives way from the bottom, so the buttons stay on screen. */
-  .tray { flex: 1 1 auto; min-height: 0; overflow: hidden; justify-content: safe center; }
-  .tray > * { flex-shrink: 0; }
-  .side-status { flex-wrap: nowrap; overflow: hidden; }
-  .side-status .chip { padding: 0 5px; }
-  .chip-more { display: none; }
-  .choice { min-height: 52px; padding-block: 7px; }
-  .actions.three .choice { padding: 6px 8px; }
-  .actions.three .choice small { margin-top: 1px; }
-}
 
 /* ---------- The match clock ---------- */
 .board-clock { display: grid; justify-items: center; line-height: 1; color: var(--board-ink); }
@@ -2621,49 +2419,263 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
 .decision-clock b { font: 900 16px/22px var(--font-display); color: var(--ink); }
 @keyframes decide { to { transform: scaleX(0); } }
 
-/* ---------- The dice on the table: each side's dice and what they come to ---------- */
-.tray-dice:has(.duel) { width: 100%; }
-.duel { display: grid; justify-items: center; gap: 6px 8px; width: 100%; max-width: 460px; }
-.duel.two { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; }
-.duel-side { display: grid; justify-items: center; align-content: start; gap: 5px; min-width: 0; width: 100%; }
-.duel.two .duel-side {
-  padding: 6px 6px 8px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--kit) 8%, var(--surface));
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--kit) 40%, transparent);
+/* ---------- The table: one end for each side, the guide, the headline ----------
+   The left team's end is always on the left, under its name on the
+   scoreboard; whoever is attacking, nothing moves. */
+.tray {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px var(--gutter-r) 10px var(--gutter-l);
+  text-align: center;
+  overflow: hidden;
 }
-.duel-head { display: flex; align-items: center; gap: 5px; max-width: 100%; margin: 0; font: 600 11px/1.15 var(--font-label); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
-.duel-head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
-.duel-head small { flex: none; font: inherit; }
-.duel-head .kit { flex: none; width: 10px; height: 10px; }
-.duel-dice { display: flex; gap: 8px; justify-content: center; align-items: center; }
-.tray-dice .duel .die { --size: 72px; }
-.tray-dice .duel.two .die { --size: 58px; }
+.tray > * { flex-shrink: 0; }
+.tray-dice { display: flex; justify-content: center; align-items: center; min-height: 64px; }
+.tray-dice .coin { width: 72px; height: 72px; }
+.tray-dice:has(.duel) { width: 100%; }
+
+.duel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+.duel-side {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  min-height: 132px;
+  padding: 9px 6px 10px;
+  border-top: 3px solid var(--kit);
+}
+.duel-side + .duel-side { box-shadow: inset 1px 0 0 var(--line); }
+.duel-side.quiet { border-top-color: color-mix(in srgb, var(--kit) 35%, transparent); }
+.duel-side.quiet .duel-head { opacity: 0.5; }
+.duel-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin: 0;
+  font: 700 12px/1.2 var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.duel-head .kit { width: 10px; height: 10px; border-radius: 3px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent); }
+.duel-head b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel-head small { flex: none; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); color: var(--muted); font: inherit; letter-spacing: 0.04em; }
+.duel-dice { display: flex; gap: 8px; justify-content: center; align-items: center; min-height: 58px; }
+.tray-dice .duel .die { --size: 58px; }
+.tray-dice .duel .duel-dice:has(> :nth-child(2)) .die { --size: 50px; }
 .die-ghost {
   display: grid;
   place-items: center;
-  width: 58px;
-  height: 58px;
-  border-radius: 16%;
-  border: 2px dashed color-mix(in srgb, #6f4a33 70%, transparent);
-  color: #6f4a33;
-  font: 900 26px/1 var(--font-display);
+  width: 50px;
+  height: 50px;
+  border-radius: 12%;
+  background: #6f4a33;
+  color: rgb(255 255 255 / 0.7);
+  font: 900 24px/1 var(--font-display);
+  box-shadow: inset 0 -0.35em 0.6em rgb(0 0 0 / 0.2), inset 0 0.25em 0.45em rgb(255 255 255 / 0.15);
+  opacity: 0.55;
 }
-:root[data-theme="dark"] .die-ghost { color: #c79a7c; border-color: #8d6449; }
-.duel-sum { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 2px 8px; margin: 0; }
+.duel-sum { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 2px 7px; margin: 0; }
 .duel-sum .term { display: grid; justify-items: center; line-height: 1; }
-.duel-sum .term b { font: 900 18px/1 var(--font-display); color: var(--ink); white-space: nowrap; }
-.duel-sum .term small { max-width: 76px; font: 600 9.5px/1.15 var(--font-label); letter-spacing: 0.03em; text-align: center; text-transform: uppercase; color: var(--muted); }
-.duel-sum .eq { font: 900 17px/1.05 var(--font-display); color: var(--muted); }
+.duel-sum .term b { font: 900 17px/1 var(--font-display); white-space: nowrap; }
+.duel-sum .term small { max-width: 72px; font: 600 9.5px/1.15 var(--font-label); letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+.duel-sum .eq { font: 900 16px/1.05 var(--font-display); color: var(--muted); }
 .duel-sum .term.total b { font-size: 24px; }
 .duel-sum.pending, .duel-verdict.pending { visibility: hidden; }
-.duel-verdict { grid-column: 1 / -1; margin: 0; font: 700 13px/1.2 var(--font-label); letter-spacing: 0.05em; text-align: center; text-transform: uppercase; color: var(--ink); }
+.duel-verdict {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 7px 10px 8px;
+  box-shadow: inset 0 1px 0 var(--line);
+  font: 700 13px/1.2 var(--font-label);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
 .duel-verdict.tone-ok { color: var(--muted); }
-@media (max-height: 780px) {
-  .tray-dice .duel .die { --size: 56px; }
-  .tray-dice .duel.two .die { --size: 46px; }
-  .die-ghost { width: 46px; height: 46px; font-size: 22px; }
-  .duel-sum .term b { font-size: 16px; }
-  .duel-sum .term.total b { font-size: 20px; }
-  .duel.two .duel-side { padding: 4px 4px 6px; gap: 3px; }
+
+.tray-text { max-width: 34em; min-height: 3.2em; margin: 0 auto; }
+.headline { margin: 0; font: 900 24px/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.01em; }
+.detail {
+  margin: 3px 0 0;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The guide: the six faces of the coming roll, 1 to 6, green good, red bad. */
+.guide { width: 100%; max-width: 480px; margin: 0 auto; display: grid; gap: 6px; }
+.guide-faces { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.gf {
+  --tone: transparent;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  touch-action: manipulation;
+  transition: transform 160ms ease, opacity 200ms ease;
+}
+.gf.tone-good { --tone: #1fa055; }
+.gf.tone-bad { --tone: #d63a2f; }
+.gf .face.flat.mini {
+  --size: 100%;
+  width: 100%;
+  max-width: 44px;
+  height: auto;
+  aspect-ratio: 1;
+  font-size: 7.2px;
+  padding: 6%;
+  border-radius: 20%;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--tone);
+}
+.gf.tone-ok .face.flat.mini { box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent); }
+.gf .face.flat.mini .fk { font-size: 1.2em; }
+.gf-cap { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 11px/1.1 var(--font-label); letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+.gf.tone-good .gf-cap { color: #14804a; }
+.gf.tone-bad .gf-cap { color: #c02a20; }
+/* A tick or a cross, so the tone never rests on colour alone. */
+.gf.tone-good::before, .gf.tone-bad::before {
+  position: absolute;
+  top: -6px;
+  right: calc(50% - 30px);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--tone);
+  color: #fff;
+  font: 900 9px/1 var(--font-label);
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.gf.tone-good::before { content: "✓"; }
+.gf.tone-bad::before { content: "✕"; }
+.gf.picked .face.flat.mini { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
+.guide[data-focus="kick"] .gf .fk { position: static; font-size: 2.6em; opacity: 1; }
+.guide[data-focus="kick"] .gf .fr { font-size: 0.8em; opacity: 0.7; }
+.guide[data-focus="kick"] .gf .card-dot { display: none; }
+.guide-text { margin: 0; font-size: 12.5px; line-height: 1.3; color: var(--muted); min-height: 1.3em; }
+.guide.rolled .gf:not(.hit) { opacity: 0.35; }
+.guide.rolled .gf.hit { transform: translateY(-2px) scale(1.08); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .gf.tone-good .gf-cap { color: #4cc777; }
+  :root:not([data-theme="light"]) .gf.tone-bad .gf-cap { color: #ff7a6b; }
+}
+:root[data-theme="dark"] .gf.tone-good .gf-cap { color: #4cc777; }
+:root[data-theme="dark"] .gf.tone-bad .gf-cap { color: #ff7a6b; }
+
+/* The dock: Auto beside the one big button. */
+.prompt:empty { display: none; }
+.actions.roll-row { grid-template-columns: auto minmax(0, 1fr); }
+.actions.roll-row .auto-btn {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  height: auto;
+  min-width: 58px;
+  margin: 0;
+  border-radius: 14px;
+  font-size: 11px;
+}
+.roll-btn { justify-content: flex-start; padding-inline: 14px; text-align: left; }
+.roll-btn.waiting { justify-content: center; text-align: center; }
+.roll-words { display: grid; gap: 3px; min-width: 0; }
+.roll-words small { font: 700 11px/1.1 var(--font-label); letter-spacing: 0.07em; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roll-words span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Bigger phones: bigger dice. */
+@media (min-height: 800px) {
+  .tray-dice .duel .die { --size: 68px; }
+  .tray-dice .duel .duel-dice:has(> :nth-child(2)) .die { --size: 56px; }
+  .die-ghost { width: 56px; height: 56px; }
+  .duel-dice { min-height: 68px; }
+  .duel-side { min-height: 150px; }
+  .tray-dice .coin { width: 84px; height: 84px; }
+}
+/* Shorter phones: everything a little tighter so the match fits the screen. */
+@media (max-height: 760px) {
+  .board .side-card { flex-direction: row; gap: 4px; }
+  .board .side-card .tc-chip { position: relative; width: 24px; height: 22px; padding: 0; justify-content: center; }
+  .board .side-card .tc-chip span { display: none; }
+  .board .side-card .tc-chip .tc-gem { position: absolute; top: -3px; right: -3px; }
+  .side-score { font-size: 42px; }
+  .pitch-wrap { max-height: 17vh; max-height: 17dvh; }
+  .tray { gap: 6px; padding-block: 6px; }
+  .tray-dice .duel .die { --size: 46px; }
+  .tray-dice .duel .duel-dice:has(> :nth-child(2)) .die { --size: 40px; }
+  .die-ghost { width: 40px; height: 40px; font-size: 18px; }
+  .duel-dice { min-height: 46px; }
+  .duel-side { gap: 4px; padding: 6px 4px 7px; min-height: 104px; }
+  .duel-sum .term b { font-size: 15px; }
+  .duel-sum .term.total b { font-size: 19px; }
+  .duel-verdict { padding: 5px 8px 6px; font-size: 12px; }
+  .headline { font-size: 20px; }
+  .detail { font-size: 13px; -webkit-line-clamp: 1; }
+  .gf .face.flat.mini { max-width: 34px; font-size: 6px; }
+  .gf-cap { font-size: 10px; }
+  .guide-text { font-size: 11.5px; }
+  .dock { padding-top: 8px; padding-bottom: 10px; gap: 6px; }
+  .roll-btn { min-height: 52px; }
+  .choice { min-height: 52px; padding-block: 7px; }
+  .side-status { flex-wrap: nowrap; overflow: hidden; }
+  .chip-more { display: none; }
+}
+@media (max-height: 640px) {
+  .side-score { font-size: 36px; }
+  .pitch-wrap { max-height: 13vh; max-height: 13dvh; }
+  .guide-text { display: none; }
+}
+
+/* ---------- Setup: the kit folds away, the start button stays in reach ---------- */
+.kit-pick { display: grid; gap: 8px; }
+.kit-pick > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  cursor: pointer;
+  font: 700 13px/1 var(--font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.kit-pick > summary::-webkit-details-marker { display: none; }
+.kit-pick > summary::after { content: "▾"; margin-left: auto; font-size: 12px; transition: transform 150ms ease; }
+.kit-pick[open] > summary::after { transform: rotate(180deg); }
+.kit-now { width: 30px; height: 22px; border-radius: 5px 5px 9px 9px; background: var(--kit-bg, var(--kit)); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 18%, transparent); }
+.kit-pick .swatches, .kit-pick .patterns { gap: 6px; }
+.kit-pick .swatch { width: 100%; max-width: 34px; justify-self: center; }
+.kit-pick .pattern { height: 24px; }
+.sticky-go {
+  position: sticky;
+  bottom: 0;
+  margin: 0 calc(-1 * var(--gutter-r)) -28px calc(-1 * var(--gutter-l));
+  padding: 12px var(--gutter-r) 16px var(--gutter-l);
+  background: var(--bg);
+  box-shadow: 0 30px 0 var(--bg), 0 -14px 14px -2px var(--bg);
 }

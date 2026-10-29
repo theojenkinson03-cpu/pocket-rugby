@@ -139,8 +139,9 @@ Five of twelve cards are dealt after the coin toss and each side picks **two**. 
 
 ## Presentation
 
-- **3D dice** that tumble onto the result, solid cubes with a shadow on the table, with the face that matters highlighted. Rolls that decide a try, kick, card or ruck spin longer, to a heartbeat.
-- **The dice guide.** Before every roll, the row under the dice shows the six faces of the die about to be rolled and what each would do, from your side's point of view: green good, red bad, grey neither, with a line-break chance on every run, the kick chance on every range, and so on. Each face is played through the rules engine, so injuries, the sin bin, the team cards, the weather and the clock all count. Tap a face for a sentence on it; when the dice land, the face they show lights up. A tackle shows the total needed and the chance of stopping the run.
+- **A calm match screen.** Scoreboard, pitch, the dice table, one headline and one button. The table has an end for each side, the left team's always on the left under its name on the scoreboard, whoever is attacking: each end shows its dice and, where there are pluses and minuses, the sum ("8 −4 Fortress = 4" against "4 +3 = 7"), with the verdict under both. Nothing moves or changes height between rolls. Commentary lives in the match log (menu).
+- **3D dice** that tumble onto the result, solid cubes (no gaps at the corners as they turn) with a shadow on the table. Rolls that decide a try, kick, card or ruck spin longer, to a heartbeat.
+- **The dice guide.** Before every roll, the row under the table shows the six faces of the die about to be rolled, read 1 to 6 left to right, and what each would do, from your side's point of view: green good, red bad, grey neither, with a short tag only where the face doesn't say it already (a line-break chance on every run, the kick chance on every range). Each face is played through the rules engine, so injuries, the sin bin, the team cards, the weather and the clock all count. Tap a face for a sentence on it; when the dice land, the face they show lights up. A tackle shows the total needed and the chance of stopping the run.
 - **Badges.** A die's top-right corner shows what's changing its numbers: an injury (a red cross and −1 or −2), the sin bin (a yellow card, −1 on each tackle die), a red card (−2), advantage (+1), the wind (±10 m) or a team card (+10 m and up). The same badge shows on the roll button and on a receiver's chip when you pass.
 - **Auto-roll.** Rolls your dice for you, a beat apart so you can follow, and stops at every decision. Turn it on and off with the Auto button; it's on to start an online match.
 - **Cinematic moments**: kick-off and second-half title cards, the Mythic card reveal, the team-card face-off, line breaks in slow motion, tries, video-ref reviews, big hits, injuries, cards, turnovers, penalties, quick taps, half time, full time, Player of the Match, achievements and the trophy lift. Every kick at goal plays on a kick cam with a distance gauge. Tap to skip any scene; set them to Full, Short or Off. They switch off when your phone asks for reduced motion.
@@ -173,7 +174,7 @@ Since a score now hands the other side the ball, the Pro (and the Tip badge) goe
 
 The rules were tuned by playing thousands of matches CPU against CPU (the scripts are in `scripts/`):
 
-- **The restart.** The printed rules give the ball to the side that scored. Over 2,000 matches that snowballs: the median winning margin in a race to 30 was 15 points, and 73% of matches were won by 10 or more. Giving the restart to the side that conceded made the median margin 11 (7 on the clock), made lead changes 40% to 65% more common, and turned "kick or tap" into a real choice.
+- **The restart.** The printed rules give the ball to the side that scored. Over 2,000 matches that snowballs: the median winning margin in a race to 30 was 15 points, and 73% of matches were won by 10 or more. Giving the ball to the side that conceded fixed that but felt rigged: after scoring a try you scored the next points only 37% of the time. Now the side that conceded kicks off and the black die decides it: 4, 5 or 6 and they win it back, 1, 2 or 3 and the scorers catch it. The next score is a coin flip (50.2% over 6,000 matches), the median margin is 8 on the clock and 13 in a race, and the kick-off doesn't run the clock.
 - **The clock lengths** (above), and **bonus points** set for the margins matches actually produce: on the clock, 21% to 44% of wins are by 10 or more and 30% to 44% of defeats by 5 or fewer.
 - **Kicking at goal** (above), and **the draft order**: picks 1 and 4 against 2 and 3 plus the first ball came out even.
 - **The win model** was re-measured for the new restart and extended to the clock: from 4,000 matches, a possession ends with no points and the ball lost 49.4% of the time, no points and the ball kept 14.7%, three points 14.9%, a try 6.6% and a converted try 14.3%. Its predictions agree with simulated matches to within a few points in every tenth of the range.
@@ -210,7 +211,7 @@ The rules engine is checked from several directions. [RULES.md](RULES.md) maps e
 ```sh
 npm test               # 220+ tests: rules, cards at every rarity, weather and the bench, players, tournaments, the Champions Cup, season stats, club careers, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 218 bugs; every one must be caught
+npm run test:mutation  # plants 221 bugs; every one must be caught
 npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match, the daily challenge with its leaderboard and a two-phone friends league
 npm run check          # all of the above
 ```
@@ -224,6 +225,7 @@ GitHub Actions runs everything on every push (`.github/workflows/ci.yml`).
 3. **Errors** (knock on, into touch) give the other side a scrum or lineout on the white referee die. **Intercepted** turns the ball over straight away.
 4. **Penalties** check for a yellow card (sin bin: −1 on each tackle die for the half) and roll the range. Then you choose a kick at goal or a quick tap (+1 intensity for 3 runs).
 5. **Kicks**: the brown die sets the range and the black die's number is the kick distance. Each point is 10 metres.
+6. **After a score** the side that conceded kicks off: the black die's number, 4 or more and they win it back, 3 or less and the scorers catch it.
 
 The in-game **How to play** sheet has the full rules, every face of every die and every team card.
 

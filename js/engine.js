@@ -4,7 +4,7 @@
 import { DICE, POSITIONS } from './dice.js';
 import { CARD_IDS, cardEffects, cardsWith, cardWith, DEAL_SIZE, DRAFT_ORDER, rollRarity } from './cards.js';
 
-export const VERSION = 7;
+export const VERSION = 8;
 
 // Two ways to play a match. 'points': first to `full` wins, with half time
 // when either side reaches `half`. 'rolls': a match clock of `rolls` dice
@@ -89,6 +89,7 @@ function emptyStats() {
     bigHits: 0,
     errors: 0,
     turnoversWon: 0,
+    restartsWon: 0,
     penaltiesConceded: 0,
     cards: 0,
     possessions: 0,
@@ -550,7 +551,31 @@ function afterScore(m, ev, team, kind = null) {
   // With the clock out the ball goes dead anyway: nothing to win back.
   const keep = kind !== null && keepsBall(m, team, kind) && useCharge(m, team, 'keepBall');
   if (keep) cardPlayed(ev, m, team, 'keepBall', fx => (fx.keepBall || []).includes(kind), { kick: kind });
-  startPossession(m, ev, keep ? team : other(team), 'restart');
+  if (keep) {
+    startPossession(m, ev, team, 'restart');
+    return;
+  }
+  if (timeUp(m)) {
+    endHalf(m, ev);
+    return;
+  }
+  // The side that conceded kicks off to the scorers, and the kick-off is a
+  // contest: the black die's kick number, 4 or more and the chasers win it back.
+  m.step = { type: 'roll', purpose: 'restart', dice: ['K'], team: other(team), receiver: team };
+}
+
+// The kick-off after a score: on 4, 5 or 6 the kicking side regather it.
+export const REGATHER = 4;
+
+function onRestart(m, ev, rng) {
+  const { team, receiver } = m.step;
+  const faceIndex = rollDie(rng);
+  const kick = DICE.K.faces[faceIndex].kick;
+  const regathered = kick >= REGATHER;
+  m.roll = { dice: ['K'], faces: [faceIndex], purpose: 'restart', team };
+  ev.push({ type: 'restart', team, receiver, kick, regathered });
+  if (regathered) m.teams[team].stats.restartsWon++;
+  startPossession(m, ev, regathered ? team : receiver, 'restart');
 }
 
 // A completed tackle uses up one run of any quick-tap advantage.
@@ -1066,7 +1091,8 @@ export function actInPlace(m, action, rng = Math.random) {
 
   if (step.type === 'roll') {
     m.rolls++;
-    m.clock++;
+    // The kick-off after a score is stoppage time: it doesn't run the clock.
+    if (step.purpose !== 'restart') m.clock++;
   }
   if (action.type === 'timeout') {
     ev.push({ type: 'timeout', team: step.team, purpose: step.purpose });
@@ -1101,6 +1127,7 @@ export function actInPlace(m, action, rng = Math.random) {
       penalty: onPenaltyCheck,
       kick: onKick,
       setpiece: onSetPiece,
+      restart: onRestart,
     };
     handlers[step.purpose](m, ev, rng);
   }

@@ -65,7 +65,7 @@ export function duelOf(before, after, events) {
           column(team, 'Attack', rolled, terms, total),
           column(def, 'Defence', ghosts, defenceTerms(after, def, run.special), `${total}+`),
         ],
-        verdict: { text: `The defence need ${total}+ from two brown dice`, tone: 'ok' },
+        verdict: null,
       };
     }
     case 'tackle': {
@@ -121,13 +121,20 @@ export function duelOf(before, after, events) {
         verdict: { text: card ? `${card.color === 'red' ? 'Red' : 'Yellow'} card, and the posts are ${metres(r.range)} away` : `No card. The posts are ${metres(r.range)} away`, tone: 'ok' },
       };
     }
+    case 'restart': {
+      const r = find(events, 'restart');
+      return {
+        columns: [column(team, 'Kick-off', rolled, [], String(r.kick))],
+        verdict: { text: `${r.kick}: ${r.regathered ? 'won back' : 'caught'} (4+ wins it back)`, tone: r.regathered ? 'attack' : 'defence' },
+      };
+    }
     default:
       // A try, a ruck or a set piece: one side's die, and the headline says the rest.
       return { columns: [column(team, ROLE[step.purpose] || 'Roll', rolled)], verdict: null };
   }
 }
 
-const ROLE = { try: 'Try?', ruck: 'Ruck', setpiece: 'Feed' };
+const ROLE = { try: 'Try?', ruck: 'Ruck', setpiece: 'Feed', restart: 'Kick-off' };
 
 // The last roll on its own, for drawing the screen fresh.
 export function restingDuel(match) {

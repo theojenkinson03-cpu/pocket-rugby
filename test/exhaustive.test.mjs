@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 
 import { act, breakChance, kickChance, MATCH_LENGTHS, QUICK_TAP_RUNS, receiverOdds, resolveTackle } from '../js/engine.js';
 import { DICE, POSITIONS } from '../js/dice.js';
-import { choose, dice, expectedAfterScore, faceOf, OUTSIDE_BACKS, roll, RULES, stateAt } from './helpers.mjs';
+import { choose, dice, expectedAfterScore, kickOffBy, faceOf, OUTSIDE_BACKS, roll, RULES, stateAt } from './helpers.mjs';
 
 const range6 = [0, 1, 2, 3, 4, 5];
 const YELLOW_STATES = [
@@ -219,8 +219,7 @@ test('every conversion: all 36 range and kick pairs', () => {
       assert.equal(after.teams[0].score, good ? 7 : 5, `range ${r} kick ${k}`);
       assert.equal(after.teams[0].stats.conversionAttempts, 1);
       assert.equal(after.teams[0].stats.conversions, good ? 1 : 0);
-      assert.equal(after.attacker, 1, 'the side that conceded has the restart, made or missed');
-      assert.deepEqual(after.step.dice, ['S']);
+      assert.deepEqual(after.step, kickOffBy(1), 'the side that conceded kicks off, made or missed');
       const kick = events.find(e => e.type === 'kick');
       assert.equal(kick.distance, DICE.K.faces[k].kick);
       assert.equal(kick.range, range);
@@ -253,7 +252,8 @@ test('every drop goal: all 36 range and kick pairs, kicked or passed', () => {
         assert.equal(after.teams[0].stats.dropAttempts, 1);
         assert.equal(events.find(e => e.type === 'kick').kicker, kicker);
         assert.equal(after.teams[0].players[kicker].points, good ? 3 : 0);
-        assert.equal(after.attacker, 1, 'made or missed, the other side has the ball');
+        if (good) assert.deepEqual(after.step, kickOffBy(1), 'a goal: the side that conceded kicks off');
+        else assert.equal(after.attacker, 1, 'a miss: the other side has the ball');
       }
     }
   }
@@ -304,7 +304,8 @@ test('every penalty kick and every quick tap', () => {
       const good = DICE.K.faces[k].kick >= range;
       assert.equal(after.teams[1].score, good ? 3 : 0, `range ${range} kick ${k}`);
       assert.equal(after.teams[1].stats.penaltyAttempts, 1);
-      assert.equal(after.attacker, 0, 'made or missed, the other side has the ball');
+      if (good) assert.deepEqual(after.step, kickOffBy(0), 'a goal: the side that conceded kicks off');
+      else assert.equal(after.attacker, 0, 'a miss: the other side has the ball');
     }
     const tapped = choose(m, 'tap').state;
     assert.equal(tapped.quickTap, QUICK_TAP_RUNS);
@@ -392,10 +393,7 @@ test('score thresholds: every scoring kind from every score, in both halves and 
             const want = expectedAfterScore(scores, 0, half, target);
             assert.equal(m.teams[0].score, mine + points);
             assert.equal(m.step.type, want.type, `${length} half ${half} ${mine}-${theirs} ${kind}`);
-            if (want.type === 'roll') {
-              assert.equal(m.attacker, want.team, 'the side that conceded has the restart');
-              assert.deepEqual(m.step.dice, ['S']);
-            }
+            if (want.type === 'roll') assert.deepEqual(m.step, kickOffBy(want.team), 'the side that conceded kicks off');
             if (want.type === 'fulltime') assert.equal(m.winner, 0);
             cases++;
           }

@@ -5,10 +5,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, DECISION_SECONDS, FORMATS, halfRolls, isLegal, MATCH_LENGTHS, migrate, newMatch, rollsLeft, seededRng, TIMED_DECISIONS, timeUp } from '../js/engine.js';
+import { act, REGATHER, DECISION_SECONDS, FORMATS, halfRolls, isLegal, MATCH_LENGTHS, migrate, newMatch, rollsLeft, seededRng, TIMED_DECISIONS, timeUp } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { possessionsLeft, winFromPossession, winProbability } from '../js/winprob.js';
 import { choose, dice, faceOf, roll, stateAt } from './helpers.mjs';
+import { DICE } from '../js/dice.js';
 
 const KNOCK_ON = faceOf('F', f => f.error === 'knockon');
 const TO_FORWARD = faceOf('S', f => f.to === 'F');
@@ -145,13 +146,34 @@ test('points never end a match on the clock, and half time waits for the clock',
   assert.equal(roll(late, dice(0)).state.step.type, 'roll', 'no target score on the clock');
 });
 
-test('after any score the side that conceded has the ball', () => {
+test('after any score the side that conceded kicks off, and 4, 5 or 6 on the black die wins it back', () => {
   for (const format of FORMATS) {
     const m = stateAt({ format, step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 1, kicker: 'B' } });
     const { state, events } = roll(m, dice(0));
-    assert.equal(state.attacker, 1, format);
-    assert.deepEqual(events.find(e => e.type === 'possession'), { type: 'possession', team: 1, reason: 'restart', changed: true });
+    assert.deepEqual(state.step, { type: 'roll', purpose: 'restart', dice: ['K'], team: 1, receiver: 0 }, format);
+    assert.ok(!events.some(e => e.type === 'possession'), 'nobody has the ball until the kick-off lands');
+    const clock = state.clock;
+    for (let face = 0; face < 6; face++) {
+      const kick = DICE.K.faces[face].kick;
+      const r = roll(state, dice(face));
+      const back = kick >= REGATHER;
+      assert.deepEqual(r.events.find(e => e.type === 'restart'), { type: 'restart', team: 1, receiver: 0, kick, regathered: back });
+      assert.equal(r.state.attacker, back ? 1 : 0, `${format} kick ${kick}`);
+      assert.deepEqual(r.state.step, { type: 'roll', purpose: 'attack', dice: ['S'], team: back ? 1 : 0 });
+      assert.equal(r.state.teams[1].stats.restartsWon, back ? 1 : 0);
+      assert.equal(r.state.clock, clock, 'the kick-off is stoppage time');
+      assert.equal(r.state.rolls, state.rolls + 1);
+    }
   }
+  // Three faces each way: an even contest.
+  assert.equal(DICE.K.faces.filter(f => f.kick >= REGATHER).length, 3);
+});
+
+test('with the clock out, a score ends the half instead of a kick-off', () => {
+  const m = onClock(0, { step: { type: 'roll', purpose: 'kick', dice: ['K'], team: 0, kick: 'penalty', range: 1, kicker: 'B' } });
+  m.lastPlay = true;
+  const { state } = roll(m, dice(0));
+  assert.equal(state.step.type, 'halftime');
 });
 
 test('the Fly Half takes every drop goal: the Centre gives the chance to them', () => {

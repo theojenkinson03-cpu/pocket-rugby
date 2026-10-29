@@ -124,7 +124,7 @@ export function createPitch(root) {
     const purpose = step.purpose;
     const kicking = (purpose === 'kick' || purpose === 'drop' || (step.type === 'choose' && purpose === 'penalty'));
 
-    if (step.type === 'halftime' || step.type === 'fulltime' || purpose === 'toss' || match.attacker === null) {
+    if (step.type === 'halftime' || step.type === 'fulltime' || purpose === 'toss' || purpose === 'restart' || match.attacker === null) {
       POSITIONS.forEach((pos, i) => {
         spots[0][pos] = [150 - (i % 2) * 22, 22 + i * 26];
         spots[1][pos] = [250 + (i % 2) * 22, 22 + i * 26];

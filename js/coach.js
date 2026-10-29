@@ -28,7 +28,7 @@ export const TIPS = {
   wind: { title: 'Wind', text: 'Kicks with the wind at your back go 10 m further, and 10 m shorter into it. The ends change at half time, so the wind swaps sides.' },
   'card-played': { title: 'Team card in play', text: '' },
   'quick-tap': { title: 'Quick-tap advantage', text: 'Every run gets +1 intensity until the defence makes 3 tackles or you make an error.' },
-  restart: { title: 'After a score', text: 'Whoever concedes gets the ball back from the restart, so a lead is never safe.' },
+  restart: { title: 'Kick-off after a score', text: 'The side that conceded kicks off to the scorers. Roll the black die: 4, 5 or 6 and the chasers win it back; 1, 2 or 3 and it is caught. An even contest every time.' },
   clock: { title: 'The match clock', text: 'This match is played on the clock: a set number of rolls, half each way. The higher score at the end wins, and a draw can happen. When the rolls run out, play goes on until the ball is dead.' },
   'last-play': { title: 'Last play', text: 'The clock has run out. The next score, turnover, knock-on or kick ends the half. A penalty can still be kicked at goal or tapped.' },
   'sudden-death': { title: 'Sudden death', text: 'Level at full time in a knockout match: the next score of any kind wins it.' },
@@ -49,7 +49,7 @@ export function tipFor(match, events, seen, humanTurn) {
       quickTap: 'quick-tap',
       lastPlay: 'last-play',
       suddenDeath: 'sudden-death',
-    }[e.type] || (e.type === 'possession' && e.reason === 'restart' ? 'restart' : null);
+    }[e.type] || null;
     if (id && fresh(id)) return id;
   }
   if (!humanTurn) return null;
@@ -67,6 +67,7 @@ export function tipFor(match, events, seen, humanTurn) {
     penalty: step.type === 'choose' ? 'penalty-choice' : 'penalty',
     setpiece: 'setpiece',
     ruck: 'ruck',
+    restart: 'restart',
   }[step.purpose];
   if (step.type === 'halftime') return fresh('halftime');
   if (match.format === 'rolls' && match.attacker !== null && fresh('clock')) return 'clock';
