@@ -40,6 +40,24 @@ export function randomRoster(flavour = 'any', rng = Math.random) {
   return roster;
 }
 
+// Three made-up replacements, a Forward, a Centre and an Outside Back, with
+// surnames none of `roster` has.
+export function randomBench(roster = {}, flavour = 'any', rng = Math.random) {
+  const taken = new Set(Object.values(roster).map(n => String(n).replace(/^[A-Z]\.\s*/, '')));
+  const bench = [];
+  for (const pos of ['F', 'C', 'W']) {
+    for (let guard = 0; guard < 50; guard++) {
+      const name = randomRoster(flavour, rng)[pos];
+      const surname = name.replace(/^[A-Z]\.\s*/, '');
+      if (taken.has(surname) && guard < 40) continue;
+      taken.add(surname);
+      bench.push({ name, pos });
+      break;
+    }
+  }
+  return bench;
+}
+
 // "Ravens' card", "Wales's card": an apostrophe alone after a final s.
 export const possessive = name => (/s$/i.test(name) ? `${name}'` : `${name}'s`);
 

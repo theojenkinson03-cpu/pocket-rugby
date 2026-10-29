@@ -1454,6 +1454,10 @@ dialog.sheet::backdrop { background: rgb(5 12 8 / 0.55); backdrop-filter: blur(2
 .squad-edit { font: 700 13px/1 var(--font-label); letter-spacing: 0.08em; text-transform: uppercase; }
 .ol-squad { display: block; text-align: center; font: 700 13px/1 var(--font-label); letter-spacing: 0.08em; text-transform: uppercase; }
 .squad-list { display: grid; gap: 8px; margin-bottom: 16px; }
+.squad-h { margin: 6px 0 0; font: 700 12px/1.2 var(--font-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.sheet-select { min-width: 0; width: 100%; padding: 9px 10px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: 600 15px/1.2 var(--font-body); }
+.sheet-warn { grid-column: 2 / -1; color: var(--bad); font: 600 12px/1.2 var(--font-label); letter-spacing: 0.03em; }
+.sheet-out { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
 .squad-row { display: grid; grid-template-columns: auto 88px minmax(0, 1fr); align-items: center; gap: 10px; }
 .squad-pos { font: 700 15px/1.1 var(--font-label); letter-spacing: 0.04em; text-transform: uppercase; }
 .squad-input {

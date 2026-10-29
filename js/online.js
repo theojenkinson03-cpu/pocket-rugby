@@ -155,6 +155,10 @@ export const sanitiseTeam = team => ({
   roster: team?.roster && typeof team.roster === 'object'
     ? Object.fromEntries(['S', 'F', 'C', 'W', 'B'].map(p => [p, String(team.roster[p] || '').slice(0, 26)]))
     : null,
+  // Up to three replacements, each a name and a position.
+  ...(Array.isArray(team?.bench)
+    ? { bench: team.bench.slice(0, 3).map(b => ({ name: String(b?.name || '').slice(0, 26) || null, pos: ['S', 'F', 'C', 'W', 'B'].includes(b?.pos) ? b.pos : 'F' })) }
+    : {}),
 });
 
 export class OnlineSession {

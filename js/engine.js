@@ -214,8 +214,9 @@ export function newMatch({
       color: kit.color,
       // A patterned shirt (see color.js), or null for plain.
       kit: kit.kit || null,
-      // Who is on the field at each position now.
+      // Who is on the field at each position now, and who started.
       roster: kit.roster ? { ...kit.roster } : null,
+      starters: kit.roster ? { ...kit.roster } : null,
       score: 0,
       injuries: zeros(),
       yellows: 0,
@@ -282,6 +283,7 @@ export function migrate(match) {
   for (const t of m.teams) {
     t.kit ??= null;
     t.roster ??= null;
+    t.starters ??= t.roster ? { ...t.roster } : null;
     // Before version 7 the bench was one nameless replacement a half.
     t.subs ??= m.bench ? benchOf({}) : [];
     delete t.bench;

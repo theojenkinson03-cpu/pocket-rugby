@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { seededRng } from '../js/engine.js';
 import { validCode } from '../js/online.js';
 import { bothHuman, fixtureRoomCode, fixtureRng, hashText, humanOf, isHumanFixture, myPending, newFriendsLeague, rebuild, roleIn } from '../js/friends.js';
-import { simulateFixture, standings, teamOf } from '../js/tournament.js';
+import { selectSide, simulateFixture, standings, teamOf } from '../js/tournament.js';
 
 const settingsFor = (over = {}) => ({ ...newFriendsLeague({ code: 'k7mp2q', league: 'prem', season: 'short', length: 'quick', host: 'u_a', seed: 12345, ...over }), status: 'season' });
 const clubs = { bath: { uid: 'u_a' }, gloucester: { uid: 'u_b' }, sale: { uid: 'u_c' } };
@@ -125,4 +125,7 @@ test('a friend who leaves hands their club to the CPU; squads people edited are 
   const squad = { S: 'A. One', F: 'B. Two', C: 'C. Three', W: 'D. Four', B: 'E. Five' };
   const withSquad = rebuild(s, { ...clubs, bath: { uid: 'u_a', roster: squad } }, {}, 'u_a');
   assert.deepEqual(teamOf(withSquad.t, 'bath').roster, squad);
+  // The renamed five lead the squad, so they're the ones picked.
+  assert.deepEqual(selectSide(teamOf(withSquad.t, 'bath')).roster, squad);
+  assert.equal(teamOf(withSquad.t, 'bath').squad.length, 15);
 });

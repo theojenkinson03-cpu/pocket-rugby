@@ -9,8 +9,8 @@ import { CARD_IDS, rollRarity } from './cards.js';
 import { act, MATCH_LENGTHS, newMatch, rollWeather, seededRng, TRY_RUN_IN } from './engine.js';
 import { cpuChoice } from './ai.js';
 import { randomRoster } from './players.js';
-import { realRoster } from './squads.js';
-import { LEAGUES } from './tournament.js';
+import { realRoster, realSquad } from './squads.js';
+import { LEAGUES, selectSide } from './tournament.js';
 import { winMeter } from './winprob.js';
 
 // Day 1 of the daily challenge.
@@ -191,7 +191,10 @@ export function dailyMatch(s) {
   const rng = seededRng(s.seed ^ 0x1234567);
   const sides = [0, 1].map(i => {
     const club = clubOf(s, i);
-    return { name: club.name, color: club.color, kit: club.kit || null, roster: s.rosters[i] };
+    // The bench: the club's own replacements, picked as a club would.
+    const squad = realSquad(club.id, club.flavour);
+    const bench = selectSide({ squad, roster: s.rosters[i] }, Object.values(s.rosters[i])).bench;
+    return { name: club.name, color: club.color, kit: club.kit || null, roster: s.rosters[i], bench };
   });
   // Two clubs in the same colours: the visitors change.
   const away = 1 - s.home;

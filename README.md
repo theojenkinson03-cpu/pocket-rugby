@@ -46,7 +46,9 @@ Every side has a strength: the nations a rating from 1 (Chile, Hong Kong China, 
 
 ## Real players
 
-Every nation and club fields five real players, one for each die: the Scrum Half, a Forward, a Centre, an Outside Back and the Fly Half. They come from recent squads (2025–26, and the 2026–27 line-ups where they were known), so some will have moved on. They're used only to name the dice in commentary, the stats and the Team of the Season. Your own side on the team sheet keeps names you can edit.
+Every nation and club has a squad of fifteen: two Scrum Halves, five Forwards, three Centres, three Outside Backs and two Fly Halves, 942 of them real players from recent squads (2025–26, and the 2026–27 line-ups where they were known), so some will have moved on. Where we couldn't name fifteen with confidence (Hong Kong, Spain and Zimbabwe most of all, and some clubs' benches), the rest are made up, the same names every time. They're used only to name the dice in commentary, the stats and the Team of the Season.
+
+**The team sheet.** Before each match in a competition, pick five to start, one for each die, and three replacements of any position. Anyone hurt in your last match sits this one out (the CPU's sides too), so the second-choice Forward gets a game. A player picked out of position runs at −1. Your picks stay until you change them, and carry into next season with a club. Quick matches and online matches have three made-up replacements you can rename on the squad screen.
 
 ## Leagues
 
@@ -116,7 +118,7 @@ Like the leaderboard, a friends league lives in the page's shared data on claude
 Two optional rules, switched on or off on the team sheet, in the competition setup and in the online lobby, like the team cards:
 
 - **Weather** (off unless you turn it on). Each match gets its own conditions: rain about one match in three, wind about one in two. **Rain**: a wet ball, so the Forwards' and Centres' free ‹Pass› face is a knock-on (the Scrum Half's passes and every run are as normal; a card that stops a knock-on still does). **Wind**: kicks with the wind at your back go 10 m further, and 10 m shorter into it; the ends change at half time. The pitch shows the rain and an arrow for the wind, the pass odds and kick chances count them, and the commentary says when the weather made the difference.
-- **The bench** (on unless you turn it off). Once a half, each side may bring on a replacement to clear an injured player's penalty. The choice comes when a player is hurt (any injured player may come off then) and at half time, when each side gets a fresh replacement and can use it on an old injury. Use it now, or keep it in case someone who carries more gets hurt; an unused replacement is gone at half time. The CPU brings the replacement on straight away for whoever carries most: in 40,000 simulated matches for each policy, keeping it for something worse never did better (49.6% to 49.9% against replacing at once), so it's a close call, and the CPU takes the safe one.
+- **The bench** (on unless you turn it off). Three named replacements, each coming on once, for an injured player: the replacement has none of the injury. Bring one on when a player is hurt (any injured player may come off then) or at half time, when a side can make as many changes as it has replacements for the injured. A replacement playing out of position runs at −1, so a Forward for a Forward is best; for a −1 injury an out-of-position replacement gains nothing, and the CPU plays on. The player who came off keeps their numbers in the report, and anyone hurt misses their side's next match in a competition.
 
 ## Team cards
 
@@ -208,7 +210,7 @@ The rules engine is checked from several directions. [RULES.md](RULES.md) maps e
 ```sh
 npm test               # 220+ tests: rules, cards at every rarity, weather and the bench, players, tournaments, the Champions Cup, season stats, club careers, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 195 bugs; every one must be caught
+npm run test:mutation  # plants 218 bugs; every one must be caught
 npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match, the daily challenge with its leaderboard and a two-phone friends league
 npm run check          # all of the above
 ```
@@ -246,7 +248,8 @@ A standard race to 30 averages about 5.7 tries and 4 drop-goal chances, and the 
 | `js/winprob.js` | Win model for the meter, the momentum chart and Expert |
 | `js/players.js` | Player names, ratings and Player of the Match |
 | `js/tournament.js` | The World Cup, the four leagues and the Champions Cup: teams, grounds, fixtures, tables, play-offs, class |
-| `js/squads.js` | Five real players for every nation and club |
+| `js/squads.js` | A squad of fifteen for every nation and club |
+| `js/duel.js` | Each side's dice and what they come to, for the tray |
 | `js/guide.js` | The dice guide (what each face of the next roll would do) and the dice badges |
 | `js/season.js` | Season stats: player totals, leaders, Team of the Season |
 | `js/club.js` | Club career: seasons, Champions Cup qualification, records and trophies |

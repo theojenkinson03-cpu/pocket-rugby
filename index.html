@@ -420,11 +420,21 @@
 
 <dialog class="sheet" id="dlg-squad" aria-labelledby="squad-title">
   <h2 id="squad-title">Squad</h2>
-  <p>Name your five players. Their names appear in the commentary and the match report.</p>
+  <p>Name your five players and the three on the bench. Their names appear in the commentary and the match report.</p>
   <div class="squad-list" id="squad-list"></div>
   <div class="menu-list">
     <button type="button" class="btn" id="btn-squad-shuffle">Shuffle names</button>
     <button type="button" class="btn btn-primary" id="btn-squad-done">Done</button>
+  </div>
+</dialog>
+
+<dialog class="sheet" id="dlg-sheet" aria-labelledby="sheet-title">
+  <h2 id="sheet-title">Team sheet</h2>
+  <p>Five to start, one for each die, and three replacements of any position. A player out of position runs at −1. Anyone hurt last match sits this one out.</p>
+  <div class="squad-list" id="sheet-list"></div>
+  <div class="menu-list">
+    <button type="button" class="btn" id="btn-sheet-best">Best side</button>
+    <button type="button" class="btn btn-primary" id="btn-sheet-done">Kick off</button>
   </div>
 </dialog>
 

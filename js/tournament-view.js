@@ -423,7 +423,7 @@ export function tournamentHub(t, handlers) {
   if (res) page.append(res);
 
   const foot = el('div', 'page-foot');
-  foot.append(button('Edit squad', handlers.onSquad, 'btn'));
+  foot.append(button('Team sheet', handlers.onSquad, 'btn'));
   if (t.stage !== 'done') foot.append(button('Abandon tournament', handlers.onAbandon, 'btn btn-quiet'));
   page.append(foot);
   return page;

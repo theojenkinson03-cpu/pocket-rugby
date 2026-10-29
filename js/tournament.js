@@ -275,6 +275,21 @@ function makeTeams(roster) {
 }
 const firstFive = squad => Object.fromEntries(POSITIONS.map(p => [p, squad.find(x => x.pos === p)?.name ?? null]));
 
+// A squad with `roster` first at each position: a name already in the squad
+// moves up, a new one takes the first player's place.
+export function ledBy(squad, roster) {
+  const led = squad.map(x => ({ ...x }));
+  for (const pos of POSITIONS) {
+    const name = roster?.[pos];
+    const first = led.findIndex(x => x.pos === pos);
+    const at = led.findIndex(x => x.name === name && x.pos === pos);
+    if (!name || first < 0 || at === first) continue;
+    if (at < 0) led[first] = { name, pos };
+    else [led[first], led[at]] = [led[at], led[first]];
+  }
+  return led;
+}
+
 // ---- Squads, the team sheet and injuries -------------------------------------
 //
 // A match day picks five to start, one for each die, and three replacements
@@ -498,20 +513,8 @@ export function migrateTournament(t) {
     side.ground ??= known.ground;
     side.rating ??= known.rating;
     if (known.kit) side.kit ??= known.kit;
-    // Squads of fifteen came with the team sheet: the five already playing
-    // stay first at their positions (made-up ones take the first place).
-    if (!side.squad) {
-      const squad = realSquad(side.id, known.flavour);
-      for (const pos of POSITIONS) {
-        const name = side.roster?.[pos];
-        const first = squad.findIndex(x => x.pos === pos);
-        const at = squad.findIndex(x => x.name === name && x.pos === pos);
-        if (!name || at === first) continue;
-        if (at < 0) squad[first] = { name, pos };
-        else [squad[first], squad[at]] = [squad[at], squad[first]];
-      }
-      side.squad = squad;
-    }
+    // Squads of fifteen came with the team sheet: the five already playing start.
+    side.squad ??= ledBy(realSquad(side.id, known.flavour), side.roster);
   }
   t.picks ??= {};
   t.byes ??= [];

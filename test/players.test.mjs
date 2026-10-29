@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { act, carryMetres, emptyPlayer, migrate, newMatch, seededRng, TRY_RUN_IN, VERSION } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { POSITIONS } from '../js/dice.js';
-import { fullName, playerOfTheMatch, playerRatings, possessive, randomRoster, rating, statLine, surname, SURNAMES, who } from '../js/players.js';
+import { fullName, playerOfTheMatch, playerRatings, possessive, randomBench, randomRoster, rating, statLine, surname, SURNAMES, who } from '../js/players.js';
 import { choose, dice, roll, stateAt } from './helpers.mjs';
 
 test('a roster is five different names in "A. Surname" form, from the side\'s pool', () => {
@@ -196,4 +196,30 @@ test('each number goes to the player who earned it', () => {
   d = choose(d, 'kick').state;
   d = roll(d, dice(0)).state;
   assert.deepEqual([d.teams[0].players.C.points, d.teams[0].players.B.points], [3, 0]);
+});
+
+test('a made-up bench: a Forward, a Centre and an Outside Back, none sharing a surname with the five', () => {
+  const rng = seededRng(12);
+  for (let i = 0; i < 200; i++) {
+    const roster = randomRoster('welsh', rng);
+    const bench = randomBench(roster, 'welsh', rng);
+    assert.deepEqual(bench.map(b => b.pos), ['F', 'C', 'W']);
+    const surnames = [...Object.values(roster), ...bench.map(b => b.name)].map(n => n.replace(/^[A-Z]\.\s*/, ''));
+    assert.equal(new Set(surnames).size, 8, surnames.join(', '));
+  }
+});
+
+test('everyone who played is rated: a replacement and the player they replaced both count', () => {
+  const m = newMatch({ mode: '2p', bench: true, teams: [{ name: 'A', color: '#111111', roster: randomRoster(), bench: [{ name: 'R. Sub', pos: 'F' }] }, { name: 'B', color: '#eeeeee', roster: randomRoster() }] });
+  m.teams[0].injuries.F = 1;
+  m.attacker = 0;
+  m.teams[0].players.F.tries = 2;
+  m.step = { type: 'choose', purpose: 'bench', team: 0, when: 'injury', pos: 'F', options: ['0>F', 'stay'], next: { type: 'roll', purpose: 'attack', dice: ['S'], team: 0 } };
+  const after = act(m, { type: 'choose', value: '0>F' }).state;
+  after.teams[0].players.F.tackles = 3;
+  const rows = playerRatings(after).filter(r => r.team === 0);
+  assert.equal(rows.length, 6, 'five on the field and one off');
+  assert.equal(rows.find(r => r.name === m.teams[0].roster.F).stats.tries, 2);
+  assert.equal(rows.find(r => r.name === 'R. Sub').stats.tackles, 3);
+  assert.deepEqual(after.teams[0].starters, m.teams[0].roster, 'the five who started, for a rematch');
 });

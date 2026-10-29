@@ -57,7 +57,12 @@ test('the next season: same league, same squads for everyone, the club and its r
   const rng = seededRng(2);
   const t = playOut(createLeague({ league: 'super', userTeam: 'blues', season: 'short', length: 'quick', cards: false, rng }), rng);
   teamOf(t, 'blues').roster.S = 'Z. Custom';
+  // The club's own team sheet goes into next season with it.
+  const sheet = { start: { F: teamOf(t, 'blues').squad.filter(x => x.pos === 'F')[2].name }, bench: [teamOf(t, 'blues').squad.find(x => x.pos === 'S').name] };
+  t.picks = { blues: sheet };
   const next = continueClub(t, rng);
+  assert.deepEqual(next.picks.blues, sheet);
+  for (const side of t.teams) assert.deepEqual(teamOf(next, side.id).squad.map(x => x.name).sort(), side.squad.map(x => x.name).filter(n => n !== teamOf(t, 'blues').squad.find(x => x.pos === 'S').name || side.id !== 'blues').concat(side.id === 'blues' ? ['Z. Custom'] : []).sort(), `${side.id} keep their squad`);
   assert.equal(next.kind, 'league');
   assert.equal(next.league, 'super');
   assert.equal(next.userTeam, 'blues');

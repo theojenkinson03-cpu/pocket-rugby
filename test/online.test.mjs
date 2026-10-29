@@ -226,6 +226,10 @@ test('team details from the other phone are cleaned up', async () => {
   assert.equal(host.peer.team.roster.S.length, 26);
   assert.equal(host.peer.team.roster.F, '3');
   assert.ok(!('extra' in host.peer.team.roster));
+  // A bench: three at most, names cut to length, positions checked.
+  await sneaky.presence({ team: { name: 'Gulls', color: '#1d3577', bench: [{ name: 'q'.repeat(40), pos: 'F' }, { name: 'B. Two', pos: 'nope' }, { pos: 'W' }, { name: 'D. Four', pos: 'C' }] } });
+  await settle(server);
+  assert.deepEqual(host.peer.team.bench, [{ name: 'q'.repeat(26), pos: 'F' }, { name: 'B. Two', pos: 'F' }, { name: null, pos: 'W' }]);
   assert.equal(host.peer.team.kit, null, 'no kit sent: plain');
   // Patterned kits: a known pattern and two to four real colours, or plain.
   const kitFrom = async kit => {

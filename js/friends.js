@@ -9,7 +9,7 @@
 
 import { seededRng } from './engine.js';
 import { makeCode } from './online.js';
-import { advance, createLeague, currentRound, LEAGUES, recordResult, simulateFixture, teamOf } from './tournament.js';
+import { advance, createLeague, currentRound, LEAGUES, ledBy, recordResult, simulateFixture, teamOf } from './tournament.js';
 
 export const FRIENDS_VERSION = 1;
 
@@ -61,7 +61,10 @@ export function rebuild(settings, clubs, results, me, cache = {}) {
   t.friends = { code: settings.code, myClub };
   for (const [id, club] of Object.entries(clubs)) {
     const team = teamOf(t, id);
-    if (team && club.roster) team.roster = { ...club.roster };
+    if (team && club.roster) {
+      team.roster = { ...club.roster };
+      team.squad = ledBy(team.squad, club.roster);
+    }
   }
   const pending = [];
   for (let guard = 0; guard < 200 && t.stage !== 'done'; guard++) {

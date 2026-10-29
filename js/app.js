@@ -5,11 +5,11 @@ import { cpuChoiceAsync, LEVELS, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
 import { CARD_BY_ID, CARDS, cardEffects, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
 import { metres, narrate, scoreLine, weatherText } from './commentary.js';
-import { playerOfTheMatch, possessive, randomRoster, statLine, surname } from './players.js';
+import { playerOfTheMatch, possessive, randomBench, randomRoster, statLine, surname } from './players.js';
 import { winMeter } from './winprob.js';
 import { ACHIEVEMENT_BY_ID, newCareer, newTracker, recordMatch, track } from './career.js';
 import { tipFor, tipText } from './coach.js';
-import { advance, clash, createChampions, createCup, createLeague, LEAGUES, matchOptions, migrateTournament, recordResult, resultFromMatch, roundName, simulateRound, stageName, standings, teamOf, userAlive, userFixture, userRecord } from './tournament.js';
+import { advance, clash, createChampions, createCup, createLeague, LEAGUES, matchOptions, migrateTournament, recordResult, resultFromMatch, roundName, selectSide, simulateRound, stageName, standings, teamOf, unavailable, userAlive, userFixture, userRecord } from './tournament.js';
 import { applyRemote, encodeAction, hashState, makeCode, normaliseCode, OnlineSession, pendingEntries, recordingRng, startingMatch, strongRandom, validCode } from './online.js';
 import { $, button, el } from './dom.js';
 import { badgeNode, createDie, dieChip, faceLabel, faceTile, rollTo, setFace, wait } from './dice-view.js';
@@ -179,6 +179,13 @@ function ensureRosters() {
   if (!Array.isArray(s.patterns) || s.patterns.length !== 2 || !s.patterns.every(p => PATTERNS.includes(p))) s.patterns = [...DEFAULT_SETUP.patterns];
   if (!Array.isArray(s.rosters) || s.rosters.length !== 2 || !s.rosters.every(r => r && POSITIONS.every(p => typeof r[p] === 'string'))) {
     s.rosters = [randomRoster(), randomRoster()];
+    s.benches = null;
+    save('setup', s);
+  }
+  // Three replacements each, named like the side.
+  const benchOk = b => Array.isArray(b) && b.length === 3 && b.every(x => x && typeof x.name === 'string' && POSITIONS.includes(x.pos));
+  if (!Array.isArray(s.benches) || s.benches.length !== 2 || !s.benches.every(benchOk)) {
+    s.benches = s.rosters.map(r => randomBench(r));
     save('setup', s);
   }
 }
@@ -249,7 +256,7 @@ function renderSetup() {
 }
 
 // A made-up side from the team sheet: name, kit and squad.
-const setupTeam = (s, i) => ({ name: cleanName(s.names[i], DEFAULT_SETUP.names[i]), color: s.colors[i], kit: customKit(s.patterns[i], s.colors[i]), roster: s.rosters[i] });
+const setupTeam = (s, i) => ({ name: cleanName(s.names[i], DEFAULT_SETUP.names[i]), color: s.colors[i], kit: customKit(s.patterns[i], s.colors[i]), roster: s.rosters[i], bench: s.benches?.[i] });
 
 const cleanName = (text, fallback) => (text || '').trim().slice(0, 14) || fallback;
 
@@ -275,11 +282,12 @@ function bindSetup() {
   document.querySelectorAll('[data-squad]').forEach(btn => btn.addEventListener('click', () => {
     const team = Number(btn.dataset.squad);
     const name = cleanName(ui.setup.names[team], DEFAULT_SETUP.names[team]);
-    openSquad(`${name} squad`, ui.setup.rosters[team], roster => {
+    openSquad(`${name} squad`, ui.setup.rosters[team], (roster, bench) => {
       ui.setup.rosters[team] = roster;
+      ui.setup.benches[team] = bench;
       save('setup', ui.setup);
       renderSetup();
-    });
+    }, 'any', ui.setup.benches[team]);
   }));
   form.addEventListener('submit', e => {
     e.preventDefault();
@@ -326,8 +334,8 @@ function startLearn() {
 
 // ---------- Squad editor (any team: setup, tournament or online) ----------
 
-function openSquad(title, roster, onSave, flavour = 'any') {
-  ui.squad = { roster: { ...roster }, onSave, flavour };
+function openSquad(title, roster, onSave, flavour = 'any', bench = null) {
+  ui.squad = { roster: { ...roster }, bench: bench ? bench.map(b => ({ ...b })) : null, onSave, flavour };
   $('#squad-title').textContent = title;
   renderSquadList();
   openDialog('dlg-squad');
@@ -336,31 +344,135 @@ function openSquad(title, roster, onSave, flavour = 'any') {
 function renderSquadList() {
   const host = $('#squad-list');
   host.innerHTML = '';
-  for (const pos of POSITIONS) {
-    const row = el('label', 'squad-row');
+  const nameInput = (value, onInput) => {
     const input = el('input', 'squad-input');
-    input.value = ui.squad.roster[pos] || '';
+    input.value = value || '';
     input.maxLength = 26;
     input.autocomplete = 'off';
     input.spellcheck = false;
-    input.addEventListener('input', () => {
-      ui.squad.roster[pos] = input.value;
-    });
-    row.append(dieChip(pos), el('span', 'squad-pos', PLAYERS[pos].one), input);
+    input.addEventListener('input', () => onInput(input.value));
+    return input;
+  };
+  for (const pos of POSITIONS) {
+    const row = el('label', 'squad-row');
+    row.append(dieChip(pos), el('span', 'squad-pos', PLAYERS[pos].one), nameInput(ui.squad.roster[pos], v => (ui.squad.roster[pos] = v)));
     host.append(row);
   }
+  if (!ui.squad.bench) return;
+  host.append(el('p', 'squad-h', 'Bench'));
+  ui.squad.bench.forEach(b => {
+    const row = el('label', 'squad-row bench');
+    row.append(dieChip(b.pos), el('span', 'squad-pos', `Sub ${PLAYERS[b.pos].one}`), nameInput(b.name, v => (b.name = v)));
+    host.append(row);
+  });
 }
 
 function bindSquad() {
   $('#btn-squad-shuffle').addEventListener('click', () => {
     ui.squad.roster = randomRoster(ui.squad.flavour);
+    if (ui.squad.bench) ui.squad.bench = randomBench(ui.squad.roster, ui.squad.flavour);
     renderSquadList();
   });
   $('#btn-squad-done').addEventListener('click', () => {
     const fresh = randomRoster(ui.squad.flavour);
     const roster = Object.fromEntries(POSITIONS.map(p => [p, (ui.squad.roster[p] || '').trim().slice(0, 26) || fresh[p]]));
-    ui.squad.onSave(roster);
+    const spare = randomBench(roster, ui.squad.flavour);
+    const bench = ui.squad.bench?.map((b, i) => ({ name: (b.name || '').trim().slice(0, 26) || spare[i].name, pos: b.pos })) ?? null;
+    ui.squad.onSave(roster, bench);
     $('#dlg-squad').close();
+  });
+}
+
+// ---------- Team sheet (competitions) ----------
+//
+// Five to start, one for each die, and three replacements of any position,
+// from the squad of fifteen. Anyone hurt last match sits this one out.
+
+function openTeamSheet(t, onDone = null) {
+  const me = teamOf(t, t.userTeam);
+  const out = unavailable(t, me.id);
+  const side = selectSide(me, out, t.picks?.[me.id]);
+  ui.sheet = { t, team: me, out, start: { ...side.roster }, bench: side.bench.map(b => b.name), onDone };
+  $('#sheet-title').textContent = `${me.name} team sheet`;
+  $('#btn-sheet-done').textContent = onDone ? 'Kick off' : 'Done';
+  renderTeamSheet();
+  openDialog('dlg-sheet');
+}
+
+function renderTeamSheet() {
+  const s = ui.sheet;
+  const host = $('#sheet-list');
+  host.innerHTML = '';
+  const squad = s.team.squad;
+  const posOf = name => squad.find(x => x.name === name)?.pos;
+  const option = (p, extra = '') => {
+    const o = el('option', null, `${p.name}${extra}${s.out.includes(p.name) ? ' · injured' : ''}`);
+    o.value = p.name;
+    o.disabled = s.out.includes(p.name);
+    return o;
+  };
+  const select = (slot, value, groups) => {
+    const box = el('select', 'sheet-select');
+    for (const [label, players, extra] of groups) {
+      if (!players.length) continue;
+      const group = document.createElement('optgroup');
+      group.label = label;
+      players.forEach(p => group.append(option(p, extra?.(p) ?? '')));
+      box.append(group);
+    }
+    box.value = value ?? '';
+    box.addEventListener('change', () => placeOnSheet(slot, box.value));
+    return box;
+  };
+  host.append(el('p', 'squad-h', 'Starting five'));
+  for (const pos of POSITIONS) {
+    const row = el('label', 'squad-row sheet-row');
+    const box = select(`start:${pos}`, s.start[pos], [
+      [PLAYERS[pos].name, squad.filter(p => p.pos === pos)],
+      ['Out of position (−1)', squad.filter(p => p.pos !== pos), p => ` (${PLAYERS[p.pos].one})`],
+    ]);
+    row.append(dieChip(pos), el('span', 'squad-pos', PLAYERS[pos].one), box);
+    if (posOf(s.start[pos]) !== pos) row.append(el('small', 'sheet-warn', 'Out of position: −1 on these runs'));
+    host.append(row);
+  }
+  host.append(el('p', 'squad-h', 'Bench'));
+  s.bench.forEach((name, i) => {
+    const row = el('label', 'squad-row sheet-row bench');
+    const box = select(`bench:${i}`, name, POSITIONS.map(pos => [PLAYERS[pos].name, squad.filter(p => p.pos === pos)]));
+    row.append(dieChip(posOf(name) || 'F'), el('span', 'squad-pos', `Sub ${i + 1}`), box);
+    host.append(row);
+  });
+  if (s.out.length) host.append(el('p', 'sheet-out', `Injured last match: ${s.out.join(', ')}. Back for the next one.`));
+}
+
+// Puts `name` in `slot`; whoever was in the slot moves to wherever `name` was.
+function placeOnSheet(slot, name) {
+  const s = ui.sheet;
+  const slots = [...POSITIONS.map(p => `start:${p}`), ...s.bench.map((_, i) => `bench:${i}`)];
+  const get = k => (k.startsWith('start:') ? s.start[k.slice(6)] : s.bench[Number(k.slice(6))]);
+  const set = (k, v) => (k.startsWith('start:') ? (s.start[k.slice(6)] = v) : (s.bench[Number(k.slice(6))] = v));
+  const from = slots.find(k => k !== slot && get(k) === name);
+  const before = get(slot);
+  set(slot, name);
+  if (from) set(from, before);
+  renderTeamSheet();
+}
+
+function bindTeamSheet() {
+  $('#btn-sheet-best').addEventListener('click', () => {
+    const s = ui.sheet;
+    const side = selectSide(s.team, s.out);
+    s.start = { ...side.roster };
+    s.bench = side.bench.map(b => b.name);
+    renderTeamSheet();
+  });
+  $('#btn-sheet-done').addEventListener('click', () => {
+    const s = ui.sheet;
+    s.t.picks ||= {};
+    s.t.picks[s.team.id] = { start: { ...s.start }, bench: [...s.bench] };
+    save('tournament', s.t);
+    $('#dlg-sheet').close();
+    s.onDone?.();
   });
 }
 
@@ -477,7 +589,7 @@ function persist() {
 function rematchOptions(m) {
   return {
     mode: m.mode,
-    teams: m.teams.map(t => ({ name: t.name, color: t.color, kit: t.kit, roster: t.roster })),
+    teams: m.teams.map(t => ({ name: t.name, color: t.color, kit: t.kit, roster: t.starters || t.roster, bench: t.subs.map(({ name, pos }) => ({ name, pos })) })),
     length: m.length,
     format: m.format,
     decider: m.decider,
@@ -1989,13 +2101,7 @@ function renderTournament() {
       }, 'btn btn-danger'],
       ['Keep playing', null, 'btn'],
     ]),
-    onSquad: () => {
-      const me = teamOf(t, t.userTeam);
-      openSquad(`${me.name} squad`, me.roster, roster => {
-        me.roster = roster;
-        save('tournament', t);
-      }, me.flavour);
-    },
+    onSquad: () => openTeamSheet(t),
   }));
 }
 
@@ -2021,7 +2127,7 @@ function playTournamentMatch() {
     resumeMatch(saved);
     return;
   }
-  startMatch(matchOptions(t, f), { kind: 'tournament', fixture: f.id });
+  openTeamSheet(t, () => startMatch(matchOptions(t, f), { kind: 'tournament', fixture: f.id }));
 }
 
 // ---------- Daily challenge ----------
@@ -2579,11 +2685,12 @@ const lobbyHandlers = {
     if (patch.color) renderLobby();
   },
   onSquad() {
-    openSquad('Your squad', ui.setup.rosters[0], roster => {
+    openSquad('Your squad', ui.setup.rosters[0], (roster, bench) => {
       ui.setup.rosters[0] = roster;
+      ui.setup.benches[0] = bench;
       save('setup', ui.setup);
       ui.lobby.team = myOnlineTeam();
-    });
+    }, 'any', ui.setup.benches[0]);
   },
   onHost: () => hostOnline(),
   onJoin: text => joinOnline(text),
@@ -3021,6 +3128,7 @@ function start(data = {}) {
   buildDiceReference();
   bindSetup();
   bindSquad();
+  bindTeamSheet();
   bindDialogs();
   bindSettings();
   bindTabs();

@@ -216,6 +216,13 @@ async function playMatch(page, { label, mode = '1p', length = 'quick', format = 
   return playOn(page, { label, tapStyle, skipScenes, budgetMs });
 }
 
+// Starts the user's next competition match: Play, then Kick off on the team sheet.
+async function kickOff(page) {
+  await page.click('.next-card .btn-primary');
+  await page.waitForSelector('#dlg-sheet[open]', { timeout: 5000 });
+  await page.click('#btn-sheet-done');
+}
+
 async function playOn(page, { label, tapStyle = 'random', skipScenes = true, budgetMs = 420000 }) {
   const started = Date.now();
   let checks = 0;
@@ -412,7 +419,7 @@ const SCENARIOS = {
     check((await page.$$('.standings tbody tr')).length === 24, 'twenty-four clubs');
     check(/Pool 3 · Round 1 of 4/.test(await page.textContent('.next-card .nc-kicker')), 'Munster are in Pool 3');
     check((await page.textContent('.next-card .nc-venue')).length > 3, 'the ground is named');
-    await page.click('.next-card .btn-primary');
+    await kickOff(page);
     const result = await playOn(page, { label: 'champions cup' });
     const note = await page.textContent('#break-note');
     check(/^(A draw\. )?Munster are \d+(st|nd|rd|th) in Pool 3\.$/.test(note), `pool note "${note}"`);
@@ -681,12 +688,24 @@ const SCENARIOS = {
     const rows = await page.$$('.standings tbody tr');
     check(rows.length === 24, `six pools of four (${rows.length} rows)`);
     check((await page.textContent('.next-card')).includes('Stadium'), 'a World Cup ground');
+    // The team sheet: Wales's first five, three on the bench; a Scrum Half on the bench instead.
     await page.click('.next-card .btn-primary');
+    await page.waitForSelector('#dlg-sheet[open]');
+    const starters = await page.$$eval('#sheet-list .sheet-row:not(.bench) select', s => s.map(x => x.value));
+    check(JSON.stringify(starters) === JSON.stringify(['T. Williams', 'J. Morgan', 'B. Thomas', 'L. Rees-Zammit', 'D. Edwards']), `Wales's five: ${starters}`);
+    const bench = await page.$$('#sheet-list .sheet-row.bench select');
+    check(bench.length === 3, 'three on the bench');
+    await bench[2].selectOption('R. Williams');
+    // Picking a starter for a slot already filled swaps them round.
+    const swapped = await page.$$eval('#sheet-list .sheet-row.bench select', s => s.map(x => x.value));
+    check(swapped[2] === 'R. Williams' && new Set(swapped).size === 3, `bench: ${swapped}`);
+    await page.click('#btn-sheet-done');
     const label = await page.textContent('#period');
     check(/World Cup · Pool F · Round 1 of 3/.test(label), `match label "${label}"`);
-    // Real players: Wales's five.
-    const squad = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:match')).match.teams[0].roster);
-    check(squad.S === 'T. Williams' && squad.B === 'D. Edwards', `Wales's squad: ${JSON.stringify(squad)}`);
+    // Real players: Wales's five, and the bench as picked.
+    const team = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:match')).match.teams[0]);
+    check(team.roster.S === 'T. Williams' && team.roster.B === 'D. Edwards', `Wales's squad: ${JSON.stringify(team.roster)}`);
+    check(team.subs.some(x => x.name === 'R. Williams' && x.pos === 'S'), `the bench: ${JSON.stringify(team.subs)}`);
     const result = await playOn(page, { label: 'cup' });
     const note = await page.textContent('#break-note');
     check(/Wales are \d(st|nd|rd|th) in Pool F/.test(note), `tournament note "${note}"`);
@@ -757,7 +776,7 @@ const SCENARIOS = {
       await page.click('.next-card.bye .btn-primary');
       check((await page.textContent('.next-card .nc-kicker')).includes('Round 2 of 6'), 'after a bye, round 2');
     }
-    await page.click('.next-card .btn-primary');
+    await kickOff(page);
     const label = await page.textContent('#period');
     check(/^Super Rugby · Round \d of 6/.test(label), `match label "${label}"`);
     const result = await playOn(page, { label: 'league' });
@@ -788,7 +807,7 @@ const SCENARIOS = {
     check((await page.textContent('.bracket .table-note')).includes('go straight into the semi-finals'), 'the top two are named');
     await page.click('.next-card.bye .btn-primary');
     check((await page.textContent('.next-card .nc-kicker')).includes('Semi-final'), 'then the semi-final');
-    await page.click('.next-card .btn-primary');
+    await kickOff(page);
     const semi = await playOn(page, { label: 'top14-semi' });
     const out = await page.textContent('#break-note');
     check(/^Toulouse are (through to the final!|out in the semi-finals\.)$/.test(out), `semi-final note "${out}"`);

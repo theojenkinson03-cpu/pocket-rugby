@@ -4,7 +4,7 @@
 // the next one. The club keeps a season-by-season history, a records book
 // and a trophy cabinet.
 
-import { CHAMPIONS_CUP, createChampions, createLeague, LEAGUE_OF, LEAGUES, standings, teamOf } from './tournament.js';
+import { CHAMPIONS_CUP, createChampions, createLeague, LEAGUE_OF, LEAGUES, ledBy, standings, teamOf } from './tournament.js';
 import { seasonPlayers, totalPoints } from './season.js';
 
 const FIRST_YEAR = 2026;
@@ -89,8 +89,12 @@ export function closeCompetition(club, t) {
   const comp = t.kind === 'league' ? LEAGUES[t.league].short : t.short || t.name;
   const team = club.team;
   const records = club.records;
-  // Every club's squad carries over to next season.
-  for (const side of t.teams) if (side.roster) club.rosters[side.id] = { ...side.roster };
+  // Every club's squad carries over to next season, and the club's own team sheet.
+  for (const side of t.teams) {
+    if (side.roster) club.rosters[side.id] = { ...side.roster };
+    if (side.squad) (club.squads ||= {})[side.id] = side.squad.map(x => ({ ...x }));
+  }
+  if (t.picks?.[team]) club.picks = structuredClone(t.picks[team]);
 
   // The club's matches in order: wins, defeats, runs and match records.
   for (const f of t.fixtures) {
@@ -179,9 +183,16 @@ export function finishSeason(club) {
   return club;
 }
 
-// Gives every side the squad it had last season.
+// Gives every side the squad it had last season, and the club its team sheet.
 function keepSquads(t, club) {
-  for (const side of t.teams) if (club.rosters[side.id]) side.roster = { ...club.rosters[side.id] };
+  for (const side of t.teams) {
+    if (club.squads?.[side.id]) side.squad = club.squads[side.id].map(x => ({ ...x }));
+    if (club.rosters[side.id]) {
+      side.roster = { ...club.rosters[side.id] };
+      side.squad = ledBy(side.squad, side.roster);
+    }
+  }
+  if (club.picks) (t.picks ||= {})[club.team] = structuredClone(club.picks);
   return t;
 }
 
