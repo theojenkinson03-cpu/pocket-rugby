@@ -4,7 +4,7 @@ The game is published as two claude.ai artifacts:
 
 | Channel | Artifact | Built from |
 | --- | --- | --- |
-| **Real** | https://claude.ai/artifact/X7GPTEeuMFYFDnVSyiuKFL | commit `cfff81f` (table animations, fair kick-offs after scores, a calm match screen with a fixed end for each side, the guide read 1 to 6, solid dice) |
+| **Real** | https://claude.ai/artifact/X7GPTEeuMFYFDnVSyiuKFL | commit `361418b` (player ratings that change the dice, Dream Team with packs and ten divisions, table animations, fair kick-offs) |
 | **Dev** | https://claude.ai/artifact/58EujGM35rJk24GvmtS1PF | the latest commit on `claude/digital-pocket-rugby` |
 
 Real is what people play. Dev is where the next build takes shape: it shows a **Dev** badge and the commit it was built from on the title screen, and keeps its saves and career apart from Real (each artifact has its own storage).
