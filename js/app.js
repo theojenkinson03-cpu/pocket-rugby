@@ -36,7 +36,7 @@ import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
 // anything that changes a match's outcome changes.
-const BUILD = 'pr-5.1';
+const BUILD = 'pr-6.0';
 
 const KITS = [
   { name: 'Navy', color: '#1d3577' },
