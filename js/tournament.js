@@ -8,7 +8,7 @@ import { cpuChoice } from './ai.js';
 import { CARD_IDS } from './cards.js';
 import { playerOfTheMatch } from './players.js';
 import { packLineup } from './season.js';
-import { realSquad } from './squads.js';
+import { rateSquad, realSquad } from './squads.js';
 import { POSITIONS } from './dice.js';
 
 // The 24 nations at the 2027 World Cup. rating: how strong a side is, 1 to
@@ -269,7 +269,7 @@ function fixture(id, stage, round, home, away, group = null) {
 // Every side with its squad of fifteen (see squads.js) and its first-choice five.
 function makeTeams(roster) {
   return roster.map(team => {
-    const squad = realSquad(team.id, team.flavour);
+    const squad = realSquad(team.id, team.flavour, ratingOf(team));
     return { ...team, squad, roster: firstFive(squad) };
   });
 }
@@ -284,7 +284,7 @@ export function ledBy(squad, roster) {
     const first = led.findIndex(x => x.pos === pos);
     const at = led.findIndex(x => x.name === name && x.pos === pos);
     if (!name || first < 0 || at === first) continue;
-    if (at < 0) led[first] = { name, pos };
+    if (at < 0) led[first] = { name, pos, rating: led[first].rating };
     else [led[first], led[at]] = [led[at], led[first]];
   }
   return led;
@@ -345,7 +345,7 @@ export function selectSide(team, out = [], pick = null) {
       }
     }
   }
-  return { roster, bench: bench.map(({ name, pos }) => ({ name, pos })), offPos };
+  return { roster, bench: bench.map(({ name, pos, rating }) => (Number.isFinite(rating) ? { name, pos, rating } : { name, pos })), offPos };
 }
 
 // A side picked for a fixture: the user's team sheet for the user's side.
@@ -514,7 +514,9 @@ export function migrateTournament(t) {
     side.rating ??= known.rating;
     if (known.kit) side.kit ??= known.kit;
     // Squads of fifteen came with the team sheet: the five already playing start.
-    side.squad ??= ledBy(realSquad(side.id, known.flavour), side.roster);
+    side.squad ??= ledBy(realSquad(side.id, known.flavour, ratingOf(side)), side.roster);
+    // Ratings came with player ratings.
+    if (side.squad.some(p => !Number.isFinite(p.rating))) side.squad = rateSquad(side.squad, side.id, known.flavour, ratingOf(side));
   }
   t.picks ??= {};
   t.byes ??= [];
@@ -568,7 +570,12 @@ function stripAgainst(team, other) {
   return { color: [team.alt, ...NEUTRALS].find(c => c && !clash(c, other)) || team.color, kit: null };
 }
 
-const dressed = (team, strip, side) => ({ name: team.name, ...strip, roster: side.roster, bench: side.bench, offPos: side.offPos });
+// The side as it takes the field, with each player's rating.
+function dressed(team, strip, side) {
+  const rating = new Map((team.squad || []).map(p => [p.name, p.rating]));
+  const ratings = Object.fromEntries(POSITIONS.map(pos => [pos, rating.get(side.roster?.[pos])]).filter(([, r]) => Number.isFinite(r)));
+  return { name: team.name, ...strip, roster: side.roster, bench: side.bench, offPos: side.offPos, ratings: Object.keys(ratings).length ? ratings : null };
+}
 
 // Kits and sides for a fixture, home first. The away side changes strip on a clash.
 export function kits(t, f) {
@@ -632,7 +639,8 @@ export function classCards(gap, rng) {
 
 // Plays a CPU-vs-CPU fixture to the end and returns its result.
 export function simulateFixture(t, f, rng = Math.random) {
-  const [home, away] = kits(t, f);
+  // Class tells through the team cards below, so the ratings sit this one out.
+  const [home, away] = kits(t, f).map(k => ({ ...k, ratings: null, bench: k.bench?.map(({ name, pos }) => ({ name, pos })) }));
   const sides = [teamOf(t, f.home), teamOf(t, f.away)];
   let m = newMatch({ mode: '2p', teams: [home, away], ...matchRules(t, rng, f), cards: false });
   const gap = ratingOf(sides[0]) - ratingOf(sides[1]);

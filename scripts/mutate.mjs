@@ -24,6 +24,11 @@ const MUTANTS = [
   ['Try worth 4', 'js/engine.js', "addPoints(m, ev, team, 5, 'try')", "addPoints(m, ev, team, 4, 'try')"],
   ['Conversion worth 3', 'js/engine.js', "conversion: ['conversions', 'conversionAttempts', 2]", "conversion: ['conversions', 'conversionAttempts', 3]"],
   ['Scorers keep the ball after a score', 'js/engine.js', "  if (keep) {\n    startPossession(m, ev, team, 'restart');", "  if (true) {\n    startPossession(m, ev, team, 'restart');"],
+  ['Elite players get nothing extra', 'js/engine.js', 'export const runRating = r => (r >= ELITE ? 1 : r < POOR ? -1 : 0);', 'export const runRating = r => (r < POOR ? -1 : 0);'],
+  ['A short boot reaches 60 m anyway', 'js/engine.js', '  const reached = Math.min(rolled, parts.cap);', '  const reached = rolled;'],
+  ['Replacements play at the starter\'s rating', 'js/engine.js', "        if (T.ratings || Number.isFinite(sub.rating)) T.ratings = { ...T.ratings, [pos]: sub.rating ?? NEUTRAL_RATING };\n", ''],
+  ['Ratings ignore how strong the side is', 'js/squads.js', 'const base = SIDE_BASE[Math.min(5, Math.max(1, Math.round(strength)))];', 'const base = SIDE_BASE[3];'],
+  ['The win meter ignores ratings', 'js/winprob.js', '  const rated = ratingsEdge(match, team) - ratingsEdge(match, 1 - team);', '  const rated = 0;'],
   ['The kick-off never won back', 'js/engine.js', 'const regathered = kick >= REGATHER;', 'const regathered = false;'],
   ['The kick-off runs the clock', 'js/engine.js', "if (step.purpose !== 'restart') m.clock++;", 'm.clock++;'],
   ['The guide reads in the die\'s own order', 'js/guide.js', "(dieId === 'K' ? DICE.K.faces[a].kick - DICE.K.faces[b].kick : a - b)", '(a - b)'],
@@ -272,7 +277,7 @@ const MUTANTS = [
 
 function run(cwd) {
   return new Promise(resolve => {
-    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions', 'daily', 'friends', 'clock', 'guide', 'duel'].map(f => `test/${f}.test.mjs`);
+    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions', 'daily', 'friends', 'clock', 'guide', 'duel', 'ratings'].map(f => `test/${f}.test.mjs`);
     const child = spawn(process.execPath, ['--test', ...files], { cwd, env: { ...process.env, FUZZ_MATCHES: '120' }, stdio: 'ignore' });
     child.on('exit', code => resolve(code));
   });

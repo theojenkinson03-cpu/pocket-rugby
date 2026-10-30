@@ -13,7 +13,7 @@
 
 import { DICE } from './dice.js';
 import { CARD_BY_ID, cardsWith } from './cards.js';
-import { defenceModifier, intensityParts, tackleBonusFor } from './engine.js';
+import { defenceModifier, intensityParts, playerRating, tackleBonusFor } from './engine.js';
 
 const signed = n => (n > 0 ? `+${n}` : `−${-n}`);
 const metres = n => `${n * 10} m`;
@@ -29,6 +29,8 @@ export function runTerms(match, team, pos, face) {
   if (p.card) terms.push({ n: signed(p.card), label: names(cardsWith(match, team, fx => fx.runBonus?.[pos])) });
   if (p.fortress) terms.push({ n: signed(-p.fortress), label: names(cardsWith(match, other(team), fx => fx.specialDefence || fx.hitUpDefence)) });
   if (p.injury) terms.push({ n: signed(-p.injury), label: 'injured' });
+  if (p.offPos) terms.push({ n: signed(-p.offPos), label: 'out of position' });
+  if (p.rating) terms.push({ n: signed(p.rating), label: `rated ${playerRating(match, team, pos)}` });
   return { terms, total: p.intensity };
 }
 
@@ -98,6 +100,9 @@ export function duelOf(before, after, events) {
     case 'kick': {
       const k = find(events, 'kick');
       const terms = [{ n: metres(k.rolled), label: 'kick' }];
+      const rated = `rated ${playerRating(before, team, 'B')}`;
+      if (k.cap < k.rolled) terms.push({ n: `−${metres(k.rolled - k.cap)}`, label: `reaches ${metres(k.cap)}, ${rated}` });
+      if (k.star) terms.push({ n: `+${metres(k.star)}`, label: rated });
       if (k.card) terms.push({ n: `${k.card > 0 ? '+' : '−'}${metres(Math.abs(k.card))}`, label: names(cardsWith(before, team, fx => fx.kickBonus?.[k.kick])) });
       if (k.wind) terms.push({ n: `${k.wind > 0 ? '+' : '−'}${metres(Math.abs(k.wind))}`, label: 'wind' });
       return {

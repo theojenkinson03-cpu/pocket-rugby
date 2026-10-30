@@ -70,7 +70,7 @@ test('a kick into the wind falls 10 m short; with it, carries 10 m further', () 
   assert.match(line, /\+10 m wind/);
   // The chance shown to the player counts the wind too.
   const m = kickAt(5, 0);
-  assert.deepEqual(kickParts(m, 0, 'penalty'), { card: 0, wind: 1 });
+  assert.deepEqual(kickParts(m, 0, 'penalty'), { card: 0, wind: 1, star: 0, cap: 6 });
   assert.equal(kickBonus(m, 0, 'penalty'), 1);
 });
 

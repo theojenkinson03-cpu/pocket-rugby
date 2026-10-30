@@ -1,6 +1,6 @@
 // Screen controller: menus, the match loop, animation and persistence.
 
-import { act, controllerOf, DECISION_SECONDS, drafterOf, freeSubs, kickBonus, kickCards, kickChance, kickParts, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollsLeft, rollWeather, TIMED_DECISIONS, windWith } from './engine.js';
+import { act, controllerOf, DECISION_SECONDS, drafterOf, freeSubs, kickCards, kickOdds, kickParts, kickReach, runRating, MATCH_LENGTHS, migrate, newMatch, QUICK_TAP_RUNS, receiverOdds, rollsLeft, rollWeather, TIMED_DECISIONS, windWith } from './engine.js';
 import { cpuChoiceAsync, LEVELS, suggestedChoice } from './ai.js';
 import { DICE, PLAYERS, POSITIONS } from './dice.js';
 import { CARD_BY_ID, CARDS, cardEffects, cardTier, RARITIES, RARITY_BY_ID } from './cards.js';
@@ -29,6 +29,7 @@ import { friendsPage } from './friends-view.js';
 import { createPitch } from './pitch.js';
 import { buzz, play, setSoundEnabled, unlockAudio } from './audio.js';
 import { customKit, kitVars, PATTERN_NAMES, PATTERNS } from './color.js';
+import { tierOf } from './squads.js';
 import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
@@ -400,6 +401,26 @@ function openTeamSheet(t, onDone = null) {
   openDialog('dlg-sheet');
 }
 
+// A rating as a chip coloured by its tier, and what it does to the dice.
+const ratingIn = (squad, name) => squad.find(x => x.name === name)?.rating;
+function ratingChip(r) {
+  const c = el('b', `rating-chip t-${tierOf(r)}`, Number.isFinite(r) ? String(r) : '–');
+  c.title = Number.isFinite(r) ? `Rated ${r}` : 'No rating';
+  return c;
+}
+function ratingNote(r, pos) {
+  if (!Number.isFinite(r)) return null;
+  if (pos === 'B') {
+    const { cap, star } = kickReach(r);
+    if (star) return { tone: 'good', text: `Rated ${r}: +1 on runs, +10 m on every kick` };
+    if (cap < 6) return { tone: 'bad', text: `Rated ${r}: kicks reach ${cap * 10} m at most${runRating(r) < 0 ? ', −1 on runs' : ''}` };
+  }
+  const run = runRating(r);
+  if (run > 0) return { tone: 'good', text: `Rated ${r}: +1 on every run` };
+  if (run < 0) return { tone: 'bad', text: `Rated ${r}: −1 on every run` };
+  return null;
+}
+
 function renderTeamSheet() {
   const s = ui.sheet;
   const host = $('#sheet-list');
@@ -407,7 +428,7 @@ function renderTeamSheet() {
   const squad = s.team.squad;
   const posOf = name => squad.find(x => x.name === name)?.pos;
   const option = (p, extra = '') => {
-    const o = el('option', null, `${p.name}${extra}${s.out.includes(p.name) ? ' · injured' : ''}`);
+    const o = el('option', null, `${p.name}${Number.isFinite(p.rating) ? ` ${p.rating}` : ''}${extra}${s.out.includes(p.name) ? ' · injured' : ''}`);
     o.value = p.name;
     o.disabled = s.out.includes(p.name);
     return o;
@@ -432,15 +453,17 @@ function renderTeamSheet() {
       [PLAYERS[pos].name, squad.filter(p => p.pos === pos)],
       ['Out of position (−1)', squad.filter(p => p.pos !== pos), p => ` (${PLAYERS[p.pos].one})`],
     ]);
-    row.append(dieChip(pos), el('span', 'squad-pos', PLAYERS[pos].one), box);
+    row.append(dieChip(pos), el('span', 'squad-pos', PLAYERS[pos].one), box, ratingChip(ratingIn(squad, s.start[pos])));
     if (posOf(s.start[pos]) !== pos) row.append(el('small', 'sheet-warn', 'Out of position: −1 on these runs'));
+    const note = ratingNote(ratingIn(squad, s.start[pos]), pos);
+    if (note) row.append(el('small', `sheet-note ${note.tone}`, note.text));
     host.append(row);
   }
   host.append(el('p', 'squad-h', 'Bench'));
   s.bench.forEach((name, i) => {
     const row = el('label', 'squad-row sheet-row bench');
     const box = select(`bench:${i}`, name, POSITIONS.map(pos => [PLAYERS[pos].name, squad.filter(p => p.pos === pos)]));
-    row.append(dieChip(posOf(name) || 'F'), el('span', 'squad-pos', `Sub ${i + 1}`), box);
+    row.append(dieChip(posOf(name) || 'F'), el('span', 'squad-pos', `Sub ${i + 1}`), box, ratingChip(ratingIn(squad, name)));
     host.append(row);
   });
   if (s.out.length) host.append(el('p', 'sheet-out', `Injured last match: ${s.out.join(', ')}. Back for the next one.`));
@@ -1619,7 +1642,7 @@ function promptText(m) {
     case 'try': return `Line break · ${playerName(m, team, step.carrier)}`;
     case 'range': return step.kick === 'conversion' ? 'Conversion' : `Drop goal chance · ${playerName(m, team, m.carrier)}`;
     case 'penalty': return 'Penalty awarded';
-    case 'kick': return `${{ conversion: 'Conversion', penalty: 'Penalty kick', drop: 'Drop goal' }[step.kick]} · ${pct(kickChance(step.range, kickBonus(m, team, step.kick)))} to land`;
+    case 'kick': return `${{ conversion: 'Conversion', penalty: 'Penalty kick', drop: 'Drop goal' }[step.kick]} · ${pct(kickOdds(m, team, step.kick, step.range))} to land`;
     case 'setpiece': return step.piece === 'scrum' ? 'Scrum feed' : 'Lineout throw';
     case 'restart': return 'Kick-off · 4+ wins it back';
     case 'pass': return `Pass from ${playerName(m, team, step.from)} · pick a receiver`;
@@ -1762,11 +1785,16 @@ function renderDock(m, locked) {
   if (step.purpose === 'drop' || step.purpose === 'penalty') {
     actions.classList.add('two');
     const kick = step.purpose === 'drop' ? 'drop' : 'penalty';
-    const bonus = kickBonus(m, step.team, kick);
     const parts = kickParts(m, step.team, kick);
     const cardNames = kickCards(m, step.team, kick).map(id => CARD_BY_ID[id].name).join(' + ');
-    const extras = [parts.card ? `+${metres(parts.card)} ${cardNames}` : '', parts.wind > 0 ? `+${metres(parts.wind)} wind` : parts.wind < 0 ? `−${metres(-parts.wind)} into the wind` : ''].filter(Boolean);
-    const p = kickChance(step.range, bonus);
+    const kicker = surname(m, step.team, 'B') || 'the Fly Half';
+    const extras = [
+      parts.cap < 6 ? `${kicker}'s boot reaches ${metres(parts.cap)}` : '',
+      parts.star ? `+${metres(parts.star)} ${kicker}` : '',
+      parts.card ? `+${metres(parts.card)} ${cardNames}` : '',
+      parts.wind > 0 ? `+${metres(parts.wind)} wind` : parts.wind < 0 ? `−${metres(-parts.wind)} into the wind` : '',
+    ].filter(Boolean);
+    const p = kickOdds(m, step.team, kick, step.range);
     actions.append(choiceButton({
       icon: '3',
       title: kick === 'drop' ? 'Drop goal' : 'Kick at goal',

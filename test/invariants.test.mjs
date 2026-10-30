@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { act, carryMetres, controllerOf, defenceModifier, halfRolls, isLegal, lineup, MATCH_LENGTHS, newMatch, QUICK_TAP_RUNS, REGATHER, rollWeather, seededRng, TIMED_DECISIONS, timeUp, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
+import { act, carryMetres, controllerOf, defenceModifier, ELITE, halfRolls, isLegal, lineup, MATCH_LENGTHS, NEUTRAL_RATING, newMatch, POOR, QUICK_TAP_RUNS, REGATHER, rollWeather, seededRng, TIMED_DECISIONS, timeUp, TRY_RUN_IN, WET_HANDS, windBonus } from '../js/engine.js';
 import { cpuChoice } from '../js/ai.js';
 import { cardEffects, CARD_IDS, RARITY_IDS } from '../js/cards.js';
 import { narrate } from '../js/commentary.js';
@@ -261,12 +261,10 @@ function checkEvents(before, after, events, label) {
     const face = DICE[before.step.dice[0]].faces[after.roll.faces[0]];
     if (face.kind === 'pass' && !face.to) assert.ok(events.some(e => e.type === 'wetBall'), `${label}: every free pass is wet in the rain`);
   }
-  // Every kick: the black die, the card and the wind.
+  // Every kick: the black die, the card and the wind (and the kicker's rating, below).
   for (const e of events.filter(x => x.type === 'kick')) {
     assert.equal(e.wind, windBonus(before, e.team), `${label}: wind on the kick`);
     assert.equal(e.card, fx(before, e.team).kickBonus?.[e.kick] || 0, `${label}: card on the kick`);
-    assert.equal(e.distance, e.rolled + e.card + e.wind, `${label}: kick distance`);
-    assert.equal(e.good, e.distance >= e.range, `${label}: a kick lands when it reaches the range`);
   }
   if (injured) {
     const [a, b] = after.roll.faces;
@@ -319,7 +317,17 @@ function checkEvents(before, after, events, label) {
     assert.equal(e.quickTap, before.attacker === e.team && before.quickTap > 0 ? 1 : 0, `${label}: quick tap`);
     assert.equal(e.injury, before.teams[e.team].injuries[e.pos], `${label}: injury`);
     assert.equal(e.offPos, before.teams[e.team].offPos[e.pos], `${label}: out of position`);
-    assert.equal(e.intensity, Math.max(1, e.value + e.quickTap + e.card - e.fortress - e.injury - e.offPos), `${label}: intensity`);
+    const rated = before.teams[e.team].ratings?.[e.pos] ?? NEUTRAL_RATING;
+    assert.equal(e.rating, rated >= ELITE ? 1 : rated < POOR ? -1 : 0, `${label}: rated ${rated}`);
+    assert.equal(e.intensity, Math.max(1, e.value + e.quickTap + e.card - e.fortress - e.injury - e.offPos + e.rating), `${label}: intensity`);
+  }
+  // A kick: the die as far as the Fly Half's boot reaches, then the bonuses.
+  for (const e of events.filter(x => x.type === 'kick')) {
+    const rated = before.teams[e.team].ratings?.B ?? NEUTRAL_RATING;
+    assert.equal(e.cap, rated < POOR ? 4 : rated < 78 ? 5 : 6, `${label}: the boot's reach at ${rated}`);
+    assert.equal(e.star, rated >= ELITE ? 1 : 0, `${label}: +10 m at ${rated}`);
+    assert.equal(e.distance, Math.min(e.rolled, e.cap) + e.card + e.wind + e.star, `${label}: kick distance`);
+    assert.equal(e.good, e.distance >= e.range, `${label}: over or short`);
   }
 
   // Cards: never change once picked; only play for the side holding them.
@@ -357,6 +365,13 @@ test(`${MATCHES} fuzzed matches keep every invariant after every action`, () => 
       weather: g % 2 ? rollWeather(rng) : null,
       format: g % 7 < 3 ? 'rolls' : 'points',
       decider: g % 7 === 1,
+      // Two in three matches with player ratings (and rated benches), from 55 to 97.
+      teams: g % 3 ? [0, 1].map(i => ({
+        name: `T${i}`,
+        color: i ? '#eeeeee' : '#111111',
+        ratings: Object.fromEntries(POSITIONS.map(p => [p, 55 + Math.floor(rng() * 43)])),
+        bench: ['F', 'C', 'W'].map(pos => ({ name: `Sub ${pos}${i}`, pos, rating: 55 + Math.floor(rng() * 43) })),
+      })) : undefined,
     });
     checkState(m, `match ${g} start`);
     let actions = 0;

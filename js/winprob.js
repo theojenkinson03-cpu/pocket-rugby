@@ -6,7 +6,7 @@
 // for the live win meter and as the Expert CPU's judge at the end of each
 // look-ahead.
 
-import { REGATHER, halfRolls, keepsBall, kickBonus, kickChance, rollsLeft, timeUp, tryChance } from './engine.js';
+import { REGATHER, halfRolls, keepsBall, kickOdds, kickReach, playerRating, rollsLeft, runRating, timeUp, tryChance } from './engine.js';
 import { cardWorth, teamCards } from './cards.js';
 
 // How a possession ends: points the attackers scored, and who has the next
@@ -202,14 +202,14 @@ export function winProbability(match, team) {
   // After a goal, the kick-off, unless a kicking card wins the ball back.
   const scored = (points, kind) => (keepsBall(match, att, kind) ? at(points, att) : restart(points));
   if (step.purpose === 'kick') {
-    const p = kickChance(step.range, kickBonus(match, att, step.kick));
+    const p = kickOdds(match, att, step.kick, step.range);
     const points = step.kick === 'conversion' ? 2 : 3;
     // A missed conversion still restarts with a kick-off; other misses hand the ball over.
     return p * scored(points, step.kick) + (1 - p) * (step.kick === 'conversion' ? restart(0) : at(0, 1 - att));
   }
   // A shot at goal on offer: the side with the ball takes whichever is better.
   if (step.type === 'choose' && (step.purpose === 'penalty' || step.purpose === 'drop')) {
-    const p = kickChance(step.range, kickBonus(match, att, step.purpose));
+    const p = kickOdds(match, att, step.purpose, step.range);
     const kick = p * scored(3, step.purpose) + (1 - p) * at(0, 1 - att);
     const play = winFromPossession(match, team);
     return team === att ? Math.max(kick, play) : Math.min(kick, play);
@@ -259,6 +259,25 @@ function setbacks(match, team, left) {
   return cost;
 }
 
+// What a side's player ratings are worth, as log-odds: +1 or −1 on a
+// player's runs counts like an injury does (by the share of runs they
+// carry), and the Fly Half's boot by how far it reaches.
+// Measured over 1,500 matches a case: a Fly Half rated 90 (+10 m) lifts the
+// win rate about 6 points, while a short boot (40 or 50 m at most) costs
+// little, since kicks from 50 m out are rare.
+export const KICK_STAR = 0.18;
+export const KICK_SHORT = 0.02;
+export function ratingsEdge(match, team) {
+  if (!match.teams[team].ratings) return 0;
+  let edge = 0;
+  for (const [pos, share] of Object.entries(CARRIES)) {
+    const run = runRating(playerRating(match, team, pos));
+    if (run) edge += Math.sign(run) * logit(0.5 + Math.min(0.4, INJURY * share * Math.abs(run)));
+  }
+  const { cap, star } = kickReach(playerRating(match, team, 'B'));
+  return edge + KICK_STAR * star - KICK_SHORT * (6 - cap);
+}
+
 // The live meter: the model above, plus what the model can't see: the team
 // cards, sin bins, red cards and injuries. The difference in the sides' card
 // edges counts in full at the kick-off and fades as the match runs out; a
@@ -269,7 +288,8 @@ export function winMeter(match, team) {
   if (p <= 0 || p >= 1) return p;
   const left = stillToPlay(match);
   const cards = cardsEdge(match, team) - cardsEdge(match, 1 - team);
-  const diff = cards * left.match + setbacks(match, 1 - team, left) - setbacks(match, team, left);
+  const rated = ratingsEdge(match, team) - ratingsEdge(match, 1 - team);
+  const diff = (cards + rated) * left.match + setbacks(match, 1 - team, left) - setbacks(match, team, left);
   if (!diff) return p;
   return 1 / (1 + Math.exp(-(logit(p) + diff)));
 }

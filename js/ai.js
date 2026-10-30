@@ -2,7 +2,7 @@
 // Expert plays out many matches from the current position for each option
 // and picks the one that wins most often. Personalities flavour the choices.
 
-import { act, actInPlace, halfRolls, keepsBall, kickBonus, kickChance, receiverOdds, seededRng, tryChance } from './engine.js';
+import { act, actInPlace, halfRolls, keepsBall, kickOdds, receiverOdds, seededRng, tryChance } from './engine.js';
 import { cardTier, cardWorth, RARITY_IDS } from './cards.js';
 import { possessionsLeft, winFromPossession, winProbability } from './winprob.js';
 
@@ -62,7 +62,7 @@ function bestReceiver(match, team, options, personality) {
 }
 
 function goesForGoal(match, team, kick, range, threshold) {
-  const chance = kickChance(range, kickBonus(match, team, kick));
+  const chance = kickOdds(match, team, kick, range);
   // Sudden death: any score wins it.
   if (match.suddenDeath) return chance >= 1 / 3;
   // Three points and the ball back: worth a go at one in three.
@@ -133,7 +133,7 @@ function rookieChoice(match, rng, personality) {
   const pick = () => step.options[Math.floor(rng() * step.options.length)];
   switch (step.purpose) {
     case 'pass': return rng() < 0.5 ? pick() : bestReceiver(match, step.team, step.options, personality);
-    case 'drop': return kickChance(step.range, kickBonus(match, step.team, 'drop')) >= 0.5 && rng() < 0.7 ? 'kick' : 'pass';
+    case 'drop': return kickOdds(match, step.team, 'drop', step.range) >= 0.5 && rng() < 0.7 ? 'kick' : 'pass';
     case 'penalty': return rng() < 0.6 ? 'kick' : 'tap';
     // Instinct: the injured player comes off straight away, for whoever is first on the bench.
     case 'bench': return step.options[0];

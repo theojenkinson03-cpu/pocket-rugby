@@ -6,7 +6,7 @@
 // rolling), a caption of a few words, a tag (only what the face itself doesn't
 // already say, or nothing) and a sentence for anyone who taps it.
 
-import { act, defenceModifier, intensityParts, kickParts, tackleBonusFor } from './engine.js';
+import { act, defenceModifier, intensityParts, kickParts, playerRating, tackleBonusFor } from './engine.js';
 import { DICE, METRES_PER_POINT, PLAYERS } from './dice.js';
 
 const pct = p => `${Math.round(p * 100)}%`;
@@ -253,6 +253,7 @@ export function playerBadge(match, team, pos) {
   return badge([
     { kind: 'injury', value: -parts.injury, label: `Injured: ${signed(-parts.injury)} on every run` },
     { kind: 'advantage', value: parts.quickTap, label: 'Advantage: +1 on every run' },
+    { kind: 'rating', value: parts.rating, label: `Rated ${playerRating(match, team, pos)}: ${signed(parts.rating)} on every run` },
   ]);
 }
 
@@ -269,11 +270,16 @@ export function dieBadges(match) {
     return bonus.map(b => badge([card, { kind: 'card', value: b, label: 'Team card: +1 on this tackle die' }]));
   }
   if (step.purpose === 'kick') {
-    const { card, wind } = kickParts(match, step.team, step.kick);
-    return [badge([
+    const { card, wind, star, cap } = kickParts(match, step.team, step.kick);
+    const rated = `Fly Half rated ${playerRating(match, step.team, 'B')}`;
+    const b = badge([
       { kind: 'wind', value: wind, label: wind > 0 ? 'Wind behind: +10 m' : 'Into the wind: −10 m' },
       { kind: 'card', value: card, label: `Team card: +${card * METRES_PER_POINT} m` },
-    ], ' m')];
+      { kind: 'rating', value: star, label: `${rated}: +10 m` },
+    ], ' m');
+    // A short boot: the die can't reach past it.
+    if (cap < 6) return [{ ...(b || {}), kinds: ['reach', ...(b?.kinds || [])], kind: 'reach', value: b?.value || 0, text: `≤${cap * METRES_PER_POINT} m`, label: [`${rated}: the kick reaches ${cap * METRES_PER_POINT} m at most`, b?.label].filter(Boolean).join('. ') }];
+    return [b];
   }
   return none;
 }

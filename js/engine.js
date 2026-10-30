@@ -4,7 +4,7 @@
 import { DICE, POSITIONS } from './dice.js';
 import { CARD_IDS, cardEffects, cardsWith, cardWith, DEAL_SIZE, DRAFT_ORDER, rollRarity } from './cards.js';
 
-export const VERSION = 8;
+export const VERSION = 9;
 
 // Two ways to play a match. 'points': first to `full` wins, with half time
 // when either side reaches `half`. 'rolls': a match clock of `rolls` dice
@@ -44,7 +44,20 @@ export const WET_HANDS = ['F', 'C'];
 // Outside Back, the players who carry (and so get hurt) most.
 export const DEFAULT_BENCH = [{ name: null, pos: 'F' }, { name: null, pos: 'C' }, { name: null, pos: 'W' }];
 export const BENCH_SIZE = 3;
-const benchOf = kit => (kit.bench || DEFAULT_BENCH).slice(0, BENCH_SIZE).map(s => ({ name: s.name ?? null, pos: POSITIONS.includes(s.pos) ? s.pos : 'F', used: false }));
+const benchOf = kit => (kit.bench || DEFAULT_BENCH).slice(0, BENCH_SIZE).map(s => ({ name: s.name ?? null, pos: POSITIONS.includes(s.pos) ? s.pos : 'F', used: false, ...(Number.isFinite(s.rating) ? { rating: s.rating } : {}) }));
+
+// ---- Player ratings ----
+// A player's rating, 50 to 99, changes the dice they roll. A side without
+// ratings plays at NEUTRAL_RATING everywhere, which changes nothing.
+// Runs: 88 and up is +1 on every run, under 70 is −1.
+// The Fly Half's boot: under 70 the kick die reaches 40 m at most, under 78
+// 50 m; 88 and up adds 10 m to every kick.
+export const NEUTRAL_RATING = 80;
+export const ELITE = 88;
+export const POOR = 70;
+export const playerRating = (match, team, pos) => match.teams[team].ratings?.[pos] ?? NEUTRAL_RATING;
+export const runRating = r => (r >= ELITE ? 1 : r < POOR ? -1 : 0);
+export const kickReach = r => ({ cap: r < POOR ? 4 : r < 78 ? 5 : 6, star: r >= ELITE ? 1 : 0 });
 const zeros = () => ({ S: 0, F: 0, C: 0, W: 0, B: 0 });
 export const WIND_METRES = 1;
 
@@ -218,6 +231,8 @@ export function newMatch({
       // Who is on the field at each position now, and who started.
       roster: kit.roster ? { ...kit.roster } : null,
       starters: kit.roster ? { ...kit.roster } : null,
+      // Ratings of the players on the field, by position (null: all neutral).
+      ratings: kit.ratings ? { ...kit.ratings } : null,
       score: 0,
       injuries: zeros(),
       yellows: 0,
@@ -285,6 +300,7 @@ export function migrate(match) {
     t.kit ??= null;
     t.roster ??= null;
     t.starters ??= t.roster ? { ...t.roster } : null;
+    t.ratings ??= null;
     // Before version 7 the bench was one nameless replacement a half.
     t.subs ??= m.bench ? benchOf({}) : [];
     delete t.bench;
@@ -325,7 +341,8 @@ export function intensityParts(match, team, pos, value, face = null) {
   const fortress = (face?.special ? defence.specialDefence : value >= (defence.hitUpDefenceFrom || 0) ? defence.hitUpDefence : 0) || 0;
   const injury = match.teams[team].injuries[pos];
   const offPos = match.teams[team].offPos?.[pos] || 0;
-  return { value, quickTap, card, fortress, injury, offPos, intensity: Math.max(1, value + quickTap + card - fortress - injury - offPos) };
+  const rating = runRating(playerRating(match, team, pos));
+  return { value, quickTap, card, fortress, injury, offPos, rating, intensity: Math.max(1, value + quickTap + card - fortress - injury - offPos + rating) };
 }
 
 export function runIntensity(match, team, pos, value, face = null) {
@@ -384,21 +401,30 @@ export function tryChance() {
   return tries / (1 - videos);
 }
 
-export function kickChance(range, bonus = 0) {
-  return DICE.K.faces.filter(f => f.kick + bonus >= range).length / 6;
+// `cap`: the furthest the kicker's boot reaches on the die (see kickReach).
+export function kickChance(range, bonus = 0, cap = 6) {
+  return DICE.K.faces.filter(f => Math.min(f.kick, cap) + bonus >= range).length / 6;
 }
 
-// A kick's extra distance: the team cards', and the wind's.
+// A kick's extra distance: the team cards', the wind's and the kicker's
+// (the Fly Half takes every kick), and how far the kicker's boot reaches.
 export function kickParts(match, team, kick) {
-  return { card: cardEffects(match, team).kickBonus?.[kick] || 0, wind: windBonus(match, team) };
+  const { cap, star } = kickReach(playerRating(match, team, 'B'));
+  return { card: cardEffects(match, team).kickBonus?.[kick] || 0, wind: windBonus(match, team), star, cap };
+}
+
+// The chance a kick of this kind from `range` goes over.
+export function kickOdds(match, team, kick, range) {
+  const p = kickParts(match, team, kick);
+  return kickChance(range, p.card + p.wind + p.star, p.cap);
 }
 
 // Ids of a side's cards that lengthen this kind of kick.
 export const kickCards = (match, team, kick) => cardsWith(match, team, fx => fx.kickBonus?.[kick]).map(c => c.id);
 
 export function kickBonus(match, team, kick) {
-  const { card, wind } = kickParts(match, team, kick);
-  return card + wind;
+  const { card, wind, star } = kickParts(match, team, kick);
+  return card + wind + star;
 }
 
 const WET_PASS = Object.freeze({ kind: 'error', label: 'Knock On', error: 'knockon', wet: true });
@@ -832,9 +858,9 @@ function onRange(m, ev, rng) {
   const faceIndex = rollDie(rng);
   const range = DICE.D.faces[faceIndex].value;
   const parts = kickParts(m, team, kick);
-  const bonus = parts.card + parts.wind;
+  const bonus = parts.card + parts.wind + parts.star;
   m.roll = { dice: ['D'], faces: [faceIndex], purpose: 'range', team };
-  ev.push({ type: 'range', team, kick, range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range, bonus) });
+  ev.push({ type: 'range', team, kick, range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range, bonus, parts.cap) });
   if (kick === 'conversion') {
     m.step = { type: 'roll', purpose: 'kick', dice: ['K'], team, kick, range, kicker: 'B' };
   } else {
@@ -868,8 +894,8 @@ function onPenaltyCheck(m, ev, rng) {
 
   const range = DICE.D.faces[rangeFace].value;
   const parts = kickParts(m, team, 'penalty');
-  const bonus = parts.card + parts.wind;
-  ev.push({ type: 'range', team, kick: 'penalty', range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range, bonus) });
+  const bonus = parts.card + parts.wind + parts.star;
+  ev.push({ type: 'range', team, kick: 'penalty', range, bonus, card: parts.card, wind: parts.wind, chance: kickChance(range, bonus, parts.cap) });
   m.step = { type: 'choose', purpose: 'penalty', team, range, options: ['kick', 'tap'] };
 }
 
@@ -878,8 +904,10 @@ function onKick(m, ev, rng) {
   const faceIndex = rollDie(rng);
   const rolled = DICE.K.faces[faceIndex].kick;
   const parts = kickParts(m, team, kick);
-  const bonus = parts.card + parts.wind;
-  const distance = rolled + bonus;
+  const bonus = parts.card + parts.wind + parts.star;
+  // The kicker's boot reaches only so far, whatever the die says.
+  const reached = Math.min(rolled, parts.cap);
+  const distance = reached + bonus;
   const good = distance >= range;
   const S = m.teams[team].stats;
   // The Fly Half kicks everything.
@@ -888,7 +916,7 @@ function onKick(m, ev, rng) {
 
   const tally = { conversion: ['conversions', 'conversionAttempts', 2], penalty: ['penaltyGoals', 'penaltyAttempts', 3], drop: ['dropGoals', 'dropAttempts', 3] }[kick];
   S[tally[1]]++;
-  ev.push({ type: 'kick', team, kick, range, distance, rolled, bonus, card: parts.card, wind: parts.wind, good, kicker });
+  ev.push({ type: 'kick', team, kick, range, distance, rolled, bonus, card: parts.card, wind: parts.wind, star: parts.star, cap: parts.cap, good, kicker });
 
   if (good) {
     S[tally[0]]++;
@@ -1003,6 +1031,7 @@ function onChoose(m, ev, value) {
         T.off.push({ name: offName, pos, stats: T.players[pos] });
         T.players[pos] = emptyPlayer();
         if (T.roster) T.roster[pos] = sub.name;
+        if (T.ratings || Number.isFinite(sub.rating)) T.ratings = { ...T.ratings, [pos]: sub.rating ?? NEUTRAL_RATING };
         T.injuries[pos] = 0;
         T.offPos[pos] = sub.pos === pos ? 0 : 1;
         sub.used = true;

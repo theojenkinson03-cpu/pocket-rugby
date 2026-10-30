@@ -613,7 +613,8 @@ test('the team sheet: five to start, three on the bench, the injured left out', 
   // By itself: the first at each position, and a Forward, a Centre and an Outside Back on the bench.
   const side = selectSide(bath);
   assert.deepEqual(side.roster, bath.roster);
-  assert.deepEqual(side.bench, [{ name: at('F')[1], pos: 'F' }, { name: at('C')[1], pos: 'C' }, { name: at('W')[1], pos: 'W' }]);
+  const rated = (pos, i) => ({ name: at(pos)[i], pos, rating: bath.squad.find(x => x.name === at(pos)[i]).rating });
+  assert.deepEqual(side.bench, [rated('F', 1), rated('C', 1), rated('W', 1)]);
   assert.deepEqual(side.offPos, {});
   // Injured: the next fit player at the position starts.
   const hurt = selectSide(bath, [at('F')[0], at('S')[0]]);

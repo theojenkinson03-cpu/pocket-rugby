@@ -294,6 +294,10 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
 .die-badge:not(.b-advantage) .bi-advantage { color: #1fa055; }
 .die-badge .bi-wind::before { content: "≋"; font-size: 13px; color: #154a85; }
 .die-badge .bi-card { width: 9px; height: 12px; border-radius: 2px; background: linear-gradient(135deg, #f2b01e, #e0461c); }
+.die-badge .bi-rating::before { content: "★"; font-size: 11px; color: #c9930a; }
+.die-badge .bi-reach::before { content: "⟷"; font-size: 11px; color: #b3241a; }
+.die-badge.b-rating { background: #fff6d6; color: #6a4b00; }
+.die-badge.b-reach { background: #fde8e6; color: #b3241a; }
 .die-chip .die-badges { transform: translate(45%, -45%) scale(0.72); transform-origin: top right; }
 .face .fl { font-size: 0.9em; letter-spacing: 0.03em; }
 .face .fl.sp { font-size: 0.78em; line-height: 1.05; }
@@ -2758,3 +2762,27 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
   .die.thud::after { display: none; }
   .roll-btn:not(.waiting):not(:disabled) { animation: none; }
 }
+
+/* ---------- Ratings ---------- */
+:root { --t-bronze: #b0703a; --t-silver: #9aa3ad; --t-gold: #d4a514; --t-elite: #6b3fd6; }
+.rating-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 24px;
+  padding: 0 5px;
+  border-radius: 7px;
+  font: 900 15px/1 var(--font-display);
+  color: #fff;
+  background: var(--t-silver);
+  box-shadow: inset 0 -2px 0 rgb(0 0 0 / 0.18);
+}
+.rating-chip.t-bronze { background: var(--t-bronze); }
+.rating-chip.t-gold { background: linear-gradient(135deg, #f3d36b, var(--t-gold)); color: #3a2a00; }
+.rating-chip.t-elite { background: linear-gradient(135deg, #a77bff, var(--t-elite) 55%, #2b1b6b); }
+.rating-chip.t-none { background: var(--surface-2); color: var(--muted); }
+.sheet-row { grid-template-columns: auto 88px minmax(0, 1fr) auto; }
+@media (max-width: 380px) { .sheet-row { grid-template-columns: auto minmax(0, 1fr) auto; } }
+.sheet-note { grid-column: 1 / -1; font-size: 12px; }
+.sheet-note.good { color: var(--good); }
+.sheet-note.bad { color: var(--bad); }

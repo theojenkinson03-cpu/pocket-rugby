@@ -192,7 +192,8 @@ export function dailyMatch(s) {
   const sides = [0, 1].map(i => {
     const club = clubOf(s, i);
     // The bench: the club's own replacements, picked as a club would.
-    const squad = realSquad(club.id, club.flavour);
+    // Without ratings: the challenge is measured as it stands.
+    const squad = realSquad(club.id, club.flavour).map(({ name, pos }) => ({ name, pos }));
     const bench = selectSide({ squad, roster: s.rosters[i] }, Object.values(s.rosters[i])).bench;
     return { name: club.name, color: club.color, kit: club.kit || null, roster: s.rosters[i], bench };
   });

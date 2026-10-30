@@ -111,10 +111,36 @@ export const realRoster = id => (SQUADS[id] ? Object.fromEntries(POSITIONS.map(p
 // A number from a side's id, so its made-up players are always the same.
 const seedOf = id => [...id].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
 
-// A side's squad of fifteen, [{name, pos}] in position order, the starters
-// first at each position. Places we can't fill with real players get made-up
-// names in the side's `flavour`; a side we don't know is made up entirely.
-export function realSquad(id, flavour = 'any') {
+// ---- Ratings ----
+// Every player gets a rating from 50 to 99, which changes their dice (see
+// the ratings in engine.js). It starts from how strong the side is (1 to 5),
+// up for the first choice at a position and down for those behind, up for
+// a handful of the world's best, down for a made-up player, and nudged a
+// point or two either way by the name so players aren't all alike. A game
+// rating, not a judgement on anyone.
+const SIDE_BASE = { 1: 65, 2: 70, 3: 74, 4: 78, 5: 81 };
+const DEPTH = [4, 1, -2, -3, -4];
+export const STARS = new Set([
+  'A. Dupont', 'C. Kolbe', 'E. Etzebeth', 'P. du Toit', 'S. Kolisi', 'A. Savea', 'W. Jordan', 'B. Barrett', 'J. Barrett', 'T. Ramos',
+  'L. Bielle-Biarrey', 'D. Penaud', 'G. Alldritt', 'R. Ntamack', 'C. Doris', 'T. Beirne', 'J. van der Flier', 'J. Gibson-Park', 'G. Ringrose',
+  'B. Aki', 'J. Lowe', 'H. Keenan', 'S. Prendergast', 'F. Russell', 'D. van der Merwe', 'S. Tuipulotu', 'M. Itoje', 'B. Earl', 'M. Smith',
+  'T. Curry', 'O. Chessum', 'F. Smith', 'T. Freeman', 'F. de Klerk', 'S. Feinberg-Mngomezulu', 'D. de Allende', 'M. Marx', 'R. Valetini',
+  'F. McReight', 'J. Suaalii', 'M. Jorgensen', 'A. Capuozzo', 'M. Lamaro', 'P. Matera', 'S. Radradra', 'M. Telea', 'C. Roigard', 'W. Sititi',
+  'O. Nché', 'C. Ollivon', 'G. Fickou', 'J. Marchand', 'A. Fassi', 'L. Ikitau', 'T. Taylor', 'J. Kriel', 'M. Leitch', 'G. Gogichashvili',
+]);
+const nameHash = name => [...name].reduce((h, c) => (Math.imul(h, 33) + c.charCodeAt(0)) >>> 0, 5381);
+export function playerRatingFor(name, depth, strength = 3, real = true) {
+  const base = SIDE_BASE[Math.min(5, Math.max(1, Math.round(strength)))];
+  const jitter = (nameHash(name || '') % 5) - 2;
+  const r = base + DEPTH[Math.min(depth, DEPTH.length - 1)] + jitter + (STARS.has(name) ? 4 : 0) - (real ? 0 : 4);
+  return Math.max(50, Math.min(99, r));
+}
+
+// A side's squad of fifteen, [{name, pos, rating}] in position order, the
+// starters first at each position. Places we can't fill with real players
+// get made-up names in the side's `flavour`; a side we don't know is made up
+// entirely. `strength` (1 to 5) sets the ratings.
+export function realSquad(id, flavour = 'any', strength = 3) {
   const known = SQUADS[id] || { S: [], F: [], C: [], W: [], B: [] };
   const rng = seededRng(seedOf(id));
   const surname = name => name.replace(/^[A-Z]\.\s*/, '');
@@ -130,7 +156,22 @@ export function realSquad(id, flavour = 'any') {
         names.push(name);
       }
     }
-    for (const name of names) squad.push({ name, pos });
+    names.forEach((name, depth) => squad.push({ name, pos, rating: playerRatingFor(name, depth, strength, known[pos].includes(name)) }));
   }
   return squad;
 }
+
+// Ratings for a squad that may have been renamed or reordered since: real
+// players keep theirs, anyone else is rated as a made-up player at their depth.
+export function rateSquad(squad, id, flavour = 'any', strength = 3) {
+  const real = new Map(realSquad(id, flavour, strength).map(p => [p.name, p.rating]));
+  const depth = {};
+  return squad.map(p => {
+    const d = (depth[p.pos] = (depth[p.pos] ?? -1) + 1);
+    return { ...p, rating: real.get(p.name) ?? playerRatingFor(p.name, d, strength, false) };
+  });
+}
+
+// A rating's tier, for colours: Elite (88 and up, the dice's +1), Gold,
+// Silver, and Bronze (under 70, the dice's −1).
+export const tierOf = r => (!Number.isFinite(r) ? 'none' : r >= 88 ? 'elite' : r >= 80 ? 'gold' : r >= 70 ? 'silver' : 'bronze');
