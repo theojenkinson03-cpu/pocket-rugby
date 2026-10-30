@@ -30,6 +30,8 @@ import { createPitch } from './pitch.js';
 import { buzz, play, setSoundEnabled, unlockAudio } from './audio.js';
 import { customKit, kitVars, PATTERN_NAMES, PATTERNS } from './color.js';
 import { tierOf } from './squads.js';
+import { autoSquad, cardById, dreamMatchOptions, migrateDream, newDream, openPack, PACK_BY_ID, placeCard, playerById, recordDream, sellCard, canSell, SELL_PRICE } from './dream.js';
+import { dreamPage, packOpening, pickerList } from './dream-view.js';
 import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
@@ -85,6 +87,8 @@ const ui = {
   coachSeen: load('coach', []),
   coach: null,
   tournament: migrateTournament(load('tournament', null)),
+  dream: migrateDream(load('dream', null)),
+  dreamTab: 'club',
   tsetup: { comp: 'cup', team: null, length: 'quick', format: 'rolls', cards: true, bench: true, weather: false, season: 'short' },
   // Auto-roll in this match, and the online decision clock.
   auto: false,
@@ -107,7 +111,7 @@ const showOdds = () => ui.prefs.odds || ui.context?.kind === 'learn';
 
 // ---------- Views ----------
 
-const VIEWS = ['home', 'setup', 'match', 'tournament', 'career', 'online', 'daily', 'friends'];
+const VIEWS = ['home', 'setup', 'match', 'tournament', 'career', 'online', 'daily', 'friends', 'dream'];
 
 function showView(name) {
   ui.view = name;
@@ -123,6 +127,7 @@ function showView(name) {
 function contextLabel(context) {
   if (!context) return null;
   if (context.kind === 'learn') return 'Guided match';
+  if (context.kind === 'dream') return `Dream Team · Division ${context.division}`;
   if (context.kind === 'daily') return `Daily #${context.number}${context.official ? '' : ' · practice'}`;
   if (context.kind === 'friends') return context.label;
   if (context.kind === 'online' && context.friends) return context.friends.label;
@@ -856,6 +861,12 @@ function finishMatch() {
     }
   }
   if (context.kind === 'daily') finishDaily(m, context, outcome);
+  if (context.kind === 'dream' && ui.dream && !context.recorded) {
+    const r = recordDream(ui.dream, m, m.teams[1].name);
+    context.recorded = true;
+    save('dream', ui.dream);
+    outcome.note = `${r.result === 'win' ? 'A win' : r.result === 'draw' ? 'A draw' : 'A defeat'}: +${r.coins.toLocaleString('en-GB')} coins.${r.title ? ' Division 1 champions!' : r.promoted ? ` Up to Division ${r.division}!` : ''}`;
+  }
   if (context.kind === 'friends') {
     sendFriendsResult(context.code, context.fixture, resultFromMatch(null, m, context.userIsHome));
     outcome.note = `${m.winner === 0 ? 'A win' : m.winner === null ? 'A draw' : 'A defeat'} for your club. The result is in the league.`;
@@ -2043,6 +2054,9 @@ function openBreak() {
         openFriends();
       }), 'btn btn-primary'));
       actions.append(button('Title screen', close(() => (kind === 'online' ? leaveOnline() : showView('home'))), 'btn btn-quiet'));
+    } else if (kind === 'dream') {
+      actions.append(simpleButton('Back to Dream Team', close(openDream), 'btn btn-primary'));
+      actions.append(button('Title screen', close(() => showView('home')), 'btn btn-quiet'));
     } else if (kind === 'daily') {
       actions.append(simpleButton('Back to the daily challenge', close(openDaily), 'btn btn-primary'));
       actions.append(button('Title screen', close(() => showView('home')), 'btn btn-quiet'));
@@ -2665,6 +2679,78 @@ async function flushFriendsOutbox() {
 
 // ---------- Career ----------// ---------- Career ----------
 
+// ---------- Dream Team ----------
+
+function openDream() {
+  ui.dream ??= newDream({ seed: Math.floor(strongRandom() * 2 ** 32) });
+  save('dream', ui.dream);
+  renderDream();
+  showView('dream');
+  $('#view-dream').scrollTop = 0;
+}
+
+function renderDream() {
+  const s = ui.dream;
+  const redraw = () => {
+    save('dream', s);
+    renderDream();
+  };
+  $('#dream-body').replaceChildren(dreamPage(s, ui.dreamTab, {
+    onTab: tab => {
+      ui.dreamTab = tab;
+      renderDream();
+    },
+    onPlay: () => startMatch(dreamMatchOptions(s), { kind: 'dream', division: s.division }),
+    onRename: name => {
+      s.name = cleanName(name, 'Dream XV');
+      redraw();
+    },
+    onColour: color => {
+      s.color = color;
+      redraw();
+    },
+    onAuto: () => {
+      autoSquad(s);
+      redraw();
+    },
+    onSlot: slot => {
+      $('#pick-title').textContent = slot.startsWith('start:') ? `Pick your ${PLAYERS[slot.slice(6)].one}` : 'Pick a replacement';
+      $('#pick-body').replaceChildren(pickerList(s, slot, id => {
+        placeCard(s, slot, id);
+        $('#dlg-pick').close();
+        redraw();
+      }));
+      openDialog('dlg-pick');
+    },
+    onBuy: id => {
+      const pack = PACK_BY_ID[id];
+      let cards;
+      try {
+        cards = openPack(s, id);
+      } catch {
+        return;
+      }
+      save('dream', s);
+      play('stamp');
+      packOpening(pack, cards.map(c => playerById(c.pid)), { reduced: reducedMotion.matches, onDone: () => {
+        ui.dreamTab = 'squad';
+        renderDream();
+      } });
+    },
+    onCard: id => {
+      const p = playerById(cardById(s, id).pid);
+      const sellable = canSell(s, id);
+      ask(p.name, `${PLAYERS[p.pos].one} · ${p.side} · rated ${p.rating}.${sellable ? '' : ' In your side: take them out of the side to let them go.'}`, [
+        ...(sellable ? [[`Let go for ${SELL_PRICE[p.tier]} coins`, () => {
+          sellCard(s, id);
+          redraw();
+        }, 'btn btn-danger']] : []),
+        ['Keep', null, 'btn'],
+      ]);
+    },
+  }));
+}
+
 function openCareer() {
   renderCareer();
   showView('career');
@@ -3209,6 +3295,7 @@ function start(data = {}) {
   $('#link-learn').addEventListener('click', startLearn);
   $('#btn-tournament').addEventListener('click', openTournament);
   $('#btn-career').addEventListener('click', openCareer);
+  $('#btn-dream').addEventListener('click', openDream);
   $('#btn-daily').addEventListener('click', openDaily);
   $('#btn-friends').addEventListener('click', openFriends);
   $('#btn-online').addEventListener('click', openOnline);

@@ -29,6 +29,11 @@ const MUTANTS = [
   ['Replacements play at the starter\'s rating', 'js/engine.js', "        if (T.ratings || Number.isFinite(sub.rating)) T.ratings = { ...T.ratings, [pos]: sub.rating ?? NEUTRAL_RATING };\n", ''],
   ['Ratings ignore how strong the side is', 'js/squads.js', 'const base = SIDE_BASE[Math.min(5, Math.max(1, Math.round(strength)))];', 'const base = SIDE_BASE[3];'],
   ['The win meter ignores ratings', 'js/winprob.js', '  const rated = ratingsEdge(match, team) - ratingsEdge(match, 1 - team);', '  const rated = 0;'],
+  ['Dream Team: packs break their guarantee', 'js/dream.js', '  if (!tiers.some(t => TIERS.indexOf(t) >= floor)) tiers[0] = pack.least;\n', ''],
+  ['Dream Team: packs are free', 'js/dream.js', '  s.coins -= pack.cost;\n', ''],
+  ['Dream Team: a starter can be let go', 'js/dream.js', "  if (inSquad(s, id)) throw new Error('in the side');\n", ''],
+  ['Dream Team: a win never goes up a division', 'js/dream.js', '      s.division--;\n', ''],
+  ['Dream Team: every division plays the same side', 'js/dream.js', '  const target = TARGET[s.division];', '  const target = TARGET[10];'],
   ['The kick-off never won back', 'js/engine.js', 'const regathered = kick >= REGATHER;', 'const regathered = false;'],
   ['The kick-off runs the clock', 'js/engine.js', "if (step.purpose !== 'restart') m.clock++;", 'm.clock++;'],
   ['The guide reads in the die\'s own order', 'js/guide.js', "(dieId === 'K' ? DICE.K.faces[a].kick - DICE.K.faces[b].kick : a - b)", '(a - b)'],
@@ -277,7 +282,7 @@ const MUTANTS = [
 
 function run(cwd) {
   return new Promise(resolve => {
-    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions', 'daily', 'friends', 'clock', 'guide', 'duel', 'ratings'].map(f => `test/${f}.test.mjs`);
+    const files = ['dice', 'engine', 'exhaustive', 'invariants', 'ai', 'commentary', 'cards', 'players', 'tournament', 'career', 'coach', 'online', 'winprob', 'color', 'season', 'champions', 'club', 'conditions', 'daily', 'friends', 'clock', 'guide', 'duel', 'ratings', 'dream'].map(f => `test/${f}.test.mjs`);
     const child = spawn(process.execPath, ['--test', ...files], { cwd, env: { ...process.env, FUZZ_MATCHES: '120' }, stdio: 'ignore' });
     child.on('exit', code => resolve(code));
   });

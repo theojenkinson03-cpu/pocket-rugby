@@ -37,6 +37,7 @@
         <div class="home-grid">
           <button type="button" class="btn" data-start="2p"><span>2 players</span><small>One phone, take turns</small></button>
           <button type="button" class="btn" id="btn-online"><span>Online</span><small>Two phones</small></button>
+          <button type="button" class="btn btn-span btn-dream" id="btn-dream"><span>Dream Team</span><small id="dream-detail">Open packs of real players, build your five, climb ten divisions</small></button>
           <button type="button" class="btn btn-span btn-cup" id="btn-tournament"><span id="tournament-label">Cups &amp; leagues</span><small id="tournament-detail">World Cup, Champions Cup, four leagues</small></button>
           <button type="button" class="btn btn-daily" id="btn-daily"><span id="daily-label">Daily challenge</span><small id="daily-detail">A new situation every day</small></button>
           <button type="button" class="btn" id="btn-friends"><span>Friends league</span><small id="friends-detail">Your league, several phones</small></button>
@@ -145,6 +146,16 @@
       <h2 id="daily-title">Daily challenge</h2>
     </header>
     <div class="page-body" id="daily-body"></div>
+  </section>
+
+  <section class="view view-page" id="view-dream" hidden aria-labelledby="dream-title">
+    <header class="setup-bar">
+      <button type="button" class="icon-btn" data-home aria-label="Back to the title screen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h2 id="dream-title">Dream Team</h2>
+    </header>
+    <div class="page-body" id="dream-body"></div>
   </section>
 
   <section class="view view-page" id="view-friends" hidden aria-labelledby="friends-title">
@@ -444,6 +455,11 @@
   <h2 id="card-title">Team card</h2>
   <div class="card-detail" id="card-detail"></div>
   <div class="menu-list"><button type="button" class="btn btn-primary" data-close>Back to the match</button></div>
+</dialog>
+
+<dialog class="sheet sheet-tall" id="dlg-pick" aria-labelledby="pick-title">
+  <div class="sheet-head"><h2 id="pick-title">Pick a player</h2><button type="button" class="icon-btn" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+  <div id="pick-body"></div>
 </dialog>
 
 <dialog class="sheet" id="dlg-ask" aria-labelledby="ask-title">

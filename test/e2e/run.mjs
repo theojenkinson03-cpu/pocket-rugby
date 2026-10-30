@@ -172,7 +172,11 @@ function verify(snap, label) {
   if (step.purpose === 'attack' && !snap.buttons[0].waiting) {
     const hurt = m.teams[step.team].injuries[step.dice[0]];
     const tap = m.quickTap > 0 ? 1 : 0;
-    const want = hurt || tap ? `${tap - hurt > 0 ? '+' : tap - hurt < 0 ? '−' : ''}${Math.abs(tap - hurt)}` : null;
+    // The player's rating: 88 and up +1, under 70 −1.
+    const r = m.teams[step.team].ratings?.[step.dice[0]] ?? 80;
+    const rated = r >= 88 ? 1 : r < 70 ? -1 : 0;
+    const n = tap - hurt + rated;
+    const want = hurt || tap || rated ? `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n)}` : null;
     check(want === null ? snap.rollBadge === null : snap.rollBadge === want, `${label}: badge "${snap.rollBadge}", want "${want}"`);
   }
   // The clock: rolls left in the half, last play, sudden death.
@@ -701,6 +705,46 @@ const SCENARIOS = {
     check(got.some(t => t.includes('Graduate')), 'career screen shows Graduate');
     check((await page.$$('.ach')).length === 36, 'all 36 achievements listed');
     return { errors, ...result, actions: result.actions + tips };
+  },
+  async 'dream-team'(browser, base) {
+    const { page, errors } = await newPage(browser, { prefs: { cinema: 'off', fast: true } });
+    await page.goto(base);
+    await page.click('#btn-dream');
+    const club = () => page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:dream')));
+    let s = await club();
+    check(s.coins === 600 && s.cards.length === 8 && s.division === 10, `a new club: ${s.coins} coins, ${s.cards.length} players`);
+    check((await page.textContent('.dream-next')).includes('Division 10'), 'the next match is in Division 10');
+    // A Bronze pack: three cards dealt face down, turned over, added to the club.
+    await page.click('.dream-tabs [data-tab="store"]');
+    await page.click('.pack-tile.p-bronze');
+    await page.click('.pack-closed');
+    await page.waitForSelector('.pack-done:not([hidden])', { timeout: 15000 });
+    check((await page.$$('.pack-cards .flip.flipped')).length === 3, 'three cards turned over');
+    await page.click('.pack-done');
+    await page.waitForSelector('.dream-five', { timeout: 5000 });
+    s = await club();
+    check(s.coins === 300 && s.cards.length === 11 && s.packs === 1, `after the pack: ${s.coins} coins, ${s.cards.length} players`);
+    // The squad: five on the cards, three on the bench; swap one from the list.
+    check((await page.$$('.dream-five .pcard')).length === 5 && (await page.$$('.dream-bench .pcard')).length === 3, 'five and three');
+    await page.click('.dream-five .dream-slot:nth-child(2) .pcard');
+    await page.waitForSelector('#dlg-pick[open]');
+    await page.click('#pick-body .pcard:nth-child(2)');
+    // Play the match: both sides rated, then back to the club with coins.
+    await page.click('.dream-tabs [data-tab="club"]');
+    await page.click('.dream-next .btn-play');
+    const label = await page.textContent('#period');
+    check(/Dream Team · Division 10/.test(label), `match label "${label}"`);
+    const teams = await page.evaluate(() => JSON.parse(localStorage.getItem('pocket-rugby:match')).match.teams);
+    check(teams.every(t => t.ratings && Object.keys(t.ratings).length === 5), 'both sides take the field rated');
+    const result = await playOn(page, { label: 'dream' });
+    const note = await page.textContent('#break-note');
+    check(/coins/.test(note), `result note "${note}"`);
+    await page.click('#break-actions .btn-primary');
+    check(await page.isVisible('#view-dream'), 'back to Dream Team');
+    s = await club();
+    check(s.played === 1 && s.coins > 300, `after the match: played ${s.played}, ${s.coins} coins`);
+    check(s.division === (s.won ? 9 : 10), `division ${s.division} after ${s.won ? 'a win' : 'no win'}`);
+    return { errors, ...result };
   },
   async 'world-cup'(browser, base) {
     const { page, errors } = await newPage(browser, { prefs: { cinema: 'off', fast: true } });
