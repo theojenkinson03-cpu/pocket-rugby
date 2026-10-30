@@ -15,6 +15,7 @@ Each team is five dice: the Scrum Half, Forwards, Centres, Outside Backs and Fly
 - **Club career**: when a league season ends, carry on into the next with the same club and squad (see [Club career](#club-career)).
 - **Daily challenge**: the same rigged situation for everyone each day, with a shared leaderboard and a score card to share (see [Daily challenge](#daily-challenge)).
 - **Friends league**: several phones each take a club in the same league, and the CPU plays the rest (see [Friends league](#friends-league)).
+- **Dream Team**: open packs of real players with the coins you earn, pick your own five from any nation or club, and climb ten divisions (see [Dream Team](#dream-team)).
 - Tables use 4 points for a win and 2 for a draw, with a **bonus point for winning by 10 or more or losing by 5 or fewer** (not rugby's usual four-try bonus: the margin means the same in every format). Other fixtures are played out by the engine, CPU against CPU, with each side's own level and style, and the stronger side given the edge (see [Class](#class)).
 - **Learn to play**: a guided first match against a Rookie, with a coach who explains each part of the game the first time it comes up. New players see it first on the title screen.
 
@@ -42,13 +43,34 @@ Every nation plays the other three in its pool. The top two in each pool and the
 
 ## Class
 
-Every side has a strength: the nations a rating from 1 (Chile, Hong Kong China, Zimbabwe) to 5 (New Zealand, South Africa, Ireland, France, England), the clubs one from their level. It only counts in the matches the CPU plays out, where the stronger side gets team cards for the gap (one Epic for a gap of one, up to two Mythics and two Epics for four): over 300 quick matches each, a gap of one won 61% to 68% of the time and a gap of four 85% to 95%. Your own matches are decided by the dice and your choices, whoever you play.
+Every side has a strength: the nations a rating from 1 (Chile, Hong Kong China, Zimbabwe) to 5 (New Zealand, South Africa, Ireland, France, England), the clubs one from their level. It only counts in the matches the CPU plays out, where the stronger side gets team cards for the gap (one Epic for a gap of one, up to two Mythics and two Epics for four): over 300 quick matches each, a gap of one won 61% to 68% of the time and a gap of four 85% to 95%. In your own matches, class tells through the players' ratings (below).
 
 ## Real players
 
 Every nation and club has a squad of fifteen: two Scrum Halves, five Forwards, three Centres, three Outside Backs and two Fly Halves, 942 of them real players from recent squads (2025–26, and the 2026–27 line-ups where they were known), so some will have moved on. Where we couldn't name fifteen with confidence (Hong Kong, Spain and Zimbabwe most of all, and some clubs' benches), the rest are made up, the same names every time. They're used only to name the dice in commentary, the stats and the Team of the Season.
 
-**The team sheet.** Before each match in a competition, pick five to start, one for each die, and three replacements of any position. Anyone hurt in your last match sits this one out (the CPU's sides too), so the second-choice Forward gets a game. A player picked out of position runs at −1. Your picks stay until you change them, and carry into next season with a club. Quick matches and online matches have three made-up replacements you can rename on the squad screen.
+**Player ratings.** Every player is rated from 50 to 99, from how strong their side is, where they are in its squad (the first choice higher), a few dozen of the world's best higher still, and made-up players lower: New Zealand's stars are around 88 to 91, Chile's first five around 70. A rating is a game rating, not a judgement on anyone, and it changes the dice:
+
+| Rating | On the runs | The Fly Half's boot |
+| --- | --- | --- |
+| 88 and up (Elite) | +1 on every run | +10 m on every kick |
+| 78 to 87 | — | the full 60 m |
+| 70 to 77 | — | 50 m at most |
+| Under 70 (Bronze) | −1 on every run | 40 m at most |
+
+The dice table shows it ("+1 rated 91", "60 m −20 m: reaches 40 m, rated 66"), the dice badges warn before the roll, the guide's odds count it, and the win meter does too (measured over 1,500 matches a case: a side rated 90 everywhere wins 64% to 69% against an unrated one, and the meter agrees to within a few points). Ratings play in cups, leagues, the Champions Cup, club careers and Dream Team; replacements come on at their own rating. Quick matches, online matches and the daily challenge stay unrated, and the CPU's background fixtures keep their class cards instead.
+
+**The team sheet.** Before each match in a competition, each player's rating sits beside their name, with what it does to the dice. pick five to start, one for each die, and three replacements of any position. Anyone hurt in your last match sits this one out (the CPU's sides too), so the second-choice Forward gets a game. A player picked out of position runs at −1. Your picks stay until you change them, and carry into next season with a club. Quick matches and online matches have three made-up replacements you can rename on the squad screen.
+
+## Dream Team
+
+Your own club, built from player cards. You start with 600 coins and eight players (one at each position and three more, Bronze and Silver).
+
+- **Packs.** Bronze (300 coins), Silver (900), Gold (2,500) and Elite (7,000), three players each, at least one of the pack's tier. A pack shakes, bursts and deals its cards face down; they turn over one by one, best last, and an Elite player gets a walkout: the lights go down, the side's colours sweep in, the rating counts up, then the name.
+- **The squad.** Five to start and three on the bench, from any nation or club. Anyone can play anywhere, at −1 out of position. "Best side" picks the highest rated at each position. The team rating is the starters' average.
+- **Ten divisions.** You start in Division 10 against a real side of about your strength (Chile, around 70) and a Rookie CPU; each win goes up a division, against stronger sides and a harder CPU (Pro from Division 7, Expert from Division 3), up to the likes of Australia and New Zealand in Division 1. Win there for the title.
+- **Coins.** 250 a win, 120 a draw, 80 a loss, 50 more for each division above 10, 25 a try, and 1,000 for a Division 1 title. Let spare players go for 40 (Bronze), 120 (Silver), 400 (Gold) or 1,200 (Elite) coins; never anyone in the side.
+- Your club's name and colour are yours to choose. 793 real players are in the packs, each once, at their best rating.
 
 ## Leagues
 
@@ -212,7 +234,7 @@ The rules engine is checked from several directions. [RULES.md](RULES.md) maps e
 ```sh
 npm test               # 220+ tests: rules, cards at every rarity, weather and the bench, players, tournaments, the Champions Cup, season stats, club careers, career, coach, online, win model, CPU, fuzzing, odds, static checks
 npm run test:fuzz      # 20,000 fuzzed matches
-npm run test:mutation  # plants 221 bugs; every one must be caught
+npm run test:mutation  # plants 231 bugs; every one must be caught
 npm run test:e2e       # plays full matches in Chromium (needs Playwright), including a two-phone online match, the daily challenge with its leaderboard and a two-phone friends league
 npm run check          # all of the above
 ```
@@ -253,6 +275,7 @@ A standard race to 30 averages about 5.7 tries and 4 drop-goal chances, and the 
 | `js/tournament.js` | The World Cup, the four leagues and the Champions Cup: teams, grounds, fixtures, tables, play-offs, class |
 | `js/squads.js` | A squad of fifteen for every nation and club |
 | `js/duel.js` | Each side's dice and what they come to, for the tray |
+| `js/dream.js`, `js/dream-view.js` | Dream Team: the player pool, packs, the squad, divisions; the screens and the pack opening |
 | `js/guide.js` | The dice guide (what each face of the next roll would do) and the dice badges |
 | `js/season.js` | Season stats: player totals, leaders, Team of the Season |
 | `js/club.js` | Club career: seasons, Champions Cup qualification, records and trophies |
