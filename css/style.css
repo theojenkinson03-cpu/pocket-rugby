@@ -2691,3 +2691,70 @@ details.res-block summary { cursor: pointer; padding: 4px 0; }
   background: var(--bg);
   box-shadow: 0 30px 0 var(--bg), 0 -14px 14px -2px var(--bg);
 }
+
+/* ---------- Motion: the table comes alive ---------- */
+/* A die hits the table: a little squash, and a ring of dust. */
+.die.thud .cube { animation: thud 260ms cubic-bezier(.3,1.6,.5,1); }
+@keyframes thud { 0% { scale: 1.08 0.9; } 100% { scale: 1; } }
+.die.thud::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6%;
+  width: 120%;
+  height: 26%;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  translate: -50% 0;
+  pointer-events: none;
+  animation: dust 520ms ease-out forwards;
+}
+@keyframes dust { from { scale: 0.4; opacity: 0.9; } to { scale: 1.25; opacity: 0; } }
+
+/* Sums count in, term by term; the total lands with a pop. */
+.duel-sum.reveal > * { animation: term-in 300ms cubic-bezier(.2,1.2,.4,1) both; animation-delay: calc(var(--i, 0) * 110ms); }
+.duel-sum.reveal .term.total b { animation: total-pop 420ms cubic-bezier(.2,1.6,.4,1) both; animation-delay: calc(var(--i, 0) * 110ms + 120ms); }
+@keyframes term-in { from { opacity: 0; translate: 0 8px; } }
+@keyframes total-pop { 0% { scale: 0.4; opacity: 0; } 70% { scale: 1.25; } 100% { scale: 1; } }
+.duel-verdict.reveal { animation: verdict-in 380ms ease-out both; animation-delay: 260ms; }
+@keyframes verdict-in { from { opacity: 0; letter-spacing: 0.25em; } }
+
+/* The end that won the roll glows in its colours. */
+.duel-side { transition: background-color 400ms ease; }
+.duel-side.won {
+  background: color-mix(in srgb, var(--kit) 12%, var(--surface));
+  animation: won-glow 900ms ease-out 300ms both;
+}
+@keyframes won-glow {
+  0% { box-shadow: inset 0 0 0 0 color-mix(in srgb, var(--kit) 0%, transparent); }
+  35% { box-shadow: inset 0 0 0 3px var(--kit), inset 0 0 28px color-mix(in srgb, var(--kit) 35%, transparent); }
+  100% { box-shadow: inset 0 0 0 0 transparent, inset 0 0 18px color-mix(in srgb, var(--kit) 18%, transparent); }
+}
+.duel-side.won .duel-head small { background: var(--kit); color: var(--kit-ink, #fff); transition: background-color 300ms ease 300ms; }
+
+/* The headline drops in when it changes. */
+.headline.swap { animation: headline-in 360ms cubic-bezier(.2,1.3,.4,1); }
+@keyframes headline-in { from { opacity: 0; translate: 0 -10px; scale: 0.94; } }
+
+/* The guide: the face that came up bounces. */
+.guide.rolled .gf.hit .face.flat.mini { animation: hit-bounce 520ms cubic-bezier(.2,1.6,.4,1); }
+@keyframes hit-bounce { 0% { scale: 0.7; } 60% { scale: 1.18; } 100% { scale: 1; } }
+
+/* Your turn: the roll button breathes, so it's clear where to tap. */
+.roll-btn:not(.waiting):not(:disabled) { animation: breathe 2.2s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { box-shadow: inset 0 -4px 0 rgb(0 0 0 / 0.2), 0 0 0 0 color-mix(in srgb, var(--kit, var(--ink)) 0%, transparent); }
+  50% { box-shadow: inset 0 -4px 0 rgb(0 0 0 / 0.2), 0 0 0 6px color-mix(in srgb, var(--kit, var(--ink)) 22%, transparent); }
+}
+.roll-btn:active { animation: none; }
+
+/* Choices arrive one after another. */
+.actions .choice { animation: choice-in 280ms cubic-bezier(.2,1.2,.4,1) both; }
+.actions .choice:nth-child(2) { animation-delay: 60ms; }
+.actions .choice:nth-child(3) { animation-delay: 120ms; }
+@keyframes choice-in { from { opacity: 0; translate: 0 12px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .die.thud::after { display: none; }
+  .roll-btn:not(.waiting):not(:disabled) { animation: none; }
+}

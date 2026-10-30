@@ -8,7 +8,8 @@
 //
 // A column: { team, role, dice: [{ id, face, rolled, ghost }], terms, total }
 // where terms are [{ n, label }] (n a signed number as text) and total is
-// what they come to. A duel: { columns, verdict: { text, tone } | null }.
+// what they come to. A duel: { columns, verdict: { text, tone, team? } | null },
+// where team is the side the roll went for, when one end clearly won it.
 
 import { DICE } from './dice.js';
 import { CARD_BY_ID, cardsWith } from './cards.js';
@@ -91,6 +92,7 @@ export function duelOf(before, after, events) {
         : big
           ? { text: e.outcome === 'ruck' ? 'Big Hit: they contest the ruck' : 'Big Hit: tackled', tone: 'defence' }
           : { text: `${e.total} stops ${step.intensity}: tackled`, tone: 'defence' };
+      verdict.team = e.type === 'lineBreak' ? att : team;
       return { columns: cols, verdict };
     }
     case 'kick': {
@@ -100,7 +102,7 @@ export function duelOf(before, after, events) {
       if (k.wind) terms.push({ n: `${k.wind > 0 ? '+' : '−'}${metres(Math.abs(k.wind))}`, label: 'wind' });
       return {
         columns: [column(team, 'Kick', rolled, terms, metres(k.distance))],
-        verdict: { text: `${metres(k.distance)} v ${metres(k.range)} to the posts: ${k.good ? 'over' : 'short'}`, tone: k.good ? 'attack' : 'defence' },
+        verdict: { text: `${metres(k.distance)} v ${metres(k.range)} to the posts: ${k.good ? 'over' : 'short'}`, tone: k.good ? 'attack' : 'defence', team: k.good ? team : null },
       };
     }
     case 'range': {
@@ -125,7 +127,7 @@ export function duelOf(before, after, events) {
       const r = find(events, 'restart');
       return {
         columns: [column(team, 'Kick-off', rolled, [], String(r.kick))],
-        verdict: { text: `${r.kick}: ${r.regathered ? 'won back' : 'caught'} (4+ wins it back)`, tone: r.regathered ? 'attack' : 'defence' },
+        verdict: { text: `${r.kick}: ${r.regathered ? 'won back' : 'caught'} (4+ wins it back)`, tone: r.regathered ? 'attack' : 'defence', team: r.regathered ? team : r.receiver },
       };
     }
     default:

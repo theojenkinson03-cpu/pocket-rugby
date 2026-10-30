@@ -242,7 +242,7 @@ export function rollTo(die, faceIndex, { duration = 950, delay = 0, reduced = fa
 
   return wait(duration + delay).then(() => {
     markFace(die, faceIndex);
-    die.classList.add('landed');
+    die.classList.add('landed', 'thud');
   });
 }
 

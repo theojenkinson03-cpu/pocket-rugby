@@ -33,7 +33,7 @@ import { load, save } from './store.js';
 
 // Both phones in an online match must run the same rules: bump this when
 // anything that changes a match's outcome changes.
-const BUILD = 'pr-5.0';
+const BUILD = 'pr-5.1';
 
 const KITS = [
   { name: 'Navy', color: '#1d3577' },
@@ -1051,7 +1051,13 @@ function soundFor(events, covered) {
 }
 
 function setHeadline(headline, detail) {
-  $('#headline').textContent = headline || '';
+  const h = $('#headline');
+  if (h.textContent !== (headline || '')) {
+    h.classList.remove('swap');
+    void h.offsetWidth;
+    h.classList.add('swap');
+  }
+  h.textContent = headline || '';
   $('#detail').textContent = detail || '';
 }
 
@@ -1121,7 +1127,12 @@ async function showDuel(duel, roll, { animate = false, dramatic = false, badges 
   for (const x of [verdict, ...sums]) x?.classList.add('pending');
   rolling.forEach(([d]) => setFace(d, Math.floor(Math.random() * 6)));
   await Promise.all(rolling.map(([d, face], i) => rollTo(d, face, { duration, delay: i * 160 * speed(), reduced })));
-  for (const x of [verdict, ...sums]) x?.classList.remove('pending');
+  for (const x of [verdict, ...sums]) {
+    x?.classList.remove('pending');
+    x?.classList.add('reveal');
+  }
+  // The end that won the roll lights up.
+  if (Number.isInteger(duel.verdict?.team)) wrap.querySelector(`.duel-side[data-team="${duel.verdict.team}"]`)?.classList.add('won');
   tray.classList.remove('dramatic');
 }
 
@@ -1138,11 +1149,14 @@ function sumLine(col) {
     return t;
   };
   col.terms.forEach(t => line.append(term(t.n, t.label)));
+  // Each term counts in after the one before.
+  [...line.children].forEach((c, i) => c.style.setProperty('--i', i));
   if (waiting) line.append(term(`${col.total}`, 'to stop it'));
   else if (col.terms.length > 1) {
     line.append(el('span', 'eq', '='));
     line.append(term(String(col.total), 'total'));
     line.lastChild.classList.add('total');
+    [...line.children].forEach((c, i) => c.style.setProperty('--i', i));
   }
   return line;
 }
