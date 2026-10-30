@@ -1,5 +1,5 @@
 // Offline support: serve the app from cache, refresh the cache in the background.
-const CACHE = 'pocket-rugby-v11';
+const CACHE = 'pocket-rugby-v12';
 const FILES = [
   './',
   'index.html',
